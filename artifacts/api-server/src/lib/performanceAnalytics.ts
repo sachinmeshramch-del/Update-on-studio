@@ -1,9 +1,8 @@
-import { db, signalsTable } from "@workspace/db";
-import { eq, or, desc } from "drizzle-orm";
+import { getClosedTrades } from "@workspace/db";
 import { logger } from "./logger.js";
 
 export interface TradeRecord {
-  id:          number;
+  id:          string;
   signal:      "LONG" | "SHORT";
   result:      "WIN" | "LOSS";
   entryPrice:  number;
@@ -61,38 +60,30 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
   }
 
   try {
-    const closedRows = await db
-      .select()
-      .from(signalsTable)
-      .where(or(
-        eq(signalsTable.tradeStatus, "TARGET_HIT"),
-        eq(signalsTable.tradeStatus, "STOP_HIT"),
-      ))
-      .orderBy(desc(signalsTable.createdAt))
-      .limit(200);
+    const closedRows = await getClosedTrades(200);
 
-    const completed = closedRows.filter(r =>
+    const completed = closedRows.filter((r: any) =>
       (r.signal === "LONG" || r.signal === "SHORT") &&
       r.pnlPoints !== null && r.closedPrice !== null
     );
 
     const totalCompleted = completed.length;
-    const wins   = completed.filter(r => r.tradeStatus === "TARGET_HIT").length;
-    const losses = completed.filter(r => r.tradeStatus === "STOP_HIT").length;
+    const wins   = completed.filter((r: any) => r.tradeStatus === "TARGET_HIT").length;
+    const losses = completed.filter((r: any) => r.tradeStatus === "STOP_HIT").length;
     const winRate  = totalCompleted > 0 ? Math.round((wins   / totalCompleted) * 100) : 0;
     const lossRate = totalCompleted > 0 ? Math.round((losses / totalCompleted) * 100) : 0;
 
-    const winPnls  = completed.filter(r => r.tradeStatus === "TARGET_HIT").map(r => r.pnlPoints ?? 0);
-    const lossPnls = completed.filter(r => r.tradeStatus === "STOP_HIT").map(r => r.pnlPoints ?? 0);
+    const winPnls  = completed.filter((r: any) => r.tradeStatus === "TARGET_HIT").map((r: any) => r.pnlPoints ?? 0);
+    const lossPnls = completed.filter((r: any) => r.tradeStatus === "STOP_HIT").map((r: any) => r.pnlPoints ?? 0);
 
     const avgProfit = winPnls.length  > 0
-      ? winPnls.reduce((s, v)  => s + v, 0) / winPnls.length  : 0;
+      ? winPnls.reduce((s: any, v: any)  => s + v, 0) / winPnls.length  : 0;
     const avgLoss = lossPnls.length > 0
-      ? Math.abs(lossPnls.reduce((s, v) => s + v, 0) / lossPnls.length) : 0;
+      ? Math.abs(lossPnls.reduce((s: any, v: any) => s + v, 0) / lossPnls.length) : 0;
     const expectancy = totalCompleted > 0
       ? (winRate / 100) * avgProfit - (lossRate / 100) * avgLoss : 0;
 
-    const last10: TradeRecord[] = completed.slice(0, 10).map(r => ({
+    const last10: TradeRecord[] = completed.slice(0, 10).map((r: any) => ({
       id:          r.id,
       signal:      r.signal as "LONG" | "SHORT",
       result:      r.tradeStatus === "TARGET_HIT" ? "WIN" : "LOSS",

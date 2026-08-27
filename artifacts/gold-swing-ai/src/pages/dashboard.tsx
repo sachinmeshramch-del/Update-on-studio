@@ -4,6 +4,7 @@ import { SignalPanel } from "@/components/trading/signal-panel";
 import { IndicatorsRow } from "@/components/trading/indicators-row";
 import { HistoryTable } from "@/components/trading/history-table";
 import { AnalyticsPanel } from "@/components/trading/analytics-panel";
+import { MarketAnalysis } from "@/components/trading/MarketAnalysis";
 import { motion } from "framer-motion";
 
 export default function Dashboard() {
@@ -11,12 +12,12 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="flex-grow container mx-auto px-4 py-6 md:py-8 flex flex-col gap-6 md:gap-8">
+      <main className="flex-grow container mx-auto px-2 sm:px-4 py-4 md:py-8 flex flex-col gap-6 md:gap-8">
 
         {/* Top Section: Chart (left) + Signal Panel (right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           <motion.div
-            className="lg:col-span-7 xl:col-span-8 h-[500px] lg:h-auto min-h-[500px]"
+            className="lg:col-span-7 xl:col-span-8 h-[350px] sm:h-[500px] lg:h-auto min-h-[350px] sm:min-h-[500px]"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -50,6 +51,16 @@ export default function Dashboard() {
           transition={{ duration: 0.5, delay: 0.3 }}
         >
           <IndicatorsRow />
+        </motion.div>
+
+        {/* Analytics Panel — full width at the bottom */}
+        <motion.div
+          className="pb-12"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.35 }}
+        >
+          <MarketAnalysis />
         </motion.div>
 
         {/* Analytics Panel — full width at the bottom */}

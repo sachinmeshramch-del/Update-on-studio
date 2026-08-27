@@ -57,6 +57,9 @@ export const GetSignalResponse = zod.object({
   spikeCooldownCandles: zod
     .number()
     .describe("Candles remaining in post-spike cooldown (0 = clear)"),
+  spikeCooldownRemaining: zod
+    .number()
+    .describe("Seconds remaining in post-spike cooldown (0 = clear)"),
   emaScore: zod.number().describe("EMA crossover score 0-35"),
   rsiScore: zod.number().describe("RSI score 0-25"),
   macdScore: zod.number().describe("MACD score 0-25"),
@@ -160,7 +163,7 @@ export const GetAnalyticsResponse = zod.object({
   expectancy: zod.number().describe("Expected value per trade"),
   last10: zod.array(
     zod.object({
-      id: zod.number(),
+      id: zod.string(),
       signal: zod.enum(["LONG", "SHORT"]),
       result: zod.enum(["WIN", "LOSS"]),
       entryPrice: zod.number(),
@@ -200,7 +203,7 @@ export const SetSmartModeResponse = zod.object({
   expectancy: zod.number().describe("Expected value per trade"),
   last10: zod.array(
     zod.object({
-      id: zod.number(),
+      id: zod.string(),
       signal: zod.enum(["LONG", "SHORT"]),
       result: zod.enum(["WIN", "LOSS"]),
       entryPrice: zod.number(),

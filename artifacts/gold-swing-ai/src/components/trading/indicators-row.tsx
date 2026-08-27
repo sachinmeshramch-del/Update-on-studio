@@ -4,14 +4,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function IndicatorsRow() {
   const { data: signalData, isLoading } = useGetSignal({
-    query: { refetchInterval: 60000 }
+    query: { refetchInterval: 60000 } as any
   });
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-4">
         {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full bg-white/5 rounded-xl" />
+          <Skeleton key={i} className="h-20 w-full bg-black/5 dark:bg-white/5 rounded-xl" />
         ))}
       </div>
     );
@@ -97,7 +97,7 @@ export function IndicatorsRow() {
         {scores.map(s => (
           <div key={s.label} className="flex items-center gap-1.5 flex-1">
             <span className="text-[9px] text-muted-foreground/60 font-mono w-8 flex-shrink-0">{s.label}</span>
-            <div className="flex-1 bg-white/5 rounded-full h-1 overflow-hidden">
+            <div className="flex-1 bg-black/5 dark:bg-white/5 rounded-full h-1 overflow-hidden">
               <div
                 className={`h-1 rounded-full transition-all duration-700 ${s.color}`}
                 style={{ width: `${Math.round((s.score / s.max) * 100)}%` }}
@@ -113,7 +113,7 @@ export function IndicatorsRow() {
       {/* Indicator cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-4">
         {statCards.map((stat, i) => (
-          <Card key={i} className="bg-black/20 border-white/5 overflow-hidden hover:bg-white/5 transition-colors duration-300">
+          <Card key={i} className="dark:bg-black/20 bg-muted/50 border-border overflow-hidden hover:bg-black/5 dark:hover:bg-white/5 transition-colors duration-300">
             <div className="p-4 flex flex-col items-center justify-center text-center h-full">
               <span className="text-xs text-muted-foreground font-medium mb-0.5">{stat.label}</span>
               {stat.sublabel && (

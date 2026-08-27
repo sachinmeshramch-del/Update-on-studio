@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { db, pushSubscriptionsTable } from "@workspace/db";
+import { getPushSubscriptions, deletePushSubscription } from "@workspace/db";
 import { logger } from "./logger.js";
 
 let initialized = false;
@@ -23,14 +23,14 @@ export function getVapidPublicKey(): string | null {
 export async function sendPushToAll(payload: object): Promise<void> {
   if (!initialized) return;
 
-  const subs = await db.select().from(pushSubscriptionsTable);
+  const subs = await getPushSubscriptions();
   if (subs.length === 0) return;
 
   const message = JSON.stringify(payload);
-  const dead: number[] = [];
+  const dead: string[] = [];
 
   await Promise.allSettled(
-    subs.map(async (sub) => {
+    subs.map(async (sub: any) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -38,7 +38,7 @@ export async function sendPushToAll(payload: object): Promise<void> {
         );
       } catch (err: any) {
         if (err?.statusCode === 410 || err?.statusCode === 404) {
-          dead.push(sub.id);
+          dead.push(sub.endpoint);
         } else {
           logger.warn({ err, endpoint: sub.endpoint }, "Push send failed");
         }
@@ -47,9 +47,8 @@ export async function sendPushToAll(payload: object): Promise<void> {
   );
 
   if (dead.length > 0) {
-    const { eq, inArray } = await import("drizzle-orm");
-    for (const id of dead) {
-      await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.id, id)).catch(() => {});
+    for (const endpoint of dead) {
+      await deletePushSubscription(endpoint).catch(() => {});
     }
     logger.info({ removed: dead.length }, "Removed expired push subscriptions");
   }

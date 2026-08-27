@@ -1,17 +1,19 @@
+import { sendPushToAll } from "../lib/pushNotifications.js";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { fetchGoldPrice } from "../lib/goldPrice.js";
 import { generateSignal, initSignalCooldown } from "../lib/signalEngine.js";
 import { startTradeTracker } from "../lib/tradeTracker.js";
 import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.js";
 import { priceEmitter, getLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { db, signalsTable, pushSubscriptionsTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { getMetaApiStatus } from "../lib/metaApiFeed.js";
+import { getTwelveDataStatus } from "../lib/twelveDataStream.js";
+import { getFinnhubStatus } from "../lib/polygonStream.js";
+import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
 
 // Start background trade outcome tracker
-startTradeTracker();
+
 // Restore 15-min inter-signal cooldown from DB so restarts don't reset it
 initSignalCooldown().catch((err) => logger.warn({ err }, "Signal cooldown init failed"));
 
@@ -58,13 +60,17 @@ router.get("/price/stream", (req: Request, res: Response) => {
 });
 
 // ── REST price endpoint ────────────────────────────────────────────────────
-router.get("/price", async (req, res) => {
+router.get("/gold-price", async (req, res) => {
   try {
     const live = getLatestPrice();
     if (live) {
       res.json(live);
     } else {
-      const priceData = await fetchGoldPrice();
+      const priceData = getLatestPrice();
+      if (!priceData) {
+        res.status(503).json({ error: "Market data unavailable" });
+        return;
+      }
       res.json(priceData);
     }
   } catch (err) {
@@ -73,20 +79,66 @@ router.get("/price", async (req, res) => {
   }
 });
 
+router.get("/price", async (req, res) => {
+  try {
+    const live = getLatestPrice();
+    if (live) {
+      res.json(live);
+    } else {
+      const priceData = getLatestPrice();
+      if (!priceData) {
+        res.status(503).json({ error: "Market data unavailable" });
+        return;
+      }
+      res.json(priceData);
+    }
+  } catch (err) {
+    req.log.error({ err }, "Error fetching price");
+    res.status(500).json({ error: "price_fetch_error", message: "Failed to fetch gold price" });
+  }
+});
+
+// ── Connections status endpoint ──────────────────────────────────────────
+router.get("/connections", (req, res) => {
+  res.json({
+    metaapi: getMetaApiStatus(),
+    twelvedata: getTwelveDataStatus(),
+    finnhub: getFinnhubStatus(),
+    activeSource: getLatestPrice()?.source || "none"
+  });
+});
+
 // ── Signal endpoint ────────────────────────────────────────────────────────
 router.get("/signal", async (req, res) => {
   try {
-    const live  = getLatestPrice();
-    const price = live?.price ?? (await fetchGoldPrice()).price;
+    const live = getLatestPrice();
+    const dataSource = process.env.DATA_SOURCE || "twelvedata";
+    
+    // We get the current price from the live price emitter (which handles MetaApi or TwelveData internally)
+    let price: number;
+    if (live) {
+        price = live.price;
+    } else {
+        const p = getLatestPrice(); 
+        if(!p) {
+          res.status(503).json({ error: "Market data unavailable" });
+          return;
+        }
+        price = p.price;
+    }
     const signal = await generateSignal(price);
 
     // NOTE: DB persistence is the scheduler's job only (signalScheduler.ts).
     // The HTTP route is read-only — never insert here or every frontend poll
     // creates a duplicate row for the same cached signal.
     res.json(signal);
-  } catch (err) {
-    req.log.error({ err }, "Error generating signal");
-    res.status(500).json({ error: "signal_error", message: "Failed to generate trading signal" });
+  } catch (err: any) {
+    if (err.message && (err.message.includes('MetaApi is not connected') || err.message.includes('status code 500'))) {
+        res.status(503).json({ error: "signal_error", message: "MetaApi unavailable. Signals paused." });
+    } else {
+        req.log.warn({ err: err.message }, "Error generating signal");
+        res.status(500).json({ error: "signal_error", message: "Failed to generate trading signal" });
+    }
   }
 });
 
@@ -96,13 +148,9 @@ router.get("/history", async (req, res) => {
     const limitParam = parseInt((req.query.limit as string) ?? "200", 10);
     const limit = isNaN(limitParam) || limitParam < 1 ? 200 : Math.min(limitParam, 500);
 
-    const rows = await db
-      .select()
-      .from(signalsTable)
-      .orderBy(desc(signalsTable.createdAt))
-      .limit(limit);
+    const rows = await getRecentSignals(limit);
 
-    const signals = rows.map(r => ({
+    const signals = rows.map((r: any) => ({
       id:            String(r.id),
       signal:        r.signal as "LONG" | "SHORT" | "HOLD",
       confidence:    r.confidence,
@@ -117,6 +165,7 @@ router.get("/history", async (req, res) => {
       closedPrice:   r.closedPrice ?? undefined,
       closedAt:      r.closedAt ? r.closedAt.toISOString() : undefined,
       pnlPoints:     r.pnlPoints ?? undefined,
+      signalType:    r.signalType ?? "TREND_FOLLOW",
     }));
 
     res.json({ signals });
@@ -129,8 +178,8 @@ router.get("/history", async (req, res) => {
 // ── Clear all history ──────────────────────────────────────────────────────
 router.delete("/history/clear", async (req, res) => {
   try {
-    const deleted = await db.delete(signalsTable).returning();
-    res.json({ deleted: deleted.length });
+    const deletedCount = await clearAllHistory();
+    res.json({ deleted: deletedCount });
   } catch (err) {
     req.log.error({ err }, "Error clearing history");
     res.status(500).json({ error: "clear_error", message: "Failed to clear history" });
@@ -139,18 +188,10 @@ router.delete("/history/clear", async (req, res) => {
 
 // ── Delete signal ──────────────────────────────────────────────────────────
 router.delete("/history/:id", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "invalid_id", message: "ID must be a number" });
-    return;
-  }
+  const id = req.params.id;
   try {
-    const deleted = await db
-      .delete(signalsTable)
-      .where(eq(signalsTable.id, id))
-      .returning();
-
-    if (deleted.length === 0) {
+    const deleted = await deleteSignalById(id as string);
+    if (!deleted) {
       res.status(404).json({ error: "not_found", message: "Signal not found" });
       return;
     }
@@ -200,13 +241,7 @@ router.post("/push/subscribe", async (req, res) => {
     return;
   }
   try {
-    await db
-      .insert(pushSubscriptionsTable)
-      .values({ endpoint, p256dh: keys.p256dh, auth: keys.auth })
-      .onConflictDoUpdate({
-        target: pushSubscriptionsTable.endpoint,
-        set: { p256dh: keys.p256dh, auth: keys.auth },
-      });
+    await insertPushSubscription(endpoint, keys.p256dh, keys.auth);
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Failed to save push subscription");
@@ -221,7 +256,7 @@ router.post("/push/unsubscribe", async (req, res) => {
     return;
   }
   try {
-    await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.endpoint, endpoint));
+    await deletePushSubscription(endpoint);
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete push subscription");
@@ -229,4 +264,20 @@ router.post("/push/unsubscribe", async (req, res) => {
   }
 });
 
+
+router.get("/push/test", async (req, res) => {
+  try {
+    await sendPushToAll({
+      title: "Test Notification",
+      body: "This is a test to verify push notifications are working.",
+      signal: "LONG",
+      entryPrice: 2000,
+    });
+    res.json({ success: true, message: "Pushed to all" });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 export default router;
+

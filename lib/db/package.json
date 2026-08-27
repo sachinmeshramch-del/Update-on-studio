@@ -7,19 +7,12 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts"
   },
-  "scripts": {
-    "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
-  },
   "dependencies": {
-    "drizzle-orm": "^0.45.1",
-    "drizzle-zod": "^0.8.3",
-    "pg": "^8.20.0",
+    "@grpc/grpc-js": "^1.14.4",
+    "firebase": "^12.18.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^25.3.3",
-    "@types/pg": "^8.18.0",
-    "drizzle-kit": "^0.31.9"
+    "@types/node": "^25.3.3"
   }
 }

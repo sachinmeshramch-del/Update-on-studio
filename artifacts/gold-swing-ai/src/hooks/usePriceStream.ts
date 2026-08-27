@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 
 export interface StreamPrice {
   price: number;
@@ -12,7 +12,7 @@ export interface StreamPrice {
   direction: "up" | "down" | "unchanged";
   timestamp: string;
   ms: number;
-  source?: "twelvedata" | "finnhub" | "polygon" | "goldprice" | "yahoo" | "synthetic";
+  source?: "twelvedata" | "finnhub" | "polygon" | "goldprice" | "yahoo" | "synthetic" | "metaapi";
 }
 
 export interface PriceStreamState {
@@ -24,139 +24,164 @@ export interface PriceStreamState {
   transport: "websocket" | "sse" | "none";
 }
 
-function buildWsUrl(): string {
+let globalState: PriceStreamState = {
+  data: null,
+  history: [],
+  connected: false,
+  error: false,
+  tickCount: 0,
+  transport: "none",
+};
+
+const listeners = new Set<(state: PriceStreamState) => void>();
+
+let ws: WebSocket | null = null;
+let es: EventSource | null = null;
+let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+let wsFailed = false;
+let connections = 0;
+
+function broadcast() {
+  listeners.forEach(l => l(globalState));
+}
+
+function handleMessage(raw: string) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.type === "history" && Array.isArray(parsed.ticks)) {
+      const ticks = parsed.ticks as StreamPrice[];
+      if (ticks.length > 0) {
+        globalState = {
+          ...globalState,
+          history: ticks,
+          data: ticks[ticks.length - 1],
+          connected: true,
+          error: false,
+          tickCount: globalState.tickCount + ticks.length,
+        };
+        broadcast();
+      }
+      return;
+    }
+    const incoming = parsed as StreamPrice;
+    if (!incoming.price) return;
+    globalState = {
+      ...globalState,
+      data: incoming,
+      connected: true,
+      error: false,
+      tickCount: globalState.tickCount + 1,
+    };
+    broadcast();
+  } catch {}
+}
+
+function connectSSE() {
+  if (es) {
+    es.close();
+    es = null;
+  }
+  es = new EventSource("/api/price/stream");
+  es.onopen = () => {
+    globalState = { ...globalState, connected: true, error: false, transport: "sse" };
+    broadcast();
+  };
+  es.onmessage = (event) => {
+    handleMessage(event.data);
+    if (globalState.transport !== "sse") {
+      globalState = { ...globalState, transport: "sse" };
+      broadcast();
+    }
+  };
+  es.onerror = () => {
+    es?.close();
+    es = null;
+    globalState = { ...globalState, connected: false, error: true };
+    broadcast();
+    retryTimeout = setTimeout(connectSSE, 3000);
+  };
+}
+
+function connectWS() {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/api/price/ws`;
+  const url = `${proto}//${window.location.host}/api/price/ws`;
+  ws = new WebSocket(url);
+  
+  const openTimeout = setTimeout(() => {
+    if (ws && ws.readyState !== WebSocket.OPEN) {
+      ws.close();
+      wsFailed = true;
+      connectSSE();
+    }
+  }, 5000);
+  
+  ws.onopen = () => {
+    clearTimeout(openTimeout);
+    globalState = { ...globalState, connected: true, error: false, transport: "websocket" };
+    broadcast();
+  };
+  ws.onmessage = (event) => {
+    handleMessage(event.data);
+    if (globalState.transport !== "websocket") {
+      globalState = { ...globalState, transport: "websocket" };
+      broadcast();
+    }
+  };
+  ws.onerror = () => {
+    clearTimeout(openTimeout);
+    wsFailed = true;
+  };
+  ws.onclose = () => {
+    clearTimeout(openTimeout);
+    ws = null;
+    globalState = { ...globalState, connected: false };
+    broadcast();
+    if (wsFailed) {
+      if (!es) connectSSE();
+    } else {
+      retryTimeout = setTimeout(connectWS, 3000);
+    }
+  };
+}
+
+function initStream() {
+  connections++;
+  if (connections === 1) {
+    connectWS();
+  }
+}
+
+function releaseStream() {
+  connections--;
+  if (connections <= 0) {
+    connections = 0;
+    ws?.close();
+    es?.close();
+    ws = null;
+    es = null;
+    if (retryTimeout) {
+      clearTimeout(retryTimeout);
+      retryTimeout = null;
+    }
+  }
 }
 
 export function usePriceStream(): PriceStreamState {
-  const [state, setState] = useState<PriceStreamState>({
-    data: null,
-    history: [],
-    connected: false,
-    error: false,
-    tickCount: 0,
-    transport: "none",
-  });
-
-  const wsRef  = useRef<WebSocket | null>(null);
-  const esRef  = useRef<EventSource | null>(null);
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wsFailedRef = useRef(false);
-
-  const onMessage = useCallback((raw: string) => {
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-
-      // History batch sent on connect
-      if (parsed["type"] === "history" && Array.isArray(parsed["ticks"])) {
-        const ticks = parsed["ticks"] as StreamPrice[];
-        if (ticks.length === 0) return;
-        const latest = ticks[ticks.length - 1];
-        setState(s => ({
-          ...s,
-          history: ticks,
-          data: latest,
-          connected: true,
-          error: false,
-          tickCount: s.tickCount + ticks.length,
-        }));
-        return;
-      }
-
-      // Regular tick
-      const incoming = parsed as unknown as StreamPrice;
-      if (!incoming.price) return;
-      setState(s => ({
-        ...s,
-        data: incoming,
-        connected: true,
-        error: false,
-        tickCount: s.tickCount + 1,
-      }));
-    } catch {
-      // ignore parse errors
-    }
-  }, []);
-
-  // ── SSE fallback ──────────────────────────────────────────────────────────
-  const connectSSE = useCallback(() => {
-    if (esRef.current) esRef.current.close();
-
-    const es = new EventSource("/api/price/stream");
-    esRef.current = es;
-
-    es.onopen = () => {
-      setState(s => ({ ...s, connected: true, error: false, transport: "sse" }));
-    };
-
-    es.onmessage = (event: MessageEvent) => {
-      onMessage(event.data as string);
-      setState(s => ({ ...s, transport: "sse" }));
-    };
-
-    es.onerror = () => {
-      es.close();
-      esRef.current = null;
-      setState(s => ({ ...s, connected: false, error: true }));
-      retryRef.current = setTimeout(connectSSE, 3000);
-    };
-  }, [onMessage]);
-
-  // ── WebSocket primary ──────────────────────────────────────────────────────
-  const connectWS = useCallback(() => {
-    if (wsRef.current) wsRef.current.close();
-
-    const url = buildWsUrl();
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    const openTimeout = setTimeout(() => {
-      if (ws.readyState !== WebSocket.OPEN) {
-        ws.close();
-        wsFailedRef.current = true;
-        connectSSE();
-      }
-    }, 5000);
-
-    ws.onopen = () => {
-      clearTimeout(openTimeout);
-      setState(s => ({ ...s, connected: true, error: false, transport: "websocket" }));
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      onMessage(event.data as string);
-      setState(s => ({ ...s, transport: "websocket" }));
-    };
-
-    ws.onerror = () => {
-      clearTimeout(openTimeout);
-      wsFailedRef.current = true;
-    };
-
-    ws.onclose = () => {
-      clearTimeout(openTimeout);
-      setState(s => ({ ...s, connected: false }));
-
-      if (wsFailedRef.current) {
-        // WS not available — stay on SSE
-        if (!esRef.current) connectSSE();
-      } else {
-        // Unexpected close — retry WS after 3s
-        retryRef.current = setTimeout(connectWS, 3000);
-      }
-    };
-  }, [onMessage, connectSSE]);
-
+  const [state, setState] = useState<PriceStreamState>(globalState);
+  
   useEffect(() => {
-    connectWS();
-
+    listeners.add(setState);
+    initStream();
+    
     return () => {
-      wsRef.current?.close();
-      esRef.current?.close();
-      if (retryRef.current) clearTimeout(retryRef.current);
+      listeners.delete(setState);
+      releaseStream();
     };
-  }, [connectWS]);
-
+  }, []);
+  
   return state;
 }

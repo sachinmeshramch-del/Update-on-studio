@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "export NODE_ENV=development && npm run build && npm run start",
     "build": "node ./build.mjs",
-    "start": "node --enable-source-maps ./dist/index.mjs",
+    "start": "node --enable-source-maps --env-file=../../.env ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@google/genai": "^2.18.0",
+    "@libsql/client": "^0.17.4",
     "@types/web-push": "^3.6.4",
     "@workspace/api-zod": "*",
     "@workspace/db": "*",
@@ -17,6 +19,7 @@
     "cors": "^2",
     "drizzle-orm": "^0.45.1",
     "express": "^5",
+    "metaapi.cloud-sdk": "^29.3.3",
     "pino": "^9",
     "pino-http": "^10",
     "web-push": "^3.6.7",

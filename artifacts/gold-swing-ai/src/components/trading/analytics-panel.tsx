@@ -35,7 +35,7 @@ function StatBox({ label, value, sub, color }: { label: string; value: string; s
 
 export function AnalyticsPanel() {
   const { data, isLoading, refetch } = useGetAnalytics({
-    query: { refetchInterval: 30000 },
+    query: { refetchInterval: 30000 } as any,
   });
   const { mutate: toggleSmartMode, isPending } = useSetSmartMode();
   const [optimisticSmart, setOptimisticSmart] = useState<boolean | null>(null);
@@ -76,19 +76,19 @@ export function AnalyticsPanel() {
     Activity;
 
   const trendColor =
-    recentTrend === "HOT"    ? "text-orange-400" :
-    recentTrend === "COLD"   ? "text-blue-400"   :
-    recentTrend === "STABLE" ? "text-emerald-400":
-    "text-zinc-500";
+    recentTrend === "HOT"    ? "text-orange-600 dark:text-orange-600 dark:text-orange-400" :
+    recentTrend === "COLD"   ? "text-blue-600 dark:text-blue-400"   :
+    recentTrend === "STABLE" ? "text-emerald-600 dark:text-emerald-400":
+    "text-zinc-700 dark:text-zinc-500";
 
   return (
-    <Card className="border-white/5 bg-card/50 overflow-hidden h-full">
-      <CardHeader className="pb-3 border-b border-white/5 bg-black/20">
+    <Card className="border-border bg-card/50 overflow-hidden h-full">
+      <CardHeader className="pb-3 border-b border-border bg-black/20">
         <CardTitle className="text-base flex items-center gap-2">
-          <BarChart2 className="w-4 h-4 text-amber-400" />
+          <BarChart2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           Scalp Performance
           <span className="ml-auto flex items-center gap-2 text-sm font-normal">
-            <span className={`text-xs ${smartMode ? "text-amber-400" : "text-muted-foreground"}`}>
+            <span className={`text-xs ${smartMode ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
               Smart Mode
             </span>
             <Switch
@@ -105,7 +105,7 @@ export function AnalyticsPanel() {
 
         {/* Learning Status */}
         <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/20 rounded-xl px-3 py-2">
-          <Zap className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <span className="text-xs text-amber-200/80 leading-snug">
             {isLoading ? "Loading…" : (data?.learningStatus ?? "Collecting data…")}
           </span>
@@ -128,7 +128,7 @@ export function AnalyticsPanel() {
             <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Win Rate</span>
             <div className="flex items-center gap-2">
               {streakAbs >= 2 && (
-                <span className={`text-xs font-mono font-bold ${streak > 0 ? "text-orange-400" : "text-blue-400"}`}>
+                <span className={`text-xs font-mono font-bold ${streak > 0 ? "text-orange-600 dark:text-orange-600 dark:text-orange-400" : "text-blue-600 dark:text-blue-400"}`}>
                   {streak > 0 ? `🔥${streakAbs}W` : `❄️${streakAbs}L`}
                 </span>
               )}
@@ -137,17 +137,17 @@ export function AnalyticsPanel() {
               </span>
             </div>
           </div>
-          <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden relative">
+          <div className="w-full bg-black/5 dark:bg-white/5 rounded-full h-2 overflow-hidden relative">
             <div
               className={`h-2 rounded-full transition-all duration-700 ${winRateBarColor}`}
               style={{ width: `${Math.max(winRate, 2)}%` }}
             />
-            <div className="absolute top-0 h-full w-px bg-white/40 opacity-60" style={{ left: "55%" }} />
+            <div className="absolute top-0 h-full w-px bg-black/40 dark:bg-white/40 opacity-60" style={{ left: "55%" }} />
           </div>
           <div className="flex justify-between text-[9px] text-muted-foreground/50">
             <span>0%</span>
             <span className="flex items-center gap-0.5">
-              <span className="w-px h-2 bg-white/30 inline-block" />55% threshold
+              <span className="w-px h-2 bg-black/30 dark:bg-black/5 dark:bg-white/50 inline-block" />55% threshold
             </span>
             <span>100%</span>
           </div>
@@ -204,14 +204,14 @@ export function AnalyticsPanel() {
                 <WinDot key={t.id} result={t.result} pnl={t.pnlPoints} />
               ))}
               {Array.from({ length: Math.max(0, 10 - (data.last10?.length ?? 0)) }).map((_, i) => (
-                <div key={`empty-${i}`} className="w-5 h-5 rounded-full border border-white/10 bg-white/3 flex-shrink-0" />
+                <div key={`empty-${i}`} className="w-5 h-5 rounded-full border border-border bg-black/5 dark:bg-white/5 flex-shrink-0" />
               ))}
             </div>
           )}
         </div>
 
         {/* Risk/Reward reminder */}
-        <div className="border-t border-white/5 pt-3">
+        <div className="border-t border-border pt-3">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
             <span>Scalp params</span>
             <span className="font-mono">SL: ATR×1.0 · TP: SL×1.5 · R:R 1:1.5</span>

@@ -1,3 +1,4 @@
+import { getMetaApiStatus } from "./metaApiFeed.js";
 import WebSocket from "ws";
 import { setLatestPrice, buildLivePrice, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
@@ -12,6 +13,11 @@ const RECONNECT_DELAY_MAX  = 120_000;
 let ws: WebSocket | null = null;
 let reconnectDelay = RECONNECT_DELAY_BASE;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let twelveDataStatus: "disconnected" | "connecting" | "connected" = "disconnected";
+
+export function getTwelveDataStatus() {
+    return twelveDataStatus;
+}
 
 // Exported so Finnhub stream can check staleness
 let _lastTick = 0;
@@ -64,7 +70,10 @@ function handleMessage(raw: string) {
     };
 
     _lastTick = Date.now();
-    setLatestPrice(live);
+    const dataSource = process.env.DATA_SOURCE || "twelvedata";
+    if (dataSource !== "metaapi" || getMetaApiStatus() !== "connected") {
+      setLatestPrice(live);
+    }
     return;
   }
 
@@ -82,11 +91,13 @@ function connect() {
 
   const url = `${TD_WS_BASE}?apikey=${apiKey}`;
   logger.info("Connecting to TwelveData WebSocket for real-time XAU/USD ticks…");
+  twelveDataStatus = "connecting";
 
   ws = new WebSocket(url);
 
   ws.on("open", () => {
     logger.info("TwelveData WebSocket connected — subscribing to XAU/USD");
+    twelveDataStatus = "connected";
     ws?.send(JSON.stringify({ action: "subscribe", params: { symbols: GOLD_SYMBOL } }));
     reconnectDelay = RECONNECT_DELAY_BASE;
   });
@@ -100,6 +111,7 @@ function connect() {
   });
 
   ws.on("close", (code, reason) => {
+    twelveDataStatus = "disconnected";
     logger.warn({ code, reason: reason.toString() }, "TwelveData disconnected — will reconnect");
     scheduleReconnect();
   });

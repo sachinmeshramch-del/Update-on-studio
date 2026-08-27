@@ -9,6 +9,7 @@ import {
 } from "lightweight-charts";
 import { usePriceStream } from "@/hooks/usePriceStream";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/components/theme-provider";
 
 // ── Candle resolution options ──────────────────────────────────────────────
 const RESOLUTIONS = [
@@ -28,6 +29,8 @@ interface LiveCandle {
 }
 
 export function LiveTickChart() {
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const containerRef  = useRef<HTMLDivElement>(null);
   const chartRef      = useRef<IChartApi | null>(null);
   const seriesRef     = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -42,7 +45,27 @@ export function LiveTickChart() {
   const historyLoadedRef = useRef(false);
 
   // ── Create / recreate chart when resolution changes ────────────────────────
+
   useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        layout: { textColor: isDark ? "#9ca3af" : "#4b5563" },
+        grid: {
+          vertLines: { color: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" },
+          horzLines: { color: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" },
+        },
+        rightPriceScale: {
+          borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+        },
+        timeScale: {
+          borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+        }
+      });
+    }
+  }, [isDark]);
+
+  useEffect(() => {
+
     if (!containerRef.current) return;
 
     // Tear down old chart
@@ -57,19 +80,19 @@ export function LiveTickChart() {
     const chart = createChart(containerRef.current, {
       layout: {
         background: { color: "transparent" },
-        textColor: "#9ca3af",
+        textColor: isDark ? "#9ca3af" : "#4b5563",
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.04)" },
-        horzLines: { color: "rgba(255,255,255,0.04)" },
+        vertLines: { color: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" },
+        horzLines: { color: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" },
       },
       rightPriceScale: {
-        borderColor: "rgba(255,255,255,0.08)",
+        borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
         scaleMargins: { top: 0.08, bottom: 0.08 },
       },
       timeScale: {
-        borderColor: "rgba(255,255,255,0.08)",
+        borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
         timeVisible: true,
         secondsVisible: true,
         fixRightEdge: true,
@@ -219,7 +242,7 @@ export function LiveTickChart() {
   return (
     <div className="relative w-full h-full flex flex-col">
       {/* Resolution selector */}
-      <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 border-b border-white/5">
+      <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 border-b border-border">
         <span className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest mr-1">Candle</span>
         {RESOLUTIONS.map(r => (
           <button
@@ -229,7 +252,7 @@ export function LiveTickChart() {
               "px-2.5 py-0.5 text-[10px] font-bold rounded font-mono transition-all",
               resSecs === r.secs
                 ? "bg-amber-500 text-black"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
             )}
           >
             {r.label}
@@ -240,14 +263,14 @@ export function LiveTickChart() {
         {connected && data && (
           <div className="ml-auto flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest">
+            <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 uppercase tracking-widest">
               LIVE · {candleCount} candles
             </span>
             <span className={cn(
               "ml-2 font-mono text-[11px] font-bold",
-              isUp ? "text-green-400" : "text-red-400"
+              isUp ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
             )}>
-              {isUp ? "▲" : "▼"} {data.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {isUp ? "▲" : "▼"} {data.price?.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         )}
@@ -259,7 +282,7 @@ export function LiveTickChart() {
 
         {/* Connecting overlay */}
         {noData && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/80 backdrop-blur-sm">
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin mx-auto mb-3" />
               <p className="text-sm text-muted-foreground font-mono">Waiting for live ticks…</p>
@@ -269,7 +292,7 @@ export function LiveTickChart() {
 
         {/* Warming up message (connected but few candles) */}
         {connected && data && candleCount < 2 && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm border border-white/10 rounded-full px-4 py-1.5">
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm border border-border rounded-full px-4 py-1.5">
             <span className="text-[11px] font-mono text-muted-foreground animate-pulse">
               Building candles from live ticks…
             </span>

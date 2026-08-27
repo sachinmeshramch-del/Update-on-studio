@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import {
   AlertCircle, Target, ShieldX, ArrowRightCircle,
   TrendingUp, TrendingDown, Minus, Zap,
-  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw,
+  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
 import { motion } from "framer-motion";
@@ -19,14 +19,14 @@ function SessionBadge({ active, asian }: { active?: string; asian?: boolean }) {
   return (
     <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold tracking-wide ${
       closed
-        ? "bg-zinc-500/10 border-zinc-500/30 text-zinc-400"
+        ? "bg-zinc-500/10 border-zinc-500/30 text-zinc-600 dark:text-zinc-400"
         : asian
-        ? "bg-orange-500/10 border-orange-500/25 text-orange-400"
-        : "bg-sky-500/10 border-sky-500/25 text-sky-400"
+        ? "bg-orange-500/10 border-orange-500/25 text-orange-600 dark:text-orange-600 dark:text-orange-400"
+        : "bg-sky-500/10 border-sky-500/25 text-sky-600 dark:text-sky-400"
     }`}>
       {closed ? <MoonStar className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
       {active}
-      {!closed && asian && <span className="text-orange-400/60">· Low liq.</span>}
+      {!closed && asian && <span className="text-orange-600/60 dark:text-orange-600/60 dark:text-orange-400/60">· Low liq.</span>}
     </div>
   );
 }
@@ -35,8 +35,8 @@ function SessionBadge({ active, asian }: { active?: string; asian?: boolean }) {
 function ReversalBadge() {
   return (
     <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/40">
-      <RotateCcw className="w-3.5 h-3.5 text-purple-400" />
-      <span className="text-xs font-bold text-purple-400 tracking-wide">REVERSAL TRADE</span>
+      <RotateCcw className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+      <span className="text-xs font-bold text-purple-600 dark:text-purple-400 tracking-wide">REVERSAL TRADE</span>
     </div>
   );
 }
@@ -45,14 +45,14 @@ function ReversalBadge() {
 function StrengthBadge({ strength }: { strength: "STRONG" | "NORMAL" | null }) {
   if (strength === "STRONG") return (
     <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
-      <FlameKindling className="w-3.5 h-3.5 text-amber-400" />
-      <span className="text-xs font-bold text-amber-400 tracking-wide">STRONG SIGNAL</span>
+      <FlameKindling className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 tracking-wide">STRONG SIGNAL</span>
     </div>
   );
   if (strength === "NORMAL") return (
     <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30">
-      <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-      <span className="text-xs font-bold text-blue-400 tracking-wide">NORMAL SIGNAL</span>
+      <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+      <span className="text-xs font-bold text-blue-600 dark:text-blue-400 tracking-wide">NORMAL SIGNAL</span>
     </div>
   );
   return null;
@@ -68,7 +68,7 @@ function ScoreBar({
   return (
     <div className="flex items-center gap-2">
       <span className="text-[10px] text-muted-foreground w-20 flex-shrink-0 font-medium">{label}</span>
-      <div className="flex-1 bg-white/5 rounded-full h-1.5 overflow-hidden">
+      <div className="flex-1 bg-black/5 dark:bg-white/5 rounded-full h-1.5 overflow-hidden">
         <motion.div
           className={`h-1.5 rounded-full ${color}`}
           initial={{ width: 0 }}
@@ -85,26 +85,27 @@ function ScoreBar({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function SignalPanel() {
-  const { data: signalData, isLoading, isError } = useGetSignal({
+  const { data: signalDataRaw, isLoading, isError, refetch, isFetching } = useGetSignal({
     query: {
       refetchInterval: 60000,
       refetchIntervalInBackground: true,
       refetchOnWindowFocus: true,
       staleTime: 55000,
-    }
+    } as any
   });
+  const signalData = signalDataRaw as any;
 
   if (isLoading) {
     return (
       <Card className="h-full bg-card/50">
         <CardContent className="p-6 flex flex-col gap-6">
-          <Skeleton className="h-24 w-full bg-white/5 rounded-2xl" />
-          <Skeleton className="h-16 w-full bg-white/5 rounded-xl" />
-          <Skeleton className="h-8 w-3/4 bg-white/5" />
+          <Skeleton className="h-24 w-full bg-black/5 dark:bg-white/5 rounded-2xl" />
+          <Skeleton className="h-16 w-full bg-black/5 dark:bg-white/5 rounded-xl" />
+          <Skeleton className="h-8 w-3/4 bg-black/5 dark:bg-white/5" />
           <div className="grid grid-cols-3 gap-4">
-            <Skeleton className="h-20 w-full bg-white/5" />
-            <Skeleton className="h-20 w-full bg-white/5" />
-            <Skeleton className="h-20 w-full bg-white/5" />
+            <Skeleton className="h-20 w-full bg-black/5 dark:bg-white/5" />
+            <Skeleton className="h-20 w-full bg-black/5 dark:bg-white/5" />
+            <Skeleton className="h-20 w-full bg-black/5 dark:bg-white/5" />
           </div>
         </CardContent>
       </Card>
@@ -125,7 +126,7 @@ export function SignalPanel() {
   const {
     signal, confidence, entryPrice, stopLoss, takeProfit,
     trend, reason, timestamp, tradeDuration, cooldownRemaining,
-    signalStrength, spikeCooldownCandles,
+    signalStrength, spikeCooldownCandles, spikeCooldownRemaining,
     emaScore, rsiScore, macdScore, momentumScore, fvgScore, sweepScore, obScore,
     candleScore, candlePattern,
     signalType,
@@ -164,7 +165,7 @@ export function SignalPanel() {
   const rrRatio = slDist > 0 ? ((Math.abs(takeProfit - entryPrice)) / slDist).toFixed(2) : "1.50";
 
   return (
-    <Card className="relative overflow-hidden border-white/10 bg-gradient-to-b from-card to-background shadow-2xl">
+    <Card className="relative overflow-hidden border-border bg-gradient-to-b from-card to-background shadow-2xl">
       <div className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-3xl opacity-10 pointer-events-none
         ${signal === "LONG" ? "bg-success" : signal === "SHORT" ? "bg-destructive" : "bg-warning"}`} />
 
@@ -178,13 +179,21 @@ export function SignalPanel() {
                 Scalp Signal · 5m/1m
               </h2>
               <SessionBadge active={session?.active} asian={session?.asian} />
+              <button 
+                onClick={() => refetch()} 
+                disabled={isFetching}
+                className="ml-auto md:ml-2 p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
+                title="Refresh Signal"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${isFetching ? 'animate-spin' : ''}`} />
+              </button>
             </div>
             <div className="flex items-center gap-3">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 key={signal}
-                className={`px-8 py-3 rounded-xl font-black text-3xl tracking-tight border ${signalColors[signal]}`}
+                className={`px-8 py-3 rounded-xl font-black text-3xl tracking-tight border ${signalColors[signal as keyof typeof signalColors]}`}
               >
                 {signal}
               </motion.div>
@@ -192,12 +201,13 @@ export function SignalPanel() {
                 {signalType === "REVERSAL" && <ReversalBadge />}
                 {signalStrength && <StrengthBadge strength={signalStrength} />}
                 {cooldownRemaining > 0 && <CooldownTimer initialSeconds={cooldownRemaining} />}
-                {(spikeCooldownCandles ?? 0) > 0 && (
+                {(spikeCooldownRemaining ?? 0) > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/30">
-                    <Timer className="w-3.5 h-3.5 text-orange-400" />
-                    <span className="text-xs font-bold text-orange-400 tracking-wide">
-                      SPIKE COOLDOWN · {spikeCooldownCandles} {spikeCooldownCandles === 1 ? "candle" : "candles"}
+                    <Timer className="w-3.5 h-3.5 text-orange-600 dark:text-orange-600 dark:text-orange-400" />
+                    <span className="text-xs font-bold text-orange-600 dark:text-orange-600 dark:text-orange-400 tracking-wide">
+                      SPIKE GUARD
                     </span>
+                    <CooldownTimer initialSeconds={spikeCooldownRemaining} variant="raw" />
                   </div>
                 )}
               </div>
@@ -209,15 +219,15 @@ export function SignalPanel() {
             <div className="flex justify-between w-full md:w-52 gap-2">
               <span className="text-xs text-muted-foreground">Confidence</span>
               <span className={`text-xs font-bold font-mono ${
-                confidence >= 80 ? "text-amber-400" :
-                confidence >= 65 ? "text-emerald-400" :
-                confidence >= 50 ? "text-blue-400" :
-                "text-zinc-400"
+                confidence >= 80 ? "text-amber-600 dark:text-amber-400" :
+                confidence >= 65 ? "text-emerald-600 dark:text-emerald-400" :
+                confidence >= 50 ? "text-blue-600 dark:text-blue-400" :
+                "text-zinc-600 dark:text-zinc-400"
               }`}>
                 {confidence}%
               </span>
             </div>
-            <div className="w-full md:w-52 h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
+            <div className="w-full md:w-52 h-2 bg-black/40 rounded-full overflow-hidden border border-border">
               <motion.div
                 className={`h-full rounded-full ${confBarColor}`}
                 initial={{ width: 0 }}
@@ -225,12 +235,12 @@ export function SignalPanel() {
                 transition={{ duration: 1, ease: "easeOut" }}
               />
             </div>
-            <p className="text-[10px] text-zinc-500 text-right">EMA9/21 · RSI · MACD · 1m confirm</p>
+            <p className="text-[10px] text-zinc-700 dark:text-zinc-500 text-right">EMA9/21 · RSI · MACD · 1m confirm</p>
           </div>
         </div>
 
         {/* ── Score Breakdown ───────────────────────────────────────────────── */}
-        <div className="rounded-2xl border border-white/8 bg-black/25 p-4 flex flex-col gap-2.5">
+        <div className="rounded-2xl border border-border bg-black/25 p-4 flex flex-col gap-2.5">
           <p className="text-[10px] text-muted-foreground/60 uppercase tracking-widest mb-1">Signal Score Breakdown</p>
           <ScoreBar label="EMA 9/21"        value={emaScore ?? 0}      max={35} color="bg-amber-500"   />
           <ScoreBar label="RSI (14)"        value={rsiScore ?? 0}      max={25} color="bg-blue-500"    />
@@ -246,7 +256,7 @@ export function SignalPanel() {
             color={(candleScore ?? 0) < 0 ? "bg-red-700" : "bg-yellow-400"}
           />
           {(candleScore ?? 0) < 0 && (
-            <p className="text-[10px] text-red-400/70 -mt-1 pl-1">−10 pts (pattern opposes signal)</p>
+            <p className="text-[10px] text-red-600/70 dark:text-red-400/70 -mt-1 pl-1">−10 pts (pattern opposes signal)</p>
           )}
 
           {/* ── Pattern Intelligence (shown when any pattern is active) ──────── */}
@@ -255,7 +265,7 @@ export function SignalPanel() {
               {/* Strength bar */}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-muted-foreground/70 w-20 flex-shrink-0">Strength</span>
-                <div className="flex-1 bg-white/5 rounded-full h-1 overflow-hidden">
+                <div className="flex-1 bg-black/5 dark:bg-white/5 rounded-full h-1 overflow-hidden">
                   <motion.div
                     className={`h-1 rounded-full ${patternStrength >= 80 ? "bg-amber-400" : patternStrength >= 60 ? "bg-emerald-500" : "bg-zinc-500"}`}
                     initial={{ width: 0 }}
@@ -267,31 +277,31 @@ export function SignalPanel() {
               </div>
               {/* Context + Confluence + Confirmation row */}
               <div className="flex flex-wrap gap-1.5 mt-0.5">
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border ${contextValid ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400/70"}`}>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border ${contextValid ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-600/70 dark:text-red-400/70"}`}>
                   {contextValid ? "✓ Context" : "✗ Context"}
                 </span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border ${confluenceMet ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-zinc-700/30 border-zinc-600/20 text-zinc-500"}`}>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border ${confluenceMet ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400" : "bg-zinc-700/30 border-zinc-600/20 text-zinc-700 dark:text-zinc-500"}`}>
                   {confluenceMet ? "✓ Confluence" : "— Confluence"}
                 </span>
                 {confirmationStatus === "pending_confirmation" && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border bg-orange-500/10 border-orange-500/30 text-orange-400">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border bg-orange-500/10 border-orange-500/30 text-orange-600 dark:text-orange-600 dark:text-orange-400">
                     ⏳ Pending
                   </span>
                 )}
                 {confirmationStatus === "confirmed" && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
                     ✓ Confirmed
                   </span>
                 )}
                 {confirmationStatus === "not_applicable" && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border bg-sky-500/10 border-sky-500/20 text-sky-400">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold tracking-wide border bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400">
                     ✓ Engulfing
                   </span>
                 )}
               </div>
             </div>
           )}
-          <div className="flex justify-between items-center pt-1 border-t border-white/5 mt-0.5">
+          <div className="flex justify-between items-center pt-1 border-t border-border mt-0.5">
             <span className="text-[10px] text-muted-foreground">Raw score</span>
             <span className="text-sm font-bold font-mono text-foreground">
               {Math.max(0, (emaScore ?? 0) + (rsiScore ?? 0) + (macdScore ?? 0) + (momentumScore ?? 0) + (fvgScore ?? 0) + (sweepScore ?? 0) + (obScore ?? 0) + (candleScore ?? 0))}
@@ -305,7 +315,7 @@ export function SignalPanel() {
 
         {/* ── Entry / SL / TP ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-black/30 border border-white/5 rounded-xl p-3 flex flex-col items-center gap-1">
+          <div className="bg-black/30 border border-border rounded-xl p-3 flex flex-col items-center gap-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
               <ArrowRightCircle className="w-3.5 h-3.5" /> Entry
             </div>
@@ -315,24 +325,24 @@ export function SignalPanel() {
           <div className={`border rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
             signal === "LONG"  ? "border-red-500/30 bg-red-500/5" :
             signal === "SHORT" ? "border-red-500/30 bg-red-500/5" :
-            "border-white/5 bg-black/30"
+            "border-border bg-black/30"
           }`}>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-              <ShieldX className="w-3.5 h-3.5 text-red-400" /> Stop Loss
+              <ShieldX className="w-3.5 h-3.5 text-red-600 dark:text-red-400" /> Stop Loss
             </div>
-            <span className="text-sm font-bold font-mono tabular-nums text-red-400">{formatPrice(stopLoss)}</span>
+            <span className="text-sm font-bold font-mono tabular-nums text-red-600 dark:text-red-400">{formatPrice(stopLoss)}</span>
             <span className="text-[10px] text-muted-foreground font-mono">{slDist.toFixed(2)} pts</span>
           </div>
 
           <div className={`border rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
             signal === "LONG"  ? "border-emerald-500/30 bg-emerald-500/5" :
             signal === "SHORT" ? "border-emerald-500/30 bg-emerald-500/5" :
-            "border-white/5 bg-black/30"
+            "border-border bg-black/30"
           }`}>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-              <Target className="w-3.5 h-3.5 text-emerald-400" /> Take Profit
+              <Target className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Take Profit
             </div>
-            <span className="text-sm font-bold font-mono tabular-nums text-emerald-400">{formatPrice(takeProfit)}</span>
+            <span className="text-sm font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">{formatPrice(takeProfit)}</span>
             <span className="text-[10px] text-muted-foreground font-mono">R:R {rrRatio}</span>
           </div>
         </div>
@@ -360,7 +370,7 @@ export function SignalPanel() {
               color: "text-foreground",
             },
           ].map(({ label, value, sub, color }) => (
-            <div key={label} className="bg-black/30 border border-white/5 rounded-xl p-3 flex flex-col gap-0.5">
+            <div key={label} className="bg-black/30 border border-border rounded-xl p-3 flex flex-col gap-0.5">
               <span className="text-[10px] text-muted-foreground">{label}</span>
               <span className={`text-sm font-bold font-mono ${color}`}>{value}</span>
               <span className="text-[9px] text-muted-foreground/50 font-mono">{sub}</span>
@@ -369,7 +379,7 @@ export function SignalPanel() {
         </div>
 
         {/* ── Reason / Signal Reasoning ──────────────────────────────────────── */}
-        <div className="bg-black/30 border border-white/5 rounded-2xl p-4 flex flex-col gap-3">
+        <div className="bg-black/30 border border-border rounded-2xl p-4 flex flex-col gap-3">
           <div className="flex items-start gap-3">
             <Zap className="w-5 h-5 text-primary mt-0.5 shrink-0" />
             <div>
@@ -378,7 +388,7 @@ export function SignalPanel() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/5">
+          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
             <div>
               <span className="text-xs text-muted-foreground block mb-1">Market Trend</span>
               <div className={`flex items-center gap-1.5 text-sm font-semibold ${trendColor}`}>
@@ -392,12 +402,12 @@ export function SignalPanel() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-white/5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border">
             <div className="flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5" />
-              <span>Updated {format(new Date(timestamp), "HH:mm:ss")}</span>
+              <span>Updated {timestamp ? format(new Date(timestamp), "HH:mm:ss") : "N/A"}</span>
             </div>
-            <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground py-0 px-1.5">
+            <Badge variant="outline" className="text-[10px] border-border text-muted-foreground py-0 px-1.5">
               EMA · RSI · MACD
             </Badge>
           </div>

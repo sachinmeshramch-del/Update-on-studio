@@ -30,7 +30,7 @@ async function buildAll() {
     external: [
       "*.node",
       "sharp",
-      "better-sqlite3",
+      
       "sqlite3",
       "canvas",
       "bcrypt",
@@ -59,6 +59,7 @@ async function buildAll() {
       "@mikro-orm/*",
       "@grpc/*",
       "@swc/*",
+      "@libsql/*",
       "@aws-sdk/*",
       "@azure/*",
       "@opentelemetry/*",
@@ -99,6 +100,7 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "metaapi.cloud-sdk",
     ],
     sourcemap: "linked",
     plugins: [

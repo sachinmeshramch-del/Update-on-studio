@@ -15,6 +15,7 @@ export interface OHLCCandle {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 let cachedPrice: PriceData | null = null;
@@ -175,6 +176,7 @@ export async function fetchOHLC(interval: string): Promise<OHLCCandle[]> {
       high: ohlc.high[i] ?? 0,
       low: ohlc.low[i] ?? 0,
       close: ohlc.close[i] ?? 0,
+      volume: ohlc.volume?.[i] ?? 0,
     })).filter(c => c.close > 0);
 
     // Staleness guard — if the newest candle is more than 12 h old the market

@@ -35,7 +35,7 @@ async function subscribeUser(reg: ServiceWorkerRegistration, vapidKey: string): 
     if (existing) return existing;
     return await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      applicationServerKey: urlBase64ToUint8Array(vapidKey) as any,
     });
   } catch {
     return null;
@@ -71,8 +71,14 @@ export function useNotifications() {
     const vapidKey = await getVapidKey();
     if (!vapidKey) { setStatus("error"); return; }
 
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") { setStatus("denied"); return; }
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") { setStatus("denied"); return; }
+    } catch (err) {
+      alert("⚠️ PUSH NOTIFICATIONS BLOCKED\n\nBecause you are viewing this app inside the AI Studio editor frame, your browser blocks push notifications.\n\n👉 FIX: Click the 'Open in New Tab' icon at the top right of this window to open the app directly, then click the Bell icon again!");
+      setStatus("error");
+      return;
+    }
 
     const reg = await registerSW();
     if (!reg) { setStatus("error"); return; }

@@ -1,20 +1,27 @@
-import { fetchOHLC } from "./goldPrice.js";
+import type { OHLCCandle } from "./goldPrice.js";
+import { getMetaApiHistoricalOHLC } from "./metaApiFeed.js";
 import {
   calcEMA,
+  detectMarketStructure,
   calcRSI,
   calcMACD,
   calcATR,
   detectTrend,
+  calcADX,
+  calcVolumeSMA,
   detectOrderBlocks,
   getOBScore,
   detectCHoCH,
   detectSweepRejection,
   detectCandlePattern,
+  analyzeMarketRange,
+  getNearestSwingLevels,
+  findSupportResistance,
 } from "./technicalIndicators.js";
 import { getAnalyticsSummary, isSmartMode } from "./performanceAnalytics.js";
 import { logger } from "./logger.js";
-import { db, signalsTable } from "@workspace/db";
-import { desc } from "drizzle-orm";
+import { getLatestSignal, getRecentSignals, getRunningTrades } from "@workspace/db";
+
 
 export interface SessionInfo {
   london:  boolean;
@@ -39,6 +46,7 @@ export interface SignalResult {
   session:           SessionInfo;
   signalStrength:    "STRONG" | "NORMAL" | null;
   spikeCooldownCandles: number; // candles remaining in post-spike cooldown (0 = clear)
+  spikeCooldownRemaining: number; // seconds remaining in post-spike cooldown
   // Score breakdown (raw values, normalized to 100 for confidence)
   emaScore:      number;  // 0-35
   rsiScore:      number;  // 0-25
@@ -75,13 +83,7 @@ interface LastSignalState {
   timestamp: number;
 }
 
-export interface OHLCCandle {
-  time?: number; // Unix seconds — used to detect duplicate spike candles
-  open:  number;
-  high:  number;
-  low:   number;
-  close: number;
-}
+
 
 export interface FVGZone {
   type: "BULLISH" | "BEARISH";
@@ -92,6 +94,13 @@ export interface FVGZone {
 let lastSignalState: LastSignalState | null = null;
 let cachedSignal:    SignalResult | null = null;
 let lastSignalTime = 0;
+
+// ── Raw Candle Cache (caches historical fetch for 4s, but re-evaluates indicators & cooldown on every tick) ──
+let cachedCandlesTime = 0;
+let cachedCandles5m: OHLCCandle[] = [];
+let cachedCandles1m: OHLCCandle[] = [];
+let cachedCandles15m: OHLCCandle[] = [];
+const CANDLE_CACHE_TTL = 4_000;
 
 // ── Two-candle confirmation state ─────────────────────────────────────────
 // Hammer, Shooting Star, and Doji patterns require the NEXT candle to close
@@ -112,7 +121,7 @@ const SINGLE_CANDLE_PATTERNS = new Set(["Hammer", "Dragonfly Doji", "Shooting St
 // ── Post-spike cooldown state ─────────────────────────────────────────────
 let spikeDetectedAt = 0;
 let lastSpikeCandleTime = 0; // tracks which candle triggered the spike to avoid re-triggering on the same candle
-const SPIKE_ATR_MULT       = 1.5;   // body must exceed ATR × this
+const SPIKE_ATR_MULT       = 2.5;   // body must exceed ATR × this
 const SPIKE_COOLDOWN_COUNT = 2;     // candles to block after a spike
 const CANDLE_5M_MS         = 300_000; // 5 min in ms
 
@@ -123,6 +132,7 @@ const MIN_SIGNAL_INTERVAL_MS  = 5 * 60_000; // 5-min hard floor — no signal ca
 const MIN_CONF_NORMAL         = 53;
 const MIN_CONF_STRONG         = 75;
 const MIN_CONF_REVERSAL       = 75;  // counter-trend trades need higher conviction
+const MIN_CONF_RANGE          = 70;  // range-bound / consolidation markets require high conviction
 const MIN_PRICE_MOVE_PCT      = 0.002;    // 0.2% to override standard cooldown (raised from 0.1% — $4→$8 on gold)
 const MAX_RAW_SCORE           = 165;      // realistic max without all institutional factors aligning
 
@@ -181,45 +191,100 @@ export function getRecentMomentum(candles: OHLCCandle[]): "BULLISH" | "BEARISH" 
   return "NEUTRAL";
 }
 
-// ── Consecutive-stop circuit breaker ──────────────────────────────────────
-// Queries the last 5 completed trades.  If ≥2 of the last 5 LONG signals
-// stopped out, `longPenalty` is raised (requires higher confidence for LONG).
-// Same logic applies to SHORT.  Prevents the engine from repeatedly issuing
-// the same losing direction without significantly higher conviction.
-async function getRecentStopCounts(): Promise<{ longStops: number; shortStops: number }> {
+// ── Consecutive-stop circuit breaker & loss cooldown ──────────────────────
+export interface StopHistoryAnalysis {
+  longStops: number;
+  shortStops: number;
+  consecutiveLosses: number;
+  lastLossTime: number;
+  recentLossCount1h: number;
+  inCircuitBreakerCooldown: boolean;
+  cooldownRemainingMinutes: number;
+}
+
+async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
   try {
-    const rows = await db
-      .select({ signal: signalsTable.signal, tradeStatus: signalsTable.tradeStatus })
-      .from(signalsTable)
-      .orderBy(desc(signalsTable.createdAt))
-      .limit(5);
+    const rows = await getRecentSignals(10);
     let longStops = 0, shortStops = 0;
-    for (const r of rows) {
-      if (r.tradeStatus !== "RUNNING") { // only count completed trades
-        if (r.signal === "LONG"  && r.tradeStatus === "STOP_HIT") longStops++;
-        if (r.signal === "SHORT" && r.tradeStatus === "STOP_HIT") shortStops++;
+    let consecutiveLosses = 0;
+    let lastLossTime = 0;
+    let recentLossCount1h = 0;
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+
+    const completed = rows.filter((r: any) => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");
+    
+    let countingStreak = true;
+    for (const r of completed) {
+      const tradeTime = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+      if (r.tradeStatus === "STOP_HIT") {
+        if (tradeTime > oneHourAgo) recentLossCount1h++;
+        if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
+        if (countingStreak) consecutiveLosses++;
+      } else if (r.tradeStatus === "TARGET_HIT") {
+        countingStreak = false;
       }
     }
-    return { longStops, shortStops };
+
+    for (const r of completed.slice(0, 5)) {
+      if (r.signal === "LONG"  && r.tradeStatus === "STOP_HIT") longStops++;
+      if (r.signal === "SHORT" && r.tradeStatus === "STOP_HIT") shortStops++;
+    }
+
+    // Circuit breaker: 2+ consecutive losses OR 2+ losses in past hour -> 30-min protection cooldown
+    const CIRCUIT_BREAKER_WINDOW_MS = 30 * 60 * 1000;
+    const inCircuitBreakerCooldown =
+      (consecutiveLosses >= 2 || recentLossCount1h >= 2) &&
+      lastLossTime > 0 &&
+      now - lastLossTime < CIRCUIT_BREAKER_WINDOW_MS;
+
+    const cooldownRemainingMinutes = inCircuitBreakerCooldown
+      ? Math.max(1, Math.ceil((CIRCUIT_BREAKER_WINDOW_MS - (now - lastLossTime)) / 60000))
+      : 0;
+
+    return {
+      longStops,
+      shortStops,
+      consecutiveLosses,
+      lastLossTime,
+      recentLossCount1h,
+      inCircuitBreakerCooldown,
+      cooldownRemainingMinutes,
+    };
   } catch {
-    return { longStops: 0, shortStops: 0 };
+    return {
+      longStops: 0,
+      shortStops: 0,
+      consecutiveLosses: 0,
+      lastLossTime: 0,
+      recentLossCount1h: 0,
+      inCircuitBreakerCooldown: false,
+      cooldownRemainingMinutes: 0,
+    };
   }
 }
 
 // ── FVG Detection ─────────────────────────────────────────────────────────
-export function detectFVGZones(candles: OHLCCandle[]): FVGZone[] {
+export function detectFVGZones(candles: OHLCCandle[], volSma: number[] = []): FVGZone[] {
   const zones: FVGZone[] = [];
   for (let i = 2; i < candles.length; i++) {
     const c0 = candles[i - 2]!; // 2 bars before
+    const c1 = candles[i - 1]!; // middle gap bar
     const c2 = candles[i]!;     // current bar
+    
+    // Check if middle gap bar (c1) has volume > average
+    const avgVol = volSma[i - 1] || 0;
+    const isHighVol = avgVol === 0 || (c1.volume || 0) > avgVol * 1.1; // Require 10% above average volume for valid FVG
 
-    // Bullish FVG: gap up — the top of candle[i-2] is below the bottom of candle[i]
-    if (c0.high < c2.low) {
-      zones.push({ type: "BULLISH", low: c0.high, high: c2.low });
-    }
-    // Bearish FVG: gap down — the bottom of candle[i-2] is above the top of candle[i]
-    else if (c0.low > c2.high) {
-      zones.push({ type: "BEARISH", low: c2.high, high: c0.low });
+    if (isHighVol) {
+      // Bullish FVG: gap up
+      if (c0.high < c2.low) {
+        zones.push({ type: "BULLISH", low: c0.high, high: c2.low });
+      }
+      // Bearish FVG: gap down
+      else if (c0.low > c2.high) {
+        zones.push({ type: "BEARISH", low: c2.high, high: c0.low });
+      }
     }
   }
   return zones.slice(-10); // keep only last 10 FVG zones
@@ -234,30 +299,31 @@ export function getFVGScore(price: number, zones: FVGZone[], direction: "LONG" |
 }
 
 // ── Liquidity Sweep Detection ─────────────────────────────────────────────
-export function detectLiquiditySweep(candles: OHLCCandle[]): "BULLISH" | "BEARISH" | null {
-  // Check the last 3 completed bars for a sweep
+export function detectLiquiditySweep(candles: OHLCCandle[], volSma: number[] = []): "BULLISH" | "BEARISH" | null {
   const start = Math.max(1, candles.length - 4);
   for (let i = candles.length - 2; i >= start; i--) {
     const candle = candles[i]!;
     const prev   = candles[i - 1]!;
     const body   = Math.abs(candle.close - candle.open);
-    const wick   = candle.high - candle.low;
-    // Guard against doji (body ≈ 0) which would produce Infinity
-    const wickRatio = body > 0.01 ? wick / body : wick > 0 ? 999 : 0;
+    
+    const lowerWick = Math.min(candle.open, candle.close) - candle.low;
+    const upperWick = candle.high - Math.max(candle.open, candle.close);
+    
+    const lowerWickRatio = body > 0.01 ? lowerWick / body : lowerWick > 0 ? 999 : 0;
+    const upperWickRatio = body > 0.01 ? upperWick / body : upperWick > 0 ? 999 : 0;
+    
+    const avgVol = volSma[i] || 0;
+    const isHighVol = avgVol === 0 || (candle.volume || 0) > avgVol * 1.15; // Sweep must be on 15% higher vol
 
-    // Bullish sweep: wick dips below prev low, then price closes back above it
-    if (candle.low < prev.low && candle.close > prev.low && wickRatio > 1.5) {
-      return "BULLISH";
-    }
-    // Bearish sweep: wick spikes above prev high, then price closes back below it
-    if (candle.high > prev.high && candle.close < prev.high && wickRatio > 1.5) {
-      return "BEARISH";
+    if (isHighVol) {
+      if (candle.low < prev.low && candle.close > prev.low && lowerWickRatio > 1.0) return "BULLISH";
+      if (candle.high > prev.high && candle.close < prev.high && upperWickRatio > 1.0) return "BEARISH";
     }
   }
   return null;
 }
 
-export async function generateSignal(currentPrice: number): Promise<SignalResult> {
+export async function generateSignal(currentPrice: number, isCommit = false): Promise<SignalResult> {
   const now = Date.now();
   const sinceLastSignal    = now - lastSignalTime;
   const cooldownRemaining  = Math.max(0, Math.ceil((COOLDOWN_MS - sinceLastSignal) / 1000));
@@ -281,6 +347,7 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
       session,
       signalStrength:       null,
       spikeCooldownCandles: 0,
+      spikeCooldownRemaining: 0,
       emaScore:      0,
       rsiScore:      0,
       macdScore:     0,
@@ -335,26 +402,79 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
       smartMode,
       session,
       spikeCooldownCandles: freshSpikeCooldownCandles,
+      spikeCooldownRemaining: Math.max(0, Math.ceil((_spikeCdMs - _spikeElapsed) / 1000)),
     };
-  }
-
-  if (cachedSignal && sinceLastSignal < SIGNAL_CACHE_TTL) {
-    return { ...cachedSignal, cooldownRemaining, smartMode, session, spikeCooldownCandles: 0 };
   }
 
   const analytics = await getAnalyticsSummary();
   const minConf = smartMode && analytics.sufficientData ? MIN_CONF_NORMAL + 5 : MIN_CONF_NORMAL;
 
   try {
-    // ── Fetch 5m (primary), 1m (entry refinement), and consecutive-stop counts ──
-    const [candles5m, candles1m, recentStops] = await Promise.all([
-      fetchOHLC("5m"),
-      fetchOHLC("1m"),
-      getRecentStopCounts(),
-    ]);
+    // ── Fetch 5m (primary), 1m (entry refinement), and 15m (macro structure) ──
+    const fetchWithFallback = async (tf: string, count: number) => {
+      try {
+        const { getMetaApiHistoricalOHLC } = await import("./metaApiFeed.js");
+        return await getMetaApiHistoricalOHLC(tf, count);
+      } catch (metaErr) {
+        logger.warn({ tf, err: (metaErr as any)?.message }, "MetaApi historical candle fetch failed, falling back to public market feed");
+        const { fetchOHLC } = await import("./goldPrice.js");
+        return await fetchOHLC(tf);
+      }
+    };
+    
+    let candles5m: OHLCCandle[];
+    let candles1m: OHLCCandle[];
+    let candles15m: OHLCCandle[];
+
+    try {
+      if (Date.now() - cachedCandlesTime < CANDLE_CACHE_TTL && cachedCandles5m.length > 0) {
+        // Use cached candles and clone them
+        candles5m = cachedCandles5m.map(c => ({ ...c }));
+        candles1m = cachedCandles1m.map(c => ({ ...c }));
+        candles15m = cachedCandles15m.map(c => ({ ...c }));
+      } else {
+        candles5m = await fetchWithFallback("5m", 300);
+        candles1m = await fetchWithFallback("1m", 300);
+        candles15m = await fetchWithFallback("15m", 100);
+        cachedCandles5m = candles5m.map(c => ({ ...c }));
+        cachedCandles1m = candles1m.map(c => ({ ...c }));
+        cachedCandles15m = candles15m.map(c => ({ ...c }));
+        cachedCandlesTime = Date.now();
+      }
+    } catch (candleFetchErr) {
+      if (cachedCandles5m.length > 0) {
+        logger.warn("Transient candle fetch issue; continuing signal analysis using cached candles");
+        candles5m = cachedCandles5m.map(c => ({ ...c }));
+        candles1m = cachedCandles1m.map(c => ({ ...c }));
+        candles15m = cachedCandles15m.map(c => ({ ...c }));
+      } else {
+        throw candleFetchErr;
+      }
+    }
+    const recentStops = await getRecentStopCounts();
+
+    // Override the most recent candle's close with the real-time live price
+    // This allows us to cache MetaApi historical requests for longer without losing live precision
+    // Override the most recent candle's close with the real-time live price
+    // Also override High/Low if the live price exceeds them
+    const updateLiveCandle = (candles: any[]) => {
+        if (candles.length === 0) return;
+        const last = candles[candles.length - 1];
+        last.close = currentPrice;
+        if (currentPrice > last.high) last.high = currentPrice;
+        if (currentPrice < last.low) last.low = currentPrice;
+    };
+    updateLiveCandle(candles5m);
+    updateLiveCandle(candles1m);
+    updateLiveCandle(candles15m);
 
     const closes5m = candles5m.map(c => c.close);
     const closes1m = candles1m.map(c => c.close);
+    const closes15m = candles15m.map(c => c.close);
+    
+    const ema9_15m = calcEMA(closes15m, 9);
+    const ema21_15m = calcEMA(closes15m, 21);
+    const trend15m = detectTrend(ema9_15m, ema21_15m);
 
     // ── EMAs on 5m ────────────────────────────────────────────────────────
     const ema9_5m  = calcEMA(closes5m, 9);
@@ -376,6 +496,10 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     // ── RSI (14) on 5m ────────────────────────────────────────────────────
     const rsi5mArr = calcRSI(closes5m, 14);
     const rsi      = rsi5mArr[rsi5mArr.length - 1] ?? 50;
+    
+    // ── ADX (Trend Strength) ──────────────────────────────────────────────
+    const { adx: adxArr } = calcADX(candles5m, 14);
+    const currentAdx = adxArr[adxArr.length - 1] ?? 0;
 
     // ── MACD (12,26,9) on 5m ──────────────────────────────────────────────
     const { macdLine, signalLine, histogram } = calcMACD(closes5m);
@@ -412,13 +536,23 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     const candidates = [
       candles5m[candles5m.length - 1], // forming candle — spike in progress
       candles5m[candles5m.length - 2], // last completed candle
-    ].filter((c): c is OHLCCandle => !!c);
+    ].filter(Boolean) as any[];
 
     for (const candle of candidates) {
       const body = Math.abs(candle.close - candle.open);
-      const spikeDetected = body > spikeThreshold;
+      const range = candle.high - candle.low;
+      
+      // Check if body is massive OR range (wick) is massive
+      let spikeDetected = body > spikeThreshold || range > spikeThreshold * 2.0;
+      
+      // Guard against wild currentPrice glitches from the feed
+      const lastClose = candidates[1] ? candidates[1].close : candle.close;
+      if (Math.abs(currentPrice - lastClose) > atr * 5.0) {
+        spikeDetected = true;
+      }
+
       logger.info(
-        { "Candle body (pts)": +body.toFixed(2), "ATR (pts)": +atr.toFixed(2), "ATR×1.5 (pts)": +spikeThreshold.toFixed(2), "Spike detected": spikeDetected },
+        { "Candle body": +body.toFixed(2), "Range": +range.toFixed(2), "ATR": +atr.toFixed(2), "Threshold": +spikeThreshold.toFixed(2), "Spike detected": spikeDetected },
         "Spike check"
       );
       if (spikeDetected) {
@@ -457,10 +591,11 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     const trend5m  = detectTrend(ema9_5m, ema21_5m);
 
     // ── FVG Detection (5m candles) ────────────────────────────────────────
-    const fvgZones  = detectFVGZones(candles5m);
+    const volSma = calcVolumeSMA(candles5m, 20);
+    const fvgZones  = detectFVGZones(candles5m, volSma);
 
     // ── Liquidity Sweep Detection (5m candles) ────────────────────────────
-    const sweepDir  = detectLiquiditySweep(candles5m);
+    const sweepDir  = detectLiquiditySweep(candles5m, volSma);
 
     // ── Order Block Detection (5m candles, ATR-validated) ─────────────────
     const { bullishOB, bearishOB } = detectOrderBlocks(candles5m, atr);
@@ -481,9 +616,9 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     // even if the 5m EMAs are still bullishly aligned (they lag by design).
     const recentMomentum     = getRecentMomentum(candles5m);
     const longMomentumAdj    = recentMomentum === "BULLISH" ? 10
-                             : recentMomentum === "BEARISH" ? -15 : 0;
+                             : recentMomentum === "BEARISH" ? -25 : 0;
     const shortMomentumAdj   = recentMomentum === "BEARISH" ? 10
-                             : recentMomentum === "BULLISH" ? -15 : 0;
+                             : recentMomentum === "BULLISH" ? -25 : 0;
     logger.info(
       { recentMomentum, longMomentumAdj, shortMomentumAdj },
       "[MomentumGate] Recent 4-candle momentum"
@@ -643,12 +778,21 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     const longNorm  = Math.min(100, Math.round((longRaw  / MAX_RAW_SCORE) * 100));
     const shortNorm = Math.min(100, Math.round((shortRaw / MAX_RAW_SCORE) * 100));
 
+    // ── Market Structure & Range Analysis ──────────────────────────────────
+    const ms5m = detectMarketStructure(candles5m);
+    const ms15m = detectMarketStructure(candles15m);
+    const rangeInfo = analyzeMarketRange(candles5m, currentPrice, atr, 30);
+    const isMarketConsolidating = ms5m.structure === "RANGING" || trend5m === "NEUTRAL" || currentAdx < 22;
+
+    // In ranging/chop conditions (ADX < 22 or NEUTRAL/RANGING structure), require higher base confidence (70% vs 53%)
+    const baseMinConf = isMarketConsolidating ? MIN_CONF_RANGE : MIN_CONF_NORMAL;
+    const dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
+
     // ── Per-direction minimum confidence (consecutive-stop circuit breaker) ──
-    // After ≥2 stops in the same direction from the last 5 trades, require an
-    // extra 15% confidence before firing again in that direction.
+    // After ≥2 stops in the same direction from recent trades, require an extra 15% confidence
     const circuitBreakerPenalty = 15;
-    const longMinConf  = recentStops.longStops  >= 2 ? minConf + circuitBreakerPenalty : minConf;
-    const shortMinConf = recentStops.shortStops >= 2 ? minConf + circuitBreakerPenalty : minConf;
+    const longMinConf  = recentStops.longStops  >= 2 ? dynamicMinConf + circuitBreakerPenalty : dynamicMinConf;
+    const shortMinConf = recentStops.shortStops >= 2 ? dynamicMinConf + circuitBreakerPenalty : dynamicMinConf;
     if (recentStops.longStops >= 2 || recentStops.shortStops >= 2) {
       logger.warn(
         { longStops: recentStops.longStops, shortStops: recentStops.shortStops, longMinConf, shortMinConf },
@@ -698,8 +842,6 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
 
     // ── Cooldown Guard ────────────────────────────────────────────────────
     // Layer 1 — Hard 5-minute floor (absolute minimum, no bypass).
-    //   Prevents multiple signals at the same timestamp when gold moves
-    //   $8+ in a single minute (common during London/NY overlap).
     const hardFloorActive = sinceLastSignal < MIN_SIGNAL_INTERVAL_MS;
 
     // Layer 2 — Standard 15-minute cooldown (bypassable only when price
@@ -712,37 +854,67 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
       direction !== "HOLD" && direction !== lastSignalState.signal;
 
     let finalSignal = direction;
+    let suppressionReason = "";
 
     if (finalSignal !== "HOLD" && hardFloorActive) {
-      // Hard floor — no bypass exists
       logger.info(
         { msSinceLast: sinceLastSignal, floorMs: MIN_SIGNAL_INTERVAL_MS },
         "[Cooldown] Hard 5-min floor active — signal suppressed"
       );
       finalSignal = "HOLD";
+      suppressionReason = "Hard 5-min floor active";
     } else if (finalSignal !== "HOLD" && inCooldown && !(priceMoved && oppositeSignal)) {
-      // Standard cooldown — bypassable only when price moved enough AND direction reversed
       finalSignal = "HOLD";
+      suppressionReason = "Cooldown active";
     }
     // Post-spike cooldown overrides all — no signals until spike settles
     if (finalSignal !== "HOLD" && inSpikeCooldown) {
       finalSignal = "HOLD";
+      suppressionReason = "Spike cooldown active";
+    }
+
+    // ── Global Circuit Breaker Protection (30-min window after 2+ losses) ──
+    if (finalSignal !== "HOLD" && recentStops.inCircuitBreakerCooldown) {
+      // Only an exceptional high-conviction institutional reversal can bypass circuit breaker
+      const hasMajorInstitutionalReversal = (choch.detected || sweepRej.detected) && confidence >= 80;
+      if (!hasMajorInstitutionalReversal) {
+        logger.warn(
+          { consecutiveLosses: recentStops.consecutiveLosses, cooldownMins: recentStops.cooldownRemainingMinutes },
+          "[CircuitBreaker] Trade suppressed by circuit breaker cooldown"
+        );
+        finalSignal = "HOLD";
+        suppressionReason = `Circuit Breaker active (${recentStops.cooldownRemainingMinutes}m left)`;
+      }
+    }
+
+    // ── DB Deduplication Guard (Prevents redundant signals if trade is already running) ──
+    if (finalSignal !== "HOLD") {
+      try {
+        const running = await getRunningTrades();
+        if (running.some(r => r.signal === finalSignal)) {
+          logger.info({ direction: finalSignal }, "[SignalEngine] RUNNING trade already open — signal suppressed");
+          finalSignal = "HOLD";
+          suppressionReason = "RUNNING trade already open in same direction";
+        } else {
+          const latest = await getLatestSignal();
+          if (latest && latest.signal === finalSignal) {
+            const timeSinceLatest = Date.now() - latest.createdAt.getTime();
+            if (timeSinceLatest < 5 * 60 * 1000) {
+              logger.info({ direction: finalSignal, msAgo: timeSinceLatest }, "[SignalEngine] Previous signal in same direction fired within 5 mins — signal suppressed");
+              finalSignal = "HOLD";
+              suppressionReason = "Previous signal in same direction fired within 5 mins";
+            }
+          }
+        }
+      } catch (dbErr) {
+        logger.warn({ err: dbErr }, "[SignalEngine] Failed to check DB for running trades");
+      }
     }
 
     // ── Reversal Classification & Gate ────────────────────────────────────
-    // A signal is a reversal if it goes AGAINST the prevailing 5m trend.
-    // Counter-trend trades require:
-    //   (a) CHoCH or sweep-rejection confirmation, AND
-    //   (b) confidence ≥ MIN_CONF_REVERSAL (75%) — higher bar than trend-follow
-    //
-    // BLIND-SPOT FIX: trend5m can read NEUTRAL while EMA is clearly bullish/bearish
-    // (EMAs lag — during a fast rally the trend hasn't "confirmed" yet).
-    // Treat EMA alignment as a tie-breaker when trend5m is NEUTRAL:
-    //   • ema9 > ema21 + trend5m NEUTRAL → SHORT is still counter-trend
-    //   • ema9 < ema21 + trend5m NEUTRAL → LONG is still counter-trend
     const emaDirection: "BULLISH" | "BEARISH" | "NEUTRAL" =
-      ema9 > ema21 * 1.0005 ? "BULLISH" :   // ema9 meaningfully above ema21
-      ema9 < ema21 * 0.9995 ? "BEARISH" :   // ema9 meaningfully below ema21
+      ema9 > ema21 * 1.0005 ? "BULLISH" :
+      ema9 < ema21 * 0.9995 ? "BEARISH" :
       "NEUTRAL";
 
     const effectiveTrend =
@@ -757,26 +929,73 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     let signalType: "TREND_FOLLOW" | "REVERSAL" = "TREND_FOLLOW";
 
     if (finalSignal !== "HOLD" && isAgainstTrend) {
-      const chochConfirms = choch.detected    && choch.direction    === finalSignal;
-      const sweepConfirms = sweepRej.detected && sweepRej.rejectionType === finalSignal;
+      const chochConfirms = choch.detected    && choch.direction    === (finalSignal === "LONG" ? "BULLISH" : "BEARISH");
+      const sweepConfirms = sweepRej.detected && sweepRej.rejectionType === (finalSignal === "LONG" ? "BULLISH" : "BEARISH");
       const hasConfirmation = chochConfirms || sweepConfirms;
 
       if (!hasConfirmation || confidence < MIN_CONF_REVERSAL) {
-        // Insufficient structural evidence for counter-trend trade → stay out
         finalSignal = "HOLD";
+        suppressionReason = "Counter-trend trade requires 75% confidence & structural confirmation";
       } else {
         signalType = "REVERSAL";
       }
     }
 
-    // ── SL / TP (ATR-based, minimum 1.5:1 R:R enforced) ──────────────────
-    // Previous regime had SL up to 22 pts and TP capped at 9 pts → 0.41:1 R:R,
-    // meaning you needed 71%+ win rate just to break even. Now:
-    //   SL = 1.5×ATR (trend-follow) or 2×ATR (reversal), capped at 14
-    //   TP = slDist × 1.5  → always 1.5:1 R:R (break-even at 40% win rate)
-    const slMultiplier = signalType === "REVERSAL" ? 2.0 : 1.5;
-    const slDist = Math.min(Math.max(atr * slMultiplier, 5), 14);
-    const tpDist = slDist * 1.5;
+    // ── Range Boundaries & Mid-Chop Gate ──────────────────────────────────
+    // In consolidation/ranging conditions, reject trend-following breakouts in the middle of chop
+    // and prevent buying into range resistance or selling into range support.
+    if (finalSignal !== "HOLD" && isMarketConsolidating && rangeInfo.isRanging) {
+      if (signalType === "TREND_FOLLOW" && rangeInfo.position === "MID_CHOP_ZONE") {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed trend-follow signal in mid-range chop");
+        finalSignal = "HOLD";
+        suppressionReason = `Mid-range chop zone ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)})`;
+      } else if (signalType === "TREND_FOLLOW" && rangeInfo.position === "RESISTANCE_ZONE" && finalSignal === "LONG") {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed LONG signal at range resistance ceiling");
+        finalSignal = "HOLD";
+        suppressionReason = `Buying into range ceiling ($${rangeInfo.resistance.toFixed(1)})`;
+      } else if (signalType === "TREND_FOLLOW" && rangeInfo.position === "SUPPORT_ZONE" && finalSignal === "SHORT") {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed SHORT signal at range support floor");
+        finalSignal = "HOLD";
+        suppressionReason = `Selling into range floor ($${rangeInfo.support.toFixed(1)})`;
+      }
+    }
+
+    // ── Macro Trend Filter (15m Structure & Trend) ────────────────────────
+    // If it's a normal trend-following trade, ensure alignment with the 15m macro structure.
+    if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
+      if (finalSignal === "LONG" && (trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) {
+        logger.warn({ finalSignal, trend15m, ms15m: ms15m.structure }, "[MacroFilter] Suppressed by 15m bearish structure");
+        finalSignal = "HOLD";
+        suppressionReason = "Filtered by 15m macro bearish structure";
+      } else if (finalSignal === "SHORT" && (trend15m === "BULLISH" || ms15m.structure === "UPTREND")) {
+        logger.warn({ finalSignal, trend15m, ms15m: ms15m.structure }, "[MacroFilter] Suppressed by 15m macro bullish structure");
+        finalSignal = "HOLD";
+        suppressionReason = "Filtered by 15m macro bullish structure";
+      }
+    }
+
+    // ── SL / TP: Structure-Based Dynamic Stops (ATR-backed, min 1.5:1 R:R) ──
+    const { nearestSwingHigh, nearestSwingLow } = getNearestSwingLevels(candles5m, 25);
+    const minAtrPadding = atr * (signalType === "REVERSAL" ? 2.0 : 1.8);
+
+    let slDist: number;
+    if (finalSignal === "LONG") {
+      const structuralDist = nearestSwingLow !== null
+        ? (currentPrice - nearestSwingLow) + (atr * 0.8)
+        : minAtrPadding;
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 7.0), 16.0);
+    } else if (finalSignal === "SHORT") {
+      const structuralDist = nearestSwingHigh !== null
+        ? (nearestSwingHigh - currentPrice) + (atr * 0.8)
+        : minAtrPadding;
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 7.0), 16.0);
+    } else {
+      slDist = Math.min(Math.max(minAtrPadding, 7.0), 16.0);
+    }
+
+    // Reward to Risk: 1.6:1 baseline, up to 2.5:1 when ADX > 25 indicates strong trend
+    const rrMultiplier = currentAdx > 25 ? 2.5 : 1.6;
+    const tpDist = +(slDist * rrMultiplier).toFixed(2);
     let stopLoss:   number;
     let takeProfit: number;
 
@@ -811,19 +1030,25 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
       if (choch.detected && signalType === "REVERSAL") parts.push(`CHoCH @ ${choch.level}`);
       if (sweepRej.detected && signalType === "REVERSAL") parts.push(`Sweep reject @ ${sweepRej.sweptLevel}`);
       const typeTag = signalType === "REVERSAL" ? " ⟳REVERSAL" : "";
-      reason = `${signalStrength} ${finalSignal}${typeTag} ${sessionNote} [conf:${confidence}%] — ${parts.join(" · ")}`;
+      reason = `${signalStrength} ${finalSignal}${typeTag} ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
+    } else if (recentStops.inCircuitBreakerCooldown) {
+      reason = `HOLD – Circuit Breaker (${recentStops.cooldownRemainingMinutes}m cooldown after ${recentStops.consecutiveLosses} consecutive stops) · Preserving capital during consolidation`;
+    } else if (suppressionReason.length > 0) {
+      reason = `HOLD – ${suppressionReason} ${sessionNote} · Best: ${dominant} ${Math.max(longNorm, shortNorm)}%`;
     } else if (direction !== "HOLD" && inSpikeCooldown) {
       reason = `HOLD – Spike cooldown (${spikeCooldownCandles} candle${spikeCooldownCandles !== 1 ? "s" : ""} remaining) · ${direction} ${Math.max(longNorm, shortNorm)}% queued after spike settles`;
     } else if (direction !== "HOLD" && inCooldown) {
       const mLeft = Math.ceil(cooldownRemaining / 60);
       reason = `HOLD – cooldown ${mLeft}m remaining · ${direction} signal (${Math.max(longNorm, shortNorm)}% conf) ready`;
+    } else if (isMarketConsolidating && rangeInfo.isRanging && rangeInfo.position === "MID_CHOP_ZONE") {
+      reason = `HOLD – Range consolidation ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)}) · Price in middle chop zone (waiting for boundary test)`;
     } else {
       const bestDir  = longNorm >= shortNorm ? "LONG" : "SHORT";
       const bestConf = Math.max(longNorm, shortNorm);
-      reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${minConf}%)`;
+      reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${dynamicMinConf}%)`;
     }
 
-    if (finalSignal !== "HOLD") {
+    if (finalSignal !== "HOLD" && isCommit) {
       lastSignalState = { signal: finalSignal, price: currentPrice, timestamp: now };
       lastSignalTime  = now;
     }
@@ -842,7 +1067,8 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
       smartMode,
       session,
       signalStrength,
-      spikeCooldownCandles,
+            spikeCooldownCandles,
+      spikeCooldownRemaining: Math.max(0, Math.ceil(((SPIKE_COOLDOWN_COUNT * 300000) - (Date.now() - spikeDetectedAt)) / 1000)),
       emaScore,
       rsiScore,
       macdScore,
@@ -874,8 +1100,12 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
     cachedSignal = result;
     return result;
 
-  } catch (err) {
-    logger.error({ err }, "Scalp signal generation failed");
+  } catch (err: any) {
+    if (err.message && (err.message.includes('status code 503') || err.message.includes('MetaApi is not connected'))) {
+      logger.warn(`[SignalEngine] MetaApi unavailable: ${err.message}. Signals paused.`);
+    } else {
+      logger.error({ err }, "Scalp signal generation failed");
+    }
 
     const fallback: SignalResult = {
       signal:     "HOLD",
@@ -892,6 +1122,7 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
       session,
       signalStrength:    null,
       spikeCooldownCandles: 0,
+      spikeCooldownRemaining: 0,
       emaScore:      0,
       rsiScore:      0,
       macdScore:     0,
@@ -921,11 +1152,7 @@ export async function generateSignal(currentPrice: number): Promise<SignalResult
 // Prevents a server restart from resetting the 15-min inter-signal cooldown.
 export async function initSignalCooldown(): Promise<void> {
   try {
-    const [last] = await db
-      .select({ createdAt: signalsTable.createdAt })
-      .from(signalsTable)
-      .orderBy(desc(signalsTable.createdAt))
-      .limit(1);
+    const last = await getLatestSignal();
     if (last) {
       lastSignalTime = last.createdAt.getTime();
       logger.info(
@@ -933,7 +1160,7 @@ export async function initSignalCooldown(): Promise<void> {
         "Signal cooldown restored from DB",
       );
     }
-  } catch (err) {
+  } catch (err: any) {
     logger.warn({ err }, "Failed to restore signal cooldown from DB — starting fresh");
   }
 }

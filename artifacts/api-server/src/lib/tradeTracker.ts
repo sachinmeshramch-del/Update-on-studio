@@ -1,7 +1,7 @@
-import { db, signalsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { getRunningTrades, updateTradeStatus, updateTradeStopLoss } from "@workspace/db";
 import { getLatestPrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
+import { modifyOpenPositionsStopLoss } from "./metaApiFeed.js";
 
 const TRACKER_INTERVAL = 10_000; // 10 seconds
 
@@ -21,10 +21,7 @@ async function checkRunningTrades() {
   const currentPrice = live.price;
 
   try {
-    const runningTrades = await db
-      .select()
-      .from(signalsTable)
-      .where(eq(signalsTable.tradeStatus, "RUNNING"));
+    const runningTrades = await getRunningTrades();
 
     if (runningTrades.length === 0) return;
 
@@ -44,6 +41,23 @@ async function checkRunningTrades() {
           newStatus   = "STOP_HIT";
           closedPrice = stopLoss;
           pnlPoints   = +(stopLoss - entryPrice).toFixed(2);
+        } else {
+          // Trailing SL: When trade reaches 50% of the distance to TP, lock in exactly +2 points of profit
+          const distanceToTarget = +(takeProfit - entryPrice).toFixed(2);
+          const currentProfit = +(currentPrice - entryPrice).toFixed(2);
+          const halfwayDistance = distanceToTarget * 0.5;
+
+          if (distanceToTarget > 0 && currentProfit >= halfwayDistance) {
+            const targetSl = +(entryPrice + 2.0).toFixed(2); // Lock in exactly +2 points of profit
+            if (stopLoss < targetSl) {
+              await updateTradeStopLoss(id as string, targetSl);
+              await modifyOpenPositionsStopLoss("LONG", targetSl);
+              logger.info(
+                { id, signal, entryPrice, currentPrice, oldSl: stopLoss, newSl: targetSl, distanceToTarget, currentProfit },
+                "Trailing Stop Loss: 50% target distance reached — locked in +2.0 points profit"
+              );
+            }
+          }
         }
       } else if (signal === "SHORT") {
         if (currentPrice <= takeProfit) {
@@ -54,14 +68,28 @@ async function checkRunningTrades() {
           newStatus   = "STOP_HIT";
           closedPrice = stopLoss;
           pnlPoints   = +(entryPrice - stopLoss).toFixed(2);
+        } else {
+          // Trailing SL: When trade reaches 50% of the distance to TP, lock in exactly +2 points of profit
+          const distanceToTarget = +(entryPrice - takeProfit).toFixed(2);
+          const currentProfit = +(entryPrice - currentPrice).toFixed(2);
+          const halfwayDistance = distanceToTarget * 0.5;
+
+          if (distanceToTarget > 0 && currentProfit >= halfwayDistance) {
+            const targetSl = +(entryPrice - 2.0).toFixed(2); // Lock in exactly +2 points of profit
+            if (stopLoss > targetSl) {
+              await updateTradeStopLoss(id as string, targetSl);
+              await modifyOpenPositionsStopLoss("SHORT", targetSl);
+              logger.info(
+                { id, signal, entryPrice, currentPrice, oldSl: stopLoss, newSl: targetSl, distanceToTarget, currentProfit },
+                "Trailing Stop Loss: 50% target distance reached — locked in +2.0 points profit"
+              );
+            }
+          }
         }
       }
 
       if (newStatus && closedPrice !== null && pnlPoints !== null) {
-        await db
-          .update(signalsTable)
-          .set({ tradeStatus: newStatus, closedPrice, closedAt: new Date(), pnlPoints })
-          .where(eq(signalsTable.id, id));
+        await updateTradeStatus(id as string, newStatus, closedPrice, pnlPoints);
 
         logger.info({ id, signal, newStatus, closedPrice, pnlPoints }, "Scalp trade outcome updated");
       }

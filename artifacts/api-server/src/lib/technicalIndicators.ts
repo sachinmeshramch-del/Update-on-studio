@@ -714,3 +714,140 @@ export function detectSweepRejection(
 
   return { detected: false, rejectionType: null, sweptLevel: null };
 }
+
+export function calcADX(candles: OHLCCandle[], period: number = 14): { adx: number[], plusDI: number[], minusDI: number[] } {
+  if (candles.length <= period) {
+    return { adx: [], plusDI: [], minusDI: [] };
+  }
+  
+  const tr: number[] = [];
+  const plusDM: number[] = [];
+  const minusDM: number[] = [];
+  
+  for (let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevHigh = candles[i-1].high;
+    const prevLow = candles[i-1].low;
+    const prevClose = candles[i-1].close;
+    
+    tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+    
+    const upMove = high - prevHigh;
+    const downMove = prevLow - low;
+    
+    plusDM.push((upMove > downMove && upMove > 0) ? upMove : 0);
+    minusDM.push((downMove > upMove && downMove > 0) ? downMove : 0);
+  }
+  
+  // RMA helper
+  const calcRMA = (values: number[], per: number): number[] => {
+    if (values.length < per) return [];
+    const rma = new Array(values.length).fill(0);
+    let sum = 0;
+    for (let i = 0; i < per; i++) sum += values[i];
+    rma[per - 1] = sum / per;
+    for (let i = per; i < values.length; i++) {
+      rma[i] = (rma[i - 1] * (per - 1) + values[i]) / per;
+    }
+    return rma;
+  };
+  
+  const trRMA = calcRMA(tr, period);
+  const plusDMRMA = calcRMA(plusDM, period);
+  const minusDMRMA = calcRMA(minusDM, period);
+  
+  const plusDI = new Array(candles.length).fill(0);
+  const minusDI = new Array(candles.length).fill(0);
+  const dx = new Array(candles.length).fill(0);
+  
+  for (let i = period; i < candles.length; i++) {
+    const trIndex = i - 1;
+    if (trRMA[trIndex] > 0) {
+      plusDI[i] = (plusDMRMA[trIndex] / trRMA[trIndex]) * 100;
+      minusDI[i] = (minusDMRMA[trIndex] / trRMA[trIndex]) * 100;
+      dx[i] = Math.abs(plusDI[i] - minusDI[i]) / (plusDI[i] + minusDI[i]) * 100;
+    }
+  }
+  
+  const adx = new Array(candles.length).fill(0);
+  // dx is aligned with candles, but starts at index `period`
+  const validDX = dx.slice(period);
+  const adxRMA = calcRMA(validDX, period);
+  
+  for (let i = period * 2 - 1; i < candles.length; i++) {
+    adx[i] = adxRMA[i - period];
+  }
+  
+  return { adx, plusDI, minusDI };
+}
+export function calcVolumeSMA(candles: OHLCCandle[], period: number = 20): number[] {
+  const sma = new Array(candles.length).fill(0);
+  if (candles.length < period) return sma;
+  
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += (candles[i].volume || 0);
+  sma[period - 1] = sum / period;
+  
+  for (let i = period; i < candles.length; i++) {
+    sum += (candles[i].volume || 0) - (candles[i - period].volume || 0);
+    sma[i] = sum / period;
+  }
+  return sma;
+}
+
+export interface RangeAnalysis {
+  isRanging: boolean;
+  support: number;
+  resistance: number;
+  rangeSpan: number;
+  rangeFloor: number;    // lower 30% boundary (Support Zone)
+  rangeCeiling: number;  // upper 30% boundary (Resistance Zone)
+  position: "SUPPORT_ZONE" | "RESISTANCE_ZONE" | "MID_CHOP_ZONE";
+}
+
+export function analyzeMarketRange(
+  candles: OHLCCandle[],
+  currentPrice: number,
+  atr: number,
+  lookback = 30
+): RangeAnalysis {
+  const sr = findSupportResistance(candles, lookback);
+  const support = sr.support;
+  const resistance = sr.resistance;
+  const rangeSpan = Math.max(0.1, +(resistance - support).toFixed(2));
+  
+  const rangeFloor = +(support + rangeSpan * 0.30).toFixed(2);
+  const rangeCeiling = +(resistance - rangeSpan * 0.30).toFixed(2);
+
+  let position: RangeAnalysis["position"] = "MID_CHOP_ZONE";
+  if (currentPrice <= rangeFloor) {
+    position = "SUPPORT_ZONE";
+  } else if (currentPrice >= rangeCeiling) {
+    position = "RESISTANCE_ZONE";
+  }
+
+  return {
+    isRanging: rangeSpan >= atr * 2.0,
+    support,
+    resistance,
+    rangeSpan,
+    rangeFloor,
+    rangeCeiling,
+    position,
+  };
+}
+
+export function getNearestSwingLevels(
+  candles: OHLCCandle[],
+  lookback = 25
+): { nearestSwingHigh: number | null; nearestSwingLow: number | null } {
+  const { highs, lows } = detectSwings(candles, 2, 2);
+  const recentHighs = highs.filter(h => h.index >= candles.length - lookback);
+  const recentLows = lows.filter(l => l.index >= candles.length - lookback);
+  
+  const nearestSwingHigh = recentHighs.length > 0 ? recentHighs[recentHighs.length - 1].price : null;
+  const nearestSwingLow = recentLows.length > 0 ? recentLows[recentLows.length - 1].price : null;
+
+  return { nearestSwingHigh, nearestSwingLow };
+}

@@ -9,7 +9,7 @@ import type { TradeRecordResult } from "./tradeRecordResult";
 import type { TradeRecordSignal } from "./tradeRecordSignal";
 
 export interface TradeRecord {
-  id: number;
+  id: string;
   signal: TradeRecordSignal;
   result: TradeRecordResult;
   entryPrice: number;

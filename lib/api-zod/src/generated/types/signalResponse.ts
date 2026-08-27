@@ -38,6 +38,8 @@ export interface SignalResponse {
   signalStrength: SignalResponseSignalStrength;
   /** Candles remaining in post-spike cooldown (0 = clear) */
   spikeCooldownCandles: number;
+  /** Seconds remaining in post-spike cooldown (0 = clear) */
+  spikeCooldownRemaining: number;
   /** EMA crossover score 0-35 */
   emaScore: number;
   /** RSI score 0-25 */

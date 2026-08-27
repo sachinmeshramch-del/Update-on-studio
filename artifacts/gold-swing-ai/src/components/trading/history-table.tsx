@@ -77,7 +77,7 @@ function StatusBadge({ status }: { status: TradeStatus }) {
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/5 text-muted-foreground border border-white/10">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-black/5 dark:bg-white/5 text-muted-foreground border border-border">
       — HOLD
     </span>
   );
@@ -118,7 +118,7 @@ function PnlCell({
 }
 
 function DurationCell({ timestamp, closedAt }: { timestamp: string; closedAt?: string }) {
-  const start = new Date(timestamp);
+  const start = timestamp ? new Date(timestamp) : new Date();
   const end = closedAt ? new Date(closedAt) : new Date();
   try {
     return (
@@ -144,7 +144,7 @@ function DeleteButton({ id, onDelete }: { id: string; onDelete: (id: string) => 
         </button>
         <button
           onClick={() => setConfirming(false)}
-          className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10 transition-colors"
+          className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/5 text-muted-foreground border border-border hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
         >
           Cancel
         </button>
@@ -164,12 +164,12 @@ function DeleteButton({ id, onDelete }: { id: string; onDelete: (id: string) => 
 
 function TypeBadge({ type }: { type?: string | null }) {
   if (type === "REVERSAL") return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30 whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 whitespace-nowrap">
       <RotateCcw className="w-2.5 h-2.5" /> REVERSAL
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 whitespace-nowrap">
       <Repeat2 className="w-2.5 h-2.5" /> TREND
     </span>
   );
@@ -193,27 +193,27 @@ function PeriodDropdown({ value, onChange }: { value: Period; onChange: (p: Peri
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all text-foreground"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 hover:border-border transition-all text-foreground"
       >
         {PERIOD_LABELS[value]}
         <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 min-w-[160px] bg-[#0f1724] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 border-b border-white/5">
+        <div className="absolute left-0 top-full mt-1 z-50 min-w-[160px] bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
+          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 border-b border-border">
             Period
           </div>
           {(["ALL", "TODAY", "7D", "30D"] as Period[]).map(p => (
             <button
               key={p}
               onClick={() => { onChange(p); setOpen(false); }}
-              className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left hover:bg-white/5 transition-colors"
+              className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             >
               <span className={value === p ? "text-foreground font-semibold" : "text-muted-foreground"}>
                 {PERIOD_LABELS[p]}
               </span>
-              {value === p && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+              {value === p && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
             </button>
           ))}
         </div>
@@ -255,13 +255,13 @@ function PnlSummary({ signals, currentPrice, period }: {
   const pnlPositive = totalPnl >= 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-black/30 border-b border-white/5 text-xs">
+    <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-black/30 border-b border-border text-xs">
       {/* Period label */}
       <span className="text-muted-foreground/60 font-semibold uppercase tracking-widest text-[10px]">
         {PERIOD_LABELS[period]}
       </span>
 
-      <div className="w-px h-4 bg-white/10" />
+      <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
 
       {/* Trade count */}
       <div className="flex items-center gap-1.5">
@@ -269,7 +269,7 @@ function PnlSummary({ signals, currentPrice, period }: {
         <span className="font-mono font-bold text-foreground">{tradeable.length}</span>
       </div>
 
-      <div className="w-px h-4 bg-white/10" />
+      <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
 
       {/* Win / Loss */}
       <div className="flex items-center gap-2">
@@ -291,7 +291,7 @@ function PnlSummary({ signals, currentPrice, period }: {
         )}
       </div>
 
-      <div className="w-px h-4 bg-white/10" />
+      <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
 
       {/* Total P&L */}
       <div className="flex items-center gap-1.5 ml-auto">
@@ -309,7 +309,7 @@ function PnlSummary({ signals, currentPrice, period }: {
 
 export function HistoryTable() {
   const { data, isLoading, isError, refetch } = useGetHistory({
-    query: { refetchInterval: 10000 },
+    query: { refetchInterval: 10000 } as any,
   });
   const { data: priceData } = usePriceStream();
   const currentPrice = priceData?.price ?? 0;
@@ -341,7 +341,7 @@ export function HistoryTable() {
   // Period filter
   const cutoff = periodStart(period);
   const periodSignals = cutoff
-    ? allSignals.filter(s => new Date(s.timestamp) >= cutoff)
+    ? allSignals.filter(s => s.timestamp && new Date(s.timestamp) >= cutoff)
     : allSignals;
 
   // Type filter
@@ -350,8 +350,8 @@ export function HistoryTable() {
     : periodSignals.filter(s => (s as any).signalType === typeFilter);
 
   return (
-    <Card className="border-white/5 bg-card/50 overflow-hidden">
-      <CardHeader className="pb-4 border-b border-white/5 bg-black/20">
+    <Card className="border-border bg-card/50 overflow-hidden">
+      <CardHeader className="pb-4 border-b border-border bg-black/20">
         <CardTitle className="text-lg flex items-center gap-2 flex-wrap gap-y-2">
           <History className="w-5 h-5 text-muted-foreground flex-shrink-0" />
           Signal History
@@ -366,11 +366,11 @@ export function HistoryTable() {
                 className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
                   typeFilter === f
                     ? f === "REVERSAL"
-                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                      ? "bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40"
                       : f === "TREND_FOLLOW"
-                      ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
-                      : "bg-white/10 text-foreground border border-white/20"
-                    : "text-muted-foreground border border-transparent hover:border-white/10 hover:bg-white/5"
+                      ? "bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/40"
+                      : "bg-black/10 dark:bg-white/10 text-foreground border border-border"
+                    : "text-muted-foreground border border-transparent hover:border-border hover:bg-black/5 dark:hover:bg-white/5"
                 }`}
               >
                 {f === "TREND_FOLLOW" ? "Trend" : f === "REVERSAL" ? "⟳ Reversal" : "All"}
@@ -407,7 +407,7 @@ export function HistoryTable() {
                   </button>
                   <button
                     onClick={() => setConfirmClear(false)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10 transition-colors"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 text-muted-foreground border border-border hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                   >
                     Cancel
                   </button>
@@ -415,7 +415,7 @@ export function HistoryTable() {
               ) : (
                 <button
                   onClick={() => setConfirmClear(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground border border-white/10 hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all duration-150"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground border border-border hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all duration-150"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Clear History
@@ -438,7 +438,7 @@ export function HistoryTable() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase bg-black/40 border-b border-white/5">
+            <thead className="text-xs text-muted-foreground uppercase bg-black/40 border-b border-border">
               <tr>
                 <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Date &amp; Time (IST)</th>
                 <th className="px-4 py-3 font-semibold tracking-wider">Signal</th>
@@ -459,7 +459,7 @@ export function HistoryTable() {
                   <tr key={i}>
                     {Array.from({ length: 11 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
-                        <Skeleton className="h-4 w-16 bg-white/5" />
+                        <Skeleton className="h-4 w-16 bg-black/5 dark:bg-white/5" />
                       </td>
                     ))}
                   </tr>
@@ -468,7 +468,7 @@ export function HistoryTable() {
                 signals.map((row) => {
                   const status = (row.tradeStatus ?? "RUNNING") as TradeStatus;
                   return (
-                    <tr key={row.id} className="hover:bg-white/5 transition-colors group">
+                    <tr key={row.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors group">
                       <td className="px-4 py-3 text-slate-200 text-xs whitespace-nowrap font-mono">
                         {toLocalTime(row.timestamp)}
                       </td>

@@ -6,8 +6,7 @@
  * Architecture: 6 → 24 (ReLU) → 12 (ReLU) → 3 (Softmax)
  * Classes: 0 = LONG, 1 = SHORT, 2 = NO_TRADE
  */
-import { db, signalsTable } from "@workspace/db";
-import { ne } from "drizzle-orm";
+import { getClosedTrades } from "@workspace/db";
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "./logger.js";
@@ -293,7 +292,7 @@ export function featurize(row: {
 interface Sample { features: number[]; label: number; }
 
 async function getTrainingSamples(): Promise<Sample[]> {
-  const rows = await db.select().from(signalsTable).where(ne(signalsTable.tradeStatus, "RUNNING"));
+  const rows = await getClosedTrades(1000);
   const samples: Sample[] = [];
   for (const r of rows) {
     if (r.signal !== "LONG" && r.signal !== "SHORT") continue;

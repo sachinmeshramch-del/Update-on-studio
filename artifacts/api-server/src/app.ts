@@ -1,10 +1,12 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import pino from "pino";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,8 +15,35 @@ const app: Express = express();
 
 app.use(
   pinoHttp({
+    customLogLevel: function (req, res, err) {
+      if (res.statusCode >= 500) {
+        return 'warn';
+      }
+      if (res.statusCode >= 400) {
+        return 'warn';
+      }
+      return 'info';
+    },
+    customSuccessMessage: function (req, res) {
+      if (res.statusCode === 503) {
+        return 'Market data unavailable (503)';
+      }
+      return 'request completed';
+    },
+    customErrorMessage: function (req, res, err) {
+      if (res.statusCode === 503) {
+        return 'Market data unavailable (503)';
+      }
+      return 'request errored';
+    },
     logger,
     serializers: {
+      err: (err) => {
+        if (err && err.message && err.message.startsWith('failed with status code')) {
+          return undefined;
+        }
+        return pino.stdSerializers.err(err);
+      },
       req(req) {
         return {
           id: req.id,
@@ -28,8 +57,9 @@ app.use(
         };
       },
     },
-  }),
+  })
 );
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,8 +67,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api", router);
 
 app.use(express.static(path.join(__dirname, "../../gold-swing-ai/dist/public")));
+
 app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "../../gold-swing-ai/dist/public/index.html"));
+  const filePath = path.join(__dirname, "../../gold-swing-ai/dist/public/index.html");
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(200).send("<html><head><meta http-equiv='refresh' content='2'></head><body><p>Frontend is building, please wait a few seconds...</p></body></html>");
+  }
 });
 
 export default app;
