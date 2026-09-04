@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import pino from "pino";
-import router from "./routes";
+import router from "./routes/index.js";
 import { logger } from "./lib/logger";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -66,6 +66,8 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+
+
 app.use(express.static(path.join(__dirname, "../../gold-swing-ai/dist/public")));
 
 app.get(/.*/, (req, res) => {
@@ -76,5 +78,7 @@ app.get(/.*/, (req, res) => {
     res.status(200).send("<html><head><meta http-equiv='refresh' content='2'></head><body><p>Frontend is building, please wait a few seconds...</p></body></html>");
   }
 });
+
+
 
 export default app;

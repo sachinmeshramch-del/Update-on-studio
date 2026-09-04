@@ -1,0 +1,21 @@
+[14:35:03.890] [32mINFO[39m: [36mWebSocket price server ready at /api/price/ws[39m
+[14:35:03.891] [32mINFO[39m: [36mStarting MetaApi feed initialization...[39m
+[14:35:03.891] [32mINFO[39m: [36mWeb Push initialized[39m
+[14:35:03.891] [32mINFO[39m: [36mSignal scheduler started[39m
+[14:35:03.891] [32mINFO[39m: [36mScalp trade tracker started (10s interval, first check in 10s)[39m
+[14:35:03.902] [31mERROR[39m: [36mError listening on port[39m
+    err: {
+      "type": "Error",
+      "message": "listen EADDRINUSE: address already in use 0.0.0.0:3000",
+      "stack":
+          Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+              at Server.setupListenHandle [as _listen2] (node:net:1941:16)
+              at listenInCluster (node:net:1998:12)
+              at node:net:2207:7
+              at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+      "code": "EADDRINUSE",
+      "errno": -98,
+      "syscall": "listen",
+      "address": "0.0.0.0",
+      "port": 3000
+    }

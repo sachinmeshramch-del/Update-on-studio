@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { useGetSignal } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +8,7 @@ import { format } from "date-fns";
 import {
   AlertCircle, Target, ShieldX, ArrowRightCircle,
   TrendingUp, TrendingDown, Minus, Zap,
-  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, RefreshCw,
+  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX,
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
 import { motion } from "framer-motion";
@@ -30,6 +31,20 @@ function SessionBadge({ active, asian }: { active?: string; asian?: boolean }) {
     </div>
   );
 }
+
+
+
+// ── Range badge ─────────────────────────────────────────────────────────────
+function RangeBadge() {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/40">
+      <Repeat className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+      <span className="text-xs font-bold text-blue-600 dark:text-blue-400 tracking-wide">RANGE BOUNCE</span>
+    </div>
+  );
+}
+
+
 
 // ── Reversal badge ─────────────────────────────────────────────────────────────
 function ReversalBadge() {
@@ -84,6 +99,33 @@ function ScoreBar({
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+
+function playSignalBeep() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(500, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.5);
+  } catch(e) {
+    console.error("Audio playback failed", e);
+  }
+}
+
 export function SignalPanel() {
   const { data: signalDataRaw, isLoading, isError, refetch, isFetching } = useGetSignal({
     query: {
@@ -94,6 +136,34 @@ export function SignalPanel() {
     } as any
   });
   const signalData = signalDataRaw as any;
+
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem("goldSwingSoundEnabled");
+      return saved !== null ? JSON.parse(saved) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("goldSwingSoundEnabled", JSON.stringify(soundEnabled));
+    } catch {}
+  }, [soundEnabled]);
+  const prevSignalIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!signalData) return;
+    const currentId = signalData.timestamp + "_" + signalData.signal;
+    if (prevSignalIdRef.current && prevSignalIdRef.current !== currentId) {
+       if (signalData.signal !== "HOLD" && soundEnabled) {
+          playSignalBeep();
+       }
+    }
+    prevSignalIdRef.current = currentId;
+  }, [signalData, soundEnabled]);
+
 
   if (isLoading) {
     return (
@@ -180,7 +250,13 @@ export function SignalPanel() {
               </h2>
               <SessionBadge active={session?.active} asian={session?.asian} />
               <button 
-                onClick={() => refetch()} 
+                onClick={() => setSoundEnabled(!soundEnabled)} 
+                className="ml-2 p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                title={soundEnabled ? "Mute Notifications" : "Unmute Notifications"}
+              >
+                {soundEnabled ? <Volume2 className="w-4 h-4 text-sky-500" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+              </button>
+              <button 
                 disabled={isFetching}
                 className="ml-auto md:ml-2 p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
                 title="Refresh Signal"
@@ -198,6 +274,8 @@ export function SignalPanel() {
                 {signal}
               </motion.div>
               <div className="flex flex-col gap-1.5">
+                {signalType === "RANGE" && <RangeBadge />}
+                
                 {signalType === "REVERSAL" && <ReversalBadge />}
                 {signalStrength && <StrengthBadge strength={signalStrength} />}
                 {cooldownRemaining > 0 && <CooldownTimer initialSeconds={cooldownRemaining} />}
@@ -236,6 +314,41 @@ export function SignalPanel() {
               />
             </div>
             <p className="text-[10px] text-zinc-700 dark:text-zinc-500 text-right">EMA9/21 · RSI · MACD · 1m confirm</p>
+          </div>
+        </div>
+
+        {/* ── Reason / Signal Reasoning ──────────────────────────────────────── */}
+        <div className="bg-black/30 border border-border rounded-2xl p-4 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <Zap className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+            <div>
+              <h4 className="text-sm font-semibold text-foreground mb-1">Signal Reasoning</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">{reason}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
+            <div>
+              <span className="text-xs text-muted-foreground block mb-1">Market Trend</span>
+              <div className={`flex items-center gap-1.5 text-sm font-semibold ${trendColor}`}>
+                <TrendIcon className="w-4 h-4" />
+                {trend}
+              </div>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground block mb-1">Trade Duration</span>
+              <span className="text-sm font-semibold text-foreground">{tradeDuration}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border">
+            <div className="flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5" />
+              <span>Updated {timestamp ? format(new Date(timestamp), "HH:mm:ss") : "N/A"}</span>
+            </div>
+            <Badge variant="outline" className="text-[10px] border-border text-muted-foreground py-0 px-1.5">
+              EMA · RSI · MACD
+            </Badge>
           </div>
         </div>
 
@@ -314,6 +427,13 @@ export function SignalPanel() {
         </div>
 
         {/* ── Entry / SL / TP ───────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between mb-[-10px]">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+            {signal === "HOLD" 
+              ? (stopLoss > entryPrice ? "Preparing SHORT Setup" : "Preparing LONG Setup")
+              : (signal === "SHORT" ? "Active SHORT Trade" : "Active LONG Trade")}
+          </span>
+        </div>
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-black/30 border border-border rounded-xl p-3 flex flex-col items-center gap-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
@@ -376,41 +496,6 @@ export function SignalPanel() {
               <span className="text-[9px] text-muted-foreground/50 font-mono">{sub}</span>
             </div>
           ))}
-        </div>
-
-        {/* ── Reason / Signal Reasoning ──────────────────────────────────────── */}
-        <div className="bg-black/30 border border-border rounded-2xl p-4 flex flex-col gap-3">
-          <div className="flex items-start gap-3">
-            <Zap className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-            <div>
-              <h4 className="text-sm font-semibold text-foreground mb-1">Signal Reasoning</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">{reason}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
-            <div>
-              <span className="text-xs text-muted-foreground block mb-1">Market Trend</span>
-              <div className={`flex items-center gap-1.5 text-sm font-semibold ${trendColor}`}>
-                <TrendIcon className="w-4 h-4" />
-                {trend}
-              </div>
-            </div>
-            <div>
-              <span className="text-xs text-muted-foreground block mb-1">Trade Duration</span>
-              <span className="text-sm font-semibold text-foreground">{tradeDuration}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border">
-            <div className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5" />
-              <span>Updated {timestamp ? format(new Date(timestamp), "HH:mm:ss") : "N/A"}</span>
-            </div>
-            <Badge variant="outline" className="text-[10px] border-border text-muted-foreground py-0 px-1.5">
-              EMA · RSI · MACD
-            </Badge>
-          </div>
         </div>
 
       </CardContent>

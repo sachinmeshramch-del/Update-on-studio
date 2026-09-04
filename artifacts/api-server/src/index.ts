@@ -1,3 +1,12 @@
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('MetaApi websocket client closed')) {
+    // Suppress noisy MetaApi websocket reconnection errors
+    return;
+  }
+  originalConsoleError(...args);
+};
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { setupWebSocketServer } from "./lib/priceWebSocket.js";

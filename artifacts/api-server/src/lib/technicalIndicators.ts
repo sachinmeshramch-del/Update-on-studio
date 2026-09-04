@@ -644,75 +644,113 @@ export function detectCHoCH(
 
 // ── Sweep Rejection ───────────────────────────────────────────────────────
 //
-// A sweep rejection is a high-probability reversal pattern:
-//   1. Price wicks beyond a recent swing high or low (the "sweep")
-//   2. But closes firmly back inside the range (the "rejection")
+// A sweep rejection is an institutional Smart Money Concepts (SMC) reversal:
+//   1. Price wicks beyond a recent swing high, swing low, or support/resistance floor (the "sweep" or "stop hunt")
+//   2. But closes firmly back inside the key boundary (the "rejection")
+//   3. Or the immediately following candle prints an engulfing displacement back into the range.
 //
-// This traps breakout traders and signals institutional reversal intent.
-//   • Wick exceeds swing high by ≥ ATR×0.25, close below → BEARISH rejection
-//   • Wick exceeds swing low  by ≥ ATR×0.25, close above → BULLISH rejection
+// This traps breakout/stop orders and signals institutional reversal intent.
 export interface SweepRejectionResult {
   detected:      boolean;
   rejectionType: "BEARISH" | "BULLISH" | null; // expected direction after rejection
   sweptLevel:    number | null;
+  isStrong:      boolean;
 }
 
 export function detectSweepRejection(
   candles: OHLCCandle[],
   atr: number,
-  lookback = 30,
+  lookback = 35,
 ): SweepRejectionResult {
   const n = candles.length;
-  if (n < 6 || atr <= 0) return { detected: false, rejectionType: null, sweptLevel: null };
+  if (n < 6 || atr <= 0) return { detected: false, rejectionType: null, sweptLevel: null, isStrong: false };
 
   const slice  = candles.slice(Math.max(0, n - lookback));
   const len    = slice.length;
+  if (len < 4) return { detected: false, rejectionType: null, sweptLevel: null, isStrong: false };
+
   const recent = slice[len - 1];
   const prev   = slice[len - 2];
+  const prev2  = slice[len - 3];
 
-  // Find the most recent swing high and low from historical candles (not last 2)
+  // Find all swing highs and lows from historical candles (excluding the last 2 evaluation bars)
   const historical = slice.slice(0, len - 2);
-  let swingHigh: number | null = null;
-  let swingLow:  number | null = null;
+  const { highs, lows } = detectSwings(historical, 2, 2);
+  
+  const swingHighs: number[] = highs.map(h => h.price);
+  const swingLows:  number[] = lows.map(l => l.price);
 
-  for (let i = historical.length - 2; i >= 1; i--) {
-    const c   = historical[i];
-    const p   = historical[i - 1];
-    const nxt = historical[i + 1];
-    if (swingHigh === null && c.high > p.high && c.high > nxt.high) swingHigh = c.high;
-    if (swingLow  === null && c.low  < p.low  && c.low  < nxt.low)  swingLow  = c.low;
-    if (swingHigh !== null && swingLow !== null) break;
+  // Also include the overall range support/resistance of the historical window
+  const histLows = historical.map(c => c.low);
+  const histHighs = historical.map(c => c.high);
+  if (histLows.length > 0) {
+    const minHistLow = Math.min(...histLows);
+    if (!swingLows.includes(minHistLow)) swingLows.push(minHistLow);
+  }
+  if (histHighs.length > 0) {
+    const maxHistHigh = Math.max(...histHighs);
+    if (!swingHighs.includes(maxHistHigh)) swingHighs.push(maxHistHigh);
   }
 
-  const wickThreshold = atr * 0.25;
+  const wickThreshold = Math.max(0.1, atr * 0.15);
 
-  // ── Bearish sweep rejection (swept equal highs, closed below) ────────────
-  if (swingHigh !== null) {
-    const candideates = [recent, prev];
-    for (const c of candideates) {
-      const swept    = c.high > swingHigh + wickThreshold;
-      const rejected = c.close < swingHigh;  // closed back below the swept level
-      const wickDom  = (c.high - Math.max(c.open, c.close)) > (Math.abs(c.close - c.open) * 0.4); // upper wick prominent
-      if (swept && rejected && wickDom) {
-        return { detected: true, rejectionType: "BEARISH", sweptLevel: +swingHigh.toFixed(2) };
+  // ── Bullish sweep rejection (Sell-Side Liquidity sweep below lows / support) ──
+  for (const sLow of swingLows) {
+    const candidates = [
+      { candle: recent, isFollowThrough: false },
+      { candle: prev,   isFollowThrough: false },
+    ];
+
+    for (const { candle: c } of candidates) {
+      const swept    = c.low < (sLow - 0.05);
+      const rejected = c.close > sLow;
+      const lowerWick = Math.min(c.open, c.close) - c.low;
+      const body = Math.abs(c.close - c.open);
+      const wickDom  = lowerWick >= (body * 0.35) || lowerWick >= (atr * 0.25);
+      const prevCandle = c === recent ? prev : prev2;
+      const isEngulfing = c.close > c.open && c.close > prevCandle.high && c.low < sLow;
+
+      if (swept && rejected && (wickDom || isEngulfing)) {
+        const isStrong = lowerWick >= (atr * 0.5) || isEngulfing || (c.close > c.open && body > atr * 0.5);
+        return { detected: true, rejectionType: "BULLISH", sweptLevel: +sLow.toFixed(2), isStrong };
       }
+    }
+
+    // Two-bar sweep sequence: prev pierced below sLow, and recent closed strongly bullish back above sLow
+    if (prev.low < sLow && recent.close > sLow && recent.close > recent.open && (recent.close > prev.high || recent.close > prev.open)) {
+      return { detected: true, rejectionType: "BULLISH", sweptLevel: +sLow.toFixed(2), isStrong: true };
     }
   }
 
-  // ── Bullish sweep rejection (swept equal lows, closed above) ─────────────
-  if (swingLow !== null) {
-    const candidates = [recent, prev];
-    for (const c of candidates) {
-      const swept    = c.low < swingLow - wickThreshold;
-      const rejected = c.close > swingLow;   // closed back above the swept level
-      const wickDom  = (Math.min(c.open, c.close) - c.low) > (Math.abs(c.close - c.open) * 0.4); // lower wick prominent
-      if (swept && rejected && wickDom) {
-        return { detected: true, rejectionType: "BULLISH", sweptLevel: +swingLow.toFixed(2) };
+  // ── Bearish sweep rejection (Buy-Side Liquidity sweep above highs / resistance) ──
+  for (const sHigh of swingHighs) {
+    const candidates = [
+      { candle: recent, isFollowThrough: false },
+      { candle: prev,   isFollowThrough: false },
+    ];
+
+    for (const { candle: c } of candidates) {
+      const swept    = c.high > (sHigh + 0.05);
+      const rejected = c.close < sHigh;
+      const upperWick = c.high - Math.max(c.open, c.close);
+      const body = Math.abs(c.close - c.open);
+      const wickDom  = upperWick >= (body * 0.35) || upperWick >= (atr * 0.25);
+      const prevCandle = c === recent ? prev : prev2;
+      const isEngulfing = c.close < c.open && c.close < prevCandle.low && c.high > sHigh;
+
+      if (swept && rejected && (wickDom || isEngulfing)) {
+        const isStrong = upperWick >= (atr * 0.5) || isEngulfing || (c.close < c.open && body > atr * 0.5);
+        return { detected: true, rejectionType: "BEARISH", sweptLevel: +sHigh.toFixed(2), isStrong };
       }
+    }
+
+    // Two-bar sweep sequence: prev pierced above sHigh, and recent closed strongly bearish back below sHigh
+    if (prev.high > sHigh && recent.close < sHigh && recent.close < recent.open && (recent.close < prev.low || recent.close < prev.open)) {
+      return { detected: true, rejectionType: "BEARISH", sweptLevel: +sHigh.toFixed(2), isStrong: true };
     }
   }
 
-  return { detected: false, rejectionType: null, sweptLevel: null };
+  return { detected: false, rejectionType: null, sweptLevel: null, isStrong: false };
 }
 
 export function calcADX(candles: OHLCCandle[], period: number = 14): { adx: number[], plusDI: number[], minusDI: number[] } {

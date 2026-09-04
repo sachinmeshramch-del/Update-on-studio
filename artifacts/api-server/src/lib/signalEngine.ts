@@ -57,7 +57,7 @@ export interface SignalResult {
   obScore:       number;  // 0-25
   candleScore:   number;  // -10 to +20, scaled by patternStrength
   candlePattern: string | null; // pattern name for display (null if none, "(pending)" suffix if awaiting confirmation)
-  signalType:    "TREND_FOLLOW" | "REVERSAL";
+  signalType:    "TREND_FOLLOW" | "REVERSAL" | "RANGE";
   // ── Candlestick pattern confluence metadata ────────────────────────────
   patternDetected:      string | null;   // raw pattern name without status suffix
   patternStrength:      number;          // 0-100 wick-to-body quality score
@@ -129,12 +129,12 @@ const CANDLE_5M_MS         = 300_000; // 5 min in ms
 const SIGNAL_CACHE_TTL        = 60_000;   // 1 minute
 const COOLDOWN_MS             = 900_000;  // 15 minutes between signals
 const MIN_SIGNAL_INTERVAL_MS  = 5 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
-const MIN_CONF_NORMAL         = 53;
-const MIN_CONF_STRONG         = 75;
-const MIN_CONF_REVERSAL       = 75;  // counter-trend trades need higher conviction
+const MIN_CONF_NORMAL         = 70;
+const MIN_CONF_STRONG         = 70;
+const MIN_CONF_REVERSAL       = 70;  // counter-trend trades need higher conviction
 const MIN_CONF_RANGE          = 70;  // range-bound / consolidation markets require high conviction
 const MIN_PRICE_MOVE_PCT      = 0.002;    // 0.2% to override standard cooldown (raised from 0.1% — $4→$8 on gold)
-const MAX_RAW_SCORE           = 165;      // realistic max without all institutional factors aligning
+const MAX_RAW_SCORE           = 125;      // realistic max without all institutional factors aligning
 
 // ── Session detection ─────────────────────────────────────────────────────
 function getCurrentSession(): SessionInfo {
@@ -272,18 +272,19 @@ export function detectFVGZones(candles: OHLCCandle[], volSma: number[] = []): FV
     const c1 = candles[i - 1]!; // middle gap bar
     const c2 = candles[i]!;     // current bar
     
-    // Check if middle gap bar (c1) has volume > average
+    // Check if middle gap bar (c1) has volume or strong body
     const avgVol = volSma[i - 1] || 0;
-    const isHighVol = avgVol === 0 || (c1.volume || 0) > avgVol * 1.1; // Require 10% above average volume for valid FVG
+    const body1 = Math.abs(c1.close - c1.open);
+    const isHighVol = avgVol === 0 || (c1.volume || 0) > avgVol * 1.05 || body1 > 2.0;
 
     if (isHighVol) {
-      // Bullish FVG: gap up
+      // Bullish FVG: gap up between c0.high and c2.low
       if (c0.high < c2.low) {
-        zones.push({ type: "BULLISH", low: c0.high, high: c2.low });
+        zones.push({ type: "BULLISH", low: +c0.high.toFixed(2), high: +c2.low.toFixed(2) });
       }
-      // Bearish FVG: gap down
+      // Bearish FVG: gap down between c2.high and c0.low
       else if (c0.low > c2.high) {
-        zones.push({ type: "BEARISH", low: c2.high, high: c0.low });
+        zones.push({ type: "BEARISH", low: +c2.high.toFixed(2), high: +c0.low.toFixed(2) });
       }
     }
   }
@@ -292,16 +293,17 @@ export function detectFVGZones(candles: OHLCCandle[], volSma: number[] = []): FV
 
 export function getFVGScore(price: number, zones: FVGZone[], direction: "LONG" | "SHORT"): number {
   for (const zone of zones) {
-    if (direction === "LONG"  && zone.type === "BULLISH" && price >= zone.low && price <= zone.high) return 25;
-    if (direction === "SHORT" && zone.type === "BEARISH" && price >= zone.low && price <= zone.high) return 25;
+    // If price is inside the FVG or tapping the boundary
+    if (direction === "LONG"  && zone.type === "BULLISH" && price >= (zone.low - 0.5) && price <= (zone.high + 0.5)) return 25;
+    if (direction === "SHORT" && zone.type === "BEARISH" && price >= (zone.low - 0.5) && price <= (zone.high + 0.5)) return 25;
   }
   return 0;
 }
 
 // ── Liquidity Sweep Detection ─────────────────────────────────────────────
 export function detectLiquiditySweep(candles: OHLCCandle[], volSma: number[] = []): "BULLISH" | "BEARISH" | null {
-  const start = Math.max(1, candles.length - 4);
-  for (let i = candles.length - 2; i >= start; i--) {
+  const start = Math.max(1, candles.length - 6);
+  for (let i = candles.length - 1; i >= start; i--) {
     const candle = candles[i]!;
     const prev   = candles[i - 1]!;
     const body   = Math.abs(candle.close - candle.open);
@@ -313,11 +315,15 @@ export function detectLiquiditySweep(candles: OHLCCandle[], volSma: number[] = [
     const upperWickRatio = body > 0.01 ? upperWick / body : upperWick > 0 ? 999 : 0;
     
     const avgVol = volSma[i] || 0;
-    const isHighVol = avgVol === 0 || (candle.volume || 0) > avgVol * 1.15; // Sweep must be on 15% higher vol
+    const isHighVol = avgVol === 0 || (candle.volume || 0) > avgVol * 1.05;
 
-    if (isHighVol) {
-      if (candle.low < prev.low && candle.close > prev.low && lowerWickRatio > 1.0) return "BULLISH";
-      if (candle.high > prev.high && candle.close < prev.high && upperWickRatio > 1.0) return "BEARISH";
+    // Bullish sweep (swept prev low, closed back above with rejection wick or bullish close)
+    if (candle.low < prev.low && candle.close > prev.low && (lowerWickRatio > 0.7 || candle.close > candle.open)) {
+      return "BULLISH";
+    }
+    // Bearish sweep (swept prev high, closed back below with rejection wick or bearish close)
+    if (candle.high > prev.high && candle.close < prev.high && (upperWickRatio > 0.7 || candle.close < candle.open)) {
+      return "BEARISH";
     }
   }
   return null;
@@ -406,6 +412,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     };
   }
 
+  
+  
+
   const analytics = await getAnalyticsSummary();
   const minConf = smartMode && analytics.sufficientData ? MIN_CONF_NORMAL + 5 : MIN_CONF_NORMAL;
 
@@ -416,9 +425,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         const { getMetaApiHistoricalOHLC } = await import("./metaApiFeed.js");
         return await getMetaApiHistoricalOHLC(tf, count);
       } catch (metaErr) {
-        logger.warn({ tf, err: (metaErr as any)?.message }, "MetaApi historical candle fetch failed, falling back to public market feed");
-        const { fetchOHLC } = await import("./goldPrice.js");
-        return await fetchOHLC(tf);
+        logger.debug({ tf, err: (metaErr as any)?.message }, "MetaApi historical candle fetch failed (no fallback permitted)");
+        throw new Error(`Primary data source unavailable for ${tf} candles.`);
       }
     };
     
@@ -541,18 +549,25 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     for (const candle of candidates) {
       const body = Math.abs(candle.close - candle.open);
       const range = candle.high - candle.low;
+      const upperWick = candle.high - Math.max(candle.open, candle.close);
+      const lowerWick = Math.min(candle.open, candle.close) - candle.low;
       
-      // Check if body is massive OR range (wick) is massive
-      let spikeDetected = body > spikeThreshold || range > spikeThreshold * 2.0;
+      // Is this a clean directional displacement candle (e.g. solid body, small opposing wick)?
+      const isCleanBullishDisplacement = candle.close > candle.open && body >= atr * 1.5 && upperWick <= body * 0.35;
+      const isCleanBearishDisplacement = candle.close < candle.open && body >= atr * 1.5 && lowerWick <= body * 0.35;
+      const isDirectionalExpansion = isCleanBullishDisplacement || isCleanBearishDisplacement;
+
+      // News chop spike: two-sided massive wicks (range much larger than body, or giant opposing wick)
+      const isWhipsawSpike = (range > spikeThreshold * 2.0 && !isDirectionalExpansion) || (body > spikeThreshold && !isDirectionalExpansion);
       
       // Guard against wild currentPrice glitches from the feed
       const lastClose = candidates[1] ? candidates[1].close : candle.close;
-      if (Math.abs(currentPrice - lastClose) > atr * 5.0) {
-        spikeDetected = true;
-      }
+      const isFeedGlitch = Math.abs(currentPrice - lastClose) > atr * 5.0;
+
+      let spikeDetected = isWhipsawSpike || isFeedGlitch;
 
       logger.info(
-        { "Candle body": +body.toFixed(2), "Range": +range.toFixed(2), "ATR": +atr.toFixed(2), "Threshold": +spikeThreshold.toFixed(2), "Spike detected": spikeDetected },
+        { "Candle body": +body.toFixed(2), "Range": +range.toFixed(2), "ATR": +atr.toFixed(2), "Threshold": +spikeThreshold.toFixed(2), "Spike detected": spikeDetected, isDirectionalExpansion },
         "Spike check"
       );
       if (spikeDetected) {
@@ -606,21 +621,31 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const choch    = detectCHoCH(candles5m, trend5m);
     const sweepRej = detectSweepRejection(candles5m, atr);
 
+    const isBullishSweep = sweepDir === "BULLISH" || sweepRej.rejectionType === "BULLISH";
+    const isBearishSweep = sweepDir === "BEARISH" || sweepRej.rejectionType === "BEARISH";
+
     // ── Candlestick Pattern Detection (last 2 candles, ATR-scaled) ────────
     const candleResult = detectCandlePattern(candles5m, atr);
 
     // ── Recent candle momentum (4 completed 5m candles, faster than EMA) ──
     // Penalty: -25 pts when recent momentum opposes the signal direction.
     // Bonus:   +10 pts when recent momentum confirms the direction.
-    // This prevents LONG signals from firing when 3-of-4 recent candles are bearish,
-    // even if the 5m EMAs are still bullishly aligned (they lag by design).
+    // Exception: neutralize penalty when confirmed institutional sweep/CHoCH reversal is present
     const recentMomentum     = getRecentMomentum(candles5m);
-    const longMomentumAdj    = recentMomentum === "BULLISH" ? 10
+    let longMomentumAdj      = recentMomentum === "BULLISH" ? 10
                              : recentMomentum === "BEARISH" ? -25 : 0;
-    const shortMomentumAdj   = recentMomentum === "BEARISH" ? 10
+    let shortMomentumAdj     = recentMomentum === "BEARISH" ? 10
                              : recentMomentum === "BULLISH" ? -25 : 0;
+
+    if (isBullishSweep || (choch.detected && choch.direction === "BULLISH")) {
+      if (longMomentumAdj < 0) longMomentumAdj = 0;
+    }
+    if (isBearishSweep || (choch.detected && choch.direction === "BEARISH")) {
+      if (shortMomentumAdj < 0) shortMomentumAdj = 0;
+    }
+
     logger.info(
-      { recentMomentum, longMomentumAdj, shortMomentumAdj },
+      { recentMomentum, longMomentumAdj, shortMomentumAdj, isBullishSweep, isBearishSweep },
       "[MomentumGate] Recent 4-candle momentum"
     );
 
@@ -677,8 +702,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const shortFvgScore = getFVGScore(currentPrice, fvgZones, "SHORT");
 
     // Liquidity sweep scores (direction-dependent)
-    const longSweepScore  = sweepDir === "BULLISH" ? 30 : 0;
-    const shortSweepScore = sweepDir === "BEARISH" ? 30 : 0;
+    const longSweepScore  = isBullishSweep ? (sweepRej.isStrong ? 35 : 30) : 0;
+    const shortSweepScore = isBearishSweep ? (sweepRej.isStrong ? 35 : 30) : 0;
 
     // Order Block scores (direction-dependent — bullish OB confirms LONG, bearish OB confirms SHORT)
     const longObScore  = getOBScore(bullishOB);
@@ -775,14 +800,34 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const shortRaw = Math.max(0, shortEmaScore + shortRsiScore + shortMacdScore + shortMomentum + shortFvgScore + shortSweepScore + shortObScore + shortCandleScore + shortMomentumAdj);
 
     // Normalize to 0-100 for display and threshold comparison
-    const longNorm  = Math.min(100, Math.round((longRaw  / MAX_RAW_SCORE) * 100));
-    const shortNorm = Math.min(100, Math.round((shortRaw / MAX_RAW_SCORE) * 100));
+    let longNorm  = Math.min(100, Math.round((longRaw  / MAX_RAW_SCORE) * 100));
+    let shortNorm = Math.min(100, Math.round((shortRaw / MAX_RAW_SCORE) * 100));
+
+    // ── High-Precision Accuracy Guards (Prevent buying tops / selling bottoms) ──
+    // If RSI is extremely overbought (> 78), zero out LONG score to prevent buying exhaustion tops
+    if (rsi > 78) {
+      longNorm = 0;
+      logger.info({ rsi }, "[AccuracyGuard] Extreme overbought RSI (>78) — LONG signals suppressed");
+    }
+    // If RSI is extremely oversold (< 22), zero out SHORT score to prevent selling panic bottoms
+    if (rsi < 22) {
+      shortNorm = 0;
+      logger.info({ rsi }, "[AccuracyGuard] Extreme oversold RSI (<22) — SHORT signals suppressed");
+    }
+
+    // MACD momentum expansion check: require momentum confirmation
+    if (macdBullish === false && macdHist < 0 && longNorm > 0) {
+      longNorm = Math.max(0, longNorm - 15);
+    }
+    if (macdBearish === false && macdHist > 0 && shortNorm > 0) {
+      shortNorm = Math.max(0, shortNorm - 15);
+    }
 
     // ── Market Structure & Range Analysis ──────────────────────────────────
     const ms5m = detectMarketStructure(candles5m);
     const ms15m = detectMarketStructure(candles15m);
     const rangeInfo = analyzeMarketRange(candles5m, currentPrice, atr, 30);
-    const isMarketConsolidating = ms5m.structure === "RANGING" || trend5m === "NEUTRAL" || currentAdx < 22;
+    const isMarketConsolidating = ms5m.structure === "RANGING" || trend5m === "NEUTRAL" || currentAdx < 18;
 
     // In ranging/chop conditions (ADX < 22 or NEUTRAL/RANGING structure), require higher base confidence (70% vs 53%)
     const baseMinConf = isMarketConsolidating ? MIN_CONF_RANGE : MIN_CONF_NORMAL;
@@ -922,46 +967,87 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       emaDirection !== "NEUTRAL" ? emaDirection :
       "NEUTRAL";
 
+    const intendedSignal = direction !== "HOLD" ? direction : (longNorm >= shortNorm ? "LONG" : "SHORT");
+
+
     const isAgainstTrend =
-      (finalSignal === "LONG"  && effectiveTrend === "BEARISH") ||
-      (finalSignal === "SHORT" && effectiveTrend === "BULLISH");
+      (intendedSignal === "LONG"  && effectiveTrend === "BEARISH") ||
+      (intendedSignal === "SHORT" && effectiveTrend === "BULLISH");
 
-    let signalType: "TREND_FOLLOW" | "REVERSAL" = "TREND_FOLLOW";
-
-    if (finalSignal !== "HOLD" && isAgainstTrend) {
-      const chochConfirms = choch.detected    && choch.direction    === (finalSignal === "LONG" ? "BULLISH" : "BEARISH");
-      const sweepConfirms = sweepRej.detected && sweepRej.rejectionType === (finalSignal === "LONG" ? "BULLISH" : "BEARISH");
-      const hasConfirmation = chochConfirms || sweepConfirms;
-
-      if (!hasConfirmation || confidence < MIN_CONF_REVERSAL) {
-        finalSignal = "HOLD";
-        suppressionReason = "Counter-trend trade requires 75% confidence & structural confirmation";
-      } else {
-        signalType = "REVERSAL";
+    // -- True vs False Breakout Logic --
+    let isTrueBreakout = false;
+    let isFalseBreakout = false;
+    
+    if (isMarketConsolidating && rangeInfo.isRanging && intendedSignal !== "HOLD") {
+      const breakoutBuffer = atr * 0.2;
+      
+      // True Breakout: Price pushes cleanly beyond the boundary with momentum
+      if (intendedSignal === "LONG" && currentPrice > (rangeInfo.resistance + breakoutBuffer) && macdHistogram > 0 && rsi > 55) {
+        isTrueBreakout = true;
+      } else if (intendedSignal === "SHORT" && currentPrice < (rangeInfo.support - breakoutBuffer) && macdHistogram < 0 && rsi < 45) {
+        isTrueBreakout = true;
+      }
+      
+      // False Breakout (Sweep Rejection): Swept liquidity outside boundary but rejected back in
+      if (intendedSignal === "LONG" && sweepRej.detected && sweepRej.rejectionType === "BULLISH" && sweepRej.sweptLevel <= rangeInfo.support) {
+        isFalseBreakout = true;
+      } else if (intendedSignal === "SHORT" && sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel >= rangeInfo.resistance) {
+        isFalseBreakout = true;
       }
     }
+
+
+    let signalType: "TREND_FOLLOW" | "REVERSAL" = isAgainstTrend ? "REVERSAL" : "TREND_FOLLOW";
+
+    if (finalSignal !== "HOLD" && isAgainstTrend) {
+      if (isFalseBreakout) {
+         logger.info({ finalSignal }, "[Breakout] False breakout (Sweep Rejection) detected. Allowing reversal trade.");
+      } else {
+        // SOLUTION 1: Reversal trades (counter-trend) are completely disabled.
+        finalSignal = "HOLD";
+        suppressionReason = "Reversal trades are disabled. Only trend-following allowed.";
+      }
+    }
+    
+    // NEW STRICT MACRO-TREND FILTER
+    if (finalSignal !== "HOLD" && effectiveTrend === "NEUTRAL") {
+      if (isTrueBreakout) {
+        logger.info({ finalSignal }, "[Breakout] True breakout detected. Bypassing NEUTRAL trend filter.");
+      } else if (isFalseBreakout) {
+        logger.info({ finalSignal }, "[Breakout] False breakout detected. Bypassing NEUTRAL trend filter.");
+      } else {
+        logger.warn({ finalSignal }, "[MacroFilter] Suppressed because effective trend is NEUTRAL");
+        finalSignal = "HOLD";
+        suppressionReason = "Strict macro-trend requirement: Market is currently NEUTRAL";
+      }
+    }
+
+    
+    // ── STRICT CHOP/SIDEWAYS FILTER ───────────────────────────────────────
+    // If the market is consolidating (ADX < 25) or ranging, completely disable trading.
+    
+    // [DEBUG CHOP]
+    logger.info({
+        adx: currentAdx,
+        isRanging: rangeInfo.isRanging,
+        position: rangeInfo.position,
+        currentPrice
+    }, "[Chop Filter Status]");
+    
+
 
     // ── Range Boundaries & Mid-Chop Gate ──────────────────────────────────
     // In consolidation/ranging conditions, reject trend-following breakouts in the middle of chop
     // and prevent buying into range resistance or selling into range support.
     if (finalSignal !== "HOLD" && isMarketConsolidating && rangeInfo.isRanging) {
-      if (signalType === "TREND_FOLLOW" && rangeInfo.position === "MID_CHOP_ZONE") {
-        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed trend-follow signal in mid-range chop");
-        finalSignal = "HOLD";
-        suppressionReason = `Mid-range chop zone ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)})`;
-      } else if (signalType === "TREND_FOLLOW" && rangeInfo.position === "RESISTANCE_ZONE" && finalSignal === "LONG") {
-        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed LONG signal at range resistance ceiling");
-        finalSignal = "HOLD";
-        suppressionReason = `Buying into range ceiling ($${rangeInfo.resistance.toFixed(1)})`;
-      } else if (signalType === "TREND_FOLLOW" && rangeInfo.position === "SUPPORT_ZONE" && finalSignal === "SHORT") {
-        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed SHORT signal at range support floor");
-        finalSignal = "HOLD";
-        suppressionReason = `Selling into range floor ($${rangeInfo.support.toFixed(1)})`;
-      }
+      logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed signal because range trading is disabled");
+      finalSignal = "HOLD";
+      suppressionReason = `Range trading disabled (${rangeInfo.support.toFixed(1)} – ${rangeInfo.resistance.toFixed(1)})`;
     }
 
     // ── Macro Trend Filter (15m Structure & Trend) ────────────────────────
     // If it's a normal trend-following trade, ensure alignment with the 15m macro structure.
+    // Confirmed SMC REVERSAL trades (Sweeps / CHoCH) are explicitly exempt because they capture the bottom/top turn before 15m lags behind.
     if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
       if (finalSignal === "LONG" && (trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) {
         logger.warn({ finalSignal, trend15m, ms15m: ms15m.structure }, "[MacroFilter] Suppressed by 15m bearish structure");
@@ -976,33 +1062,53 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
     // ── SL / TP: Structure-Based Dynamic Stops (ATR-backed, min 1.5:1 R:R) ──
     const { nearestSwingHigh, nearestSwingLow } = getNearestSwingLevels(candles5m, 25);
-    const minAtrPadding = atr * (signalType === "REVERSAL" ? 2.0 : 1.8);
+    const minAtrPadding = atr * (signalType === "REVERSAL" ? 1.5 : 1.8);
 
     let slDist: number;
-    if (finalSignal === "LONG") {
-      const structuralDist = nearestSwingLow !== null
-        ? (currentPrice - nearestSwingLow) + (atr * 0.8)
+    const calcDir = finalSignal !== "HOLD" ? finalSignal : intendedSignal;
+
+    if (calcDir === "LONG") {
+      const anchorLow = (sweepRej.detected && sweepRej.rejectionType === "BULLISH" && sweepRej.sweptLevel)
+        ? sweepRej.sweptLevel
+        : nearestSwingLow;
+      const structuralDist = anchorLow !== null
+        ? (currentPrice - anchorLow) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 7.0), 16.0);
-    } else if (finalSignal === "SHORT") {
-      const structuralDist = nearestSwingHigh !== null
-        ? (nearestSwingHigh - currentPrice) + (atr * 0.8)
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 5.0), 16.0);
+    } else if (calcDir === "SHORT") {
+      const anchorHigh = (sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel)
+        ? sweepRej.sweptLevel
+        : nearestSwingHigh;
+      const structuralDist = anchorHigh !== null
+        ? (anchorHigh - currentPrice) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 7.0), 16.0);
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 5.0), 16.0);
     } else {
-      slDist = Math.min(Math.max(minAtrPadding, 7.0), 16.0);
+      slDist = Math.min(Math.max(minAtrPadding, 5.0), 16.0);
     }
 
-    // Reward to Risk: 1.6:1 baseline, up to 2.5:1 when ADX > 25 indicates strong trend
-    const rrMultiplier = currentAdx > 25 ? 2.5 : 1.6;
-    const tpDist = +(slDist * rrMultiplier).toFixed(2);
+    // Reward to Risk: 1.6:1 baseline, tightly restricted to 1.2:1 for counter-trend reversals, up to 2.5:1 when ADX > 25 indicates strong trend
+    // Updated for $50-$100 day trading goal: minimum 1.5:1, baseline 2.0:1 R:R
+    const rrMultiplier = signalType === "REVERSAL" ? 1.5 : currentAdx > 25 ? 2.5 : 2.0;
+    
+    let tpDist = +(slDist * rrMultiplier).toFixed(2);
+    
+    // For RANGE trades, SL is placed tightly outside the box, and TP is placed near the opposite edge
+    if (signalType === "RANGE") {
+      slDist = Math.min(Math.max(atr * 1.2, 3.0), 10.0);
+      const targetDist = calcDir === "LONG" 
+        ? Math.max((rangeInfo.resistance - currentPrice) * 0.9, 4.0) 
+        : Math.max((currentPrice - rangeInfo.support) * 0.9, 4.0);
+      tpDist = +targetDist.toFixed(2);
+    }
+
     let stopLoss:   number;
     let takeProfit: number;
 
-    if (finalSignal === "LONG") {
+    if (calcDir === "LONG") {
       stopLoss   = +(currentPrice - slDist).toFixed(2);
       takeProfit = +(currentPrice + tpDist).toFixed(2);
-    } else if (finalSignal === "SHORT") {
+    } else if (calcDir === "SHORT") {
       stopLoss   = +(currentPrice + slDist).toFixed(2);
       takeProfit = +(currentPrice - tpDist).toFixed(2);
     } else {
@@ -1022,19 +1128,23 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       else if (rsiScore >= 12) parts.push(`RSI ${rsi.toFixed(1)}`);
       if      (macdScore >= 25) parts.push(`MACD ${finalSignal === "LONG" ? "bull" : "bear"} cross`);
       else if (macdScore >= 20) parts.push(`MACD ${finalSignal === "LONG" ? "bull" : "bear"}`);
+      if (isTrueBreakout) parts.push("True Breakout Confirmed");
+      if (isFalseBreakout) parts.push("False Breakout (Sweep) Confirmed");
       if (momentumScore >= 15) parts.push("1m confirms");
       if (fvgScore   > 0) parts.push("FVG entry zone");
       if (sweepScore > 0) parts.push("Liquidity swept");
       if (obScore    > 0) parts.push(`OB ×${dominant === "LONG" ? bullishOB?.strength : bearishOB?.strength}`);
       if (candlePattern)  parts.push(candlePattern);
       if (choch.detected && signalType === "REVERSAL") parts.push(`CHoCH @ ${choch.level}`);
-      if (sweepRej.detected && signalType === "REVERSAL") parts.push(`Sweep reject @ ${sweepRej.sweptLevel}`);
+      if (sweepRej.detected && sweepRej.rejectionType === (finalSignal === "LONG" ? "BULLISH" : "BEARISH") && signalType === "REVERSAL") parts.push(`Sweep reject @ ${sweepRej.sweptLevel}`);
       const typeTag = signalType === "REVERSAL" ? " ⟳REVERSAL" : "";
-      reason = `${signalStrength} ${finalSignal}${typeTag} ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
+      const strPrefix = signalStrength ? `${signalStrength} ` : "";
+      reason = `${strPrefix}${finalSignal}${typeTag} ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
     } else if (recentStops.inCircuitBreakerCooldown) {
       reason = `HOLD – Circuit Breaker (${recentStops.cooldownRemainingMinutes}m cooldown after ${recentStops.consecutiveLosses} consecutive stops) · Preserving capital during consolidation`;
     } else if (suppressionReason.length > 0) {
-      reason = `HOLD – ${suppressionReason} ${sessionNote} · Best: ${dominant} ${Math.max(longNorm, shortNorm)}%`;
+      const rangeText = (isMarketConsolidating && rangeInfo.isRanging) ? ` · Range ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)})` : "";
+      reason = `HOLD – ${suppressionReason} ${sessionNote} · Best: ${dominant} ${Math.max(longNorm, shortNorm)}%${rangeText}`;
     } else if (direction !== "HOLD" && inSpikeCooldown) {
       reason = `HOLD – Spike cooldown (${spikeCooldownCandles} candle${spikeCooldownCandles !== 1 ? "s" : ""} remaining) · ${direction} ${Math.max(longNorm, shortNorm)}% queued after spike settles`;
     } else if (direction !== "HOLD" && inCooldown) {
@@ -1045,7 +1155,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     } else {
       const bestDir  = longNorm >= shortNorm ? "LONG" : "SHORT";
       const bestConf = Math.max(longNorm, shortNorm);
-      reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${dynamicMinConf}%)`;
+      const rangeText = (isMarketConsolidating && rangeInfo.isRanging) ? ` · Range ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)})` : "";
+      reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${dynamicMinConf}%)${rangeText}`;
     }
 
     if (finalSignal !== "HOLD" && isCommit) {
@@ -1103,6 +1214,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
   } catch (err: any) {
     if (err.message && (err.message.includes('status code 503') || err.message.includes('MetaApi is not connected'))) {
       logger.warn(`[SignalEngine] MetaApi unavailable: ${err.message}. Signals paused.`);
+    } else if (err.message && err.message.includes('Primary data source unavailable')) {
+      logger.debug({ err: err.message }, "Scalp signal generation skipped (no primary data)");
     } else {
       logger.error({ err }, "Scalp signal generation failed");
     }
@@ -1114,7 +1227,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       stopLoss:   +(currentPrice - 3).toFixed(2),
       takeProfit: +(currentPrice + 4.5).toFixed(2),
       trend:      "NEUTRAL",
-      reason:     "HOLD – Signal generation failed; using safe defaults",
+      reason:     "HOLD – Signal generation failed; using safe defaults " + String(err.stack || err.message),
       timestamp:  new Date().toISOString(),
       tradeDuration:     "5-30 minutes",
       cooldownRemaining,

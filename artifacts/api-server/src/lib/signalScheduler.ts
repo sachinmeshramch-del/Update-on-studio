@@ -2,6 +2,7 @@ import { generateSignal } from "./signalEngine.js";
 import { getLatestPrice } from "./priceEvents.js";
 import { insertSignal, getLatestSignal, getRunningTrades } from "@workspace/db";
 import { sendPushToAll } from "./pushNotifications.js";
+import { sendTelegramNotification } from "./telegram.js";
 import { logger } from "./logger.js";
 import { getSystemSettings } from "@workspace/db";
 import { getMetaApiStatus, executeTradeOnAccount } from "./metaApiFeed.js";
@@ -80,8 +81,7 @@ async function runScheduledSignal(): Promise<void> {
 
       // 1. Demo Account Execution: strictly triggered only if Demo Auto Trading is ON
       if (settings.autoTradingDemoEnabled) {
-        const demoId = settings.demoAccountId?.trim();
-        if (demoId) {
+                if (demoId) {
           logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Automatically executing trade on DEMO MT5 account...");
           try {
             await executeTradeOnAccount(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, 0.01);
@@ -113,6 +113,16 @@ async function runScheduledSignal(): Promise<void> {
 
     const direction = signal.signal as "LONG" | "SHORT";
     const emoji     = direction === "LONG" ? "📈" : "📉";
+
+    const tgMessage = `🚨 <b>Gold Signal: ${direction}</b>
+
+Entry: ${signal.entryPrice.toFixed(2)}
+Target (TP): ${signal.takeProfit.toFixed(2)}
+Stop Loss: ${signal.stopLoss.toFixed(2)}
+Confidence: ${signal.confidence}%
+
+Reason: ${signal.reason}`;
+    await sendTelegramNotification(tgMessage);
 
     await sendPushToAll({
       type:       "signal",

@@ -25,7 +25,7 @@ router.put("/", async (req, res) => {
     if (
         oldSettings.tradingMode !== settings.tradingMode || 
         oldSettings.realAccountId !== settings.realAccountId ||
-        oldSettings.demoAccountId !== settings.demoAccountId ||
+        
         oldSettings.metaApiSymbol !== settings.metaApiSymbol
     ) {
         logger.info("Trading mode or account ID changed, restarting MetaApi feed...");

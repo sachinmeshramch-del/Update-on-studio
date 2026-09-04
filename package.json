@@ -24,7 +24,8 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.1",
-    "firebase": "^12.18.0"
+    "firebase": "^12.18.0",
+    "puppeteer": "^25.9.0"
   },
   "description": "",
   "main": "check.js",

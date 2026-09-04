@@ -3,12 +3,10 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { generateSignal, initSignalCooldown } from "../lib/signalEngine.js";
 import { startTradeTracker } from "../lib/tradeTracker.js";
 import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.js";
-import { priceEmitter, getLatestPrice, type LivePrice } from "../lib/priceEvents.js";
+import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
 import { getMetaApiStatus } from "../lib/metaApiFeed.js";
-import { getTwelveDataStatus } from "../lib/twelveDataStream.js";
-import { getFinnhubStatus } from "../lib/polygonStream.js";
-import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription } from "@workspace/db";
+import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
 
@@ -62,17 +60,38 @@ router.get("/price/stream", (req: Request, res: Response) => {
 // ── REST price endpoint ────────────────────────────────────────────────────
 router.get("/gold-price", async (req, res) => {
   try {
-    const live = getLatestPrice();
-    if (live) {
-      res.json(live);
-    } else {
-      const priceData = getLatestPrice();
-      if (!priceData) {
-        res.status(503).json({ error: "Market data unavailable" });
-        return;
+    let live = getLatestPrice();
+    
+    if (!live) {
+      try {
+           const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
+           const recent = await getMetaApiHistoricalOHLC("1m", 1);
+           if (recent && recent.length > 0) {
+               const c = recent[recent.length - 1];
+               live = {
+                 price: c.close,
+                 bid: c.close,
+                 ask: c.close,
+                 spread: c.spread || 20,
+                 change: 0,
+                 changePercent: 0,
+                 high24h: c.high,
+                 low24h: c.low,
+                 timestamp: new Date(c.time).toISOString(),
+                 direction: "unchanged",
+                 ms: Date.now(),
+                 source: "metaapi"
+               };
+           } else {
+               res.status(503).json({ error: "Market data unavailable" });
+               return;
+           }
+      } catch (e) {
+          res.status(503).json({ error: "Market data unavailable" });
+          return;
       }
-      res.json(priceData);
     }
+    res.json(live);
   } catch (err) {
     req.log.error({ err }, "Error fetching price");
     res.status(500).json({ error: "price_fetch_error", message: "Failed to fetch gold price" });
@@ -81,17 +100,38 @@ router.get("/gold-price", async (req, res) => {
 
 router.get("/price", async (req, res) => {
   try {
-    const live = getLatestPrice();
-    if (live) {
-      res.json(live);
-    } else {
-      const priceData = getLatestPrice();
-      if (!priceData) {
-        res.status(503).json({ error: "Market data unavailable" });
-        return;
+    let live = getLatestPrice();
+    
+    if (!live) {
+      try {
+           const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
+           const recent = await getMetaApiHistoricalOHLC("1m", 1);
+           if (recent && recent.length > 0) {
+               const c = recent[recent.length - 1];
+               live = {
+                 price: c.close,
+                 bid: c.close,
+                 ask: c.close,
+                 spread: c.spread || 20,
+                 change: 0,
+                 changePercent: 0,
+                 high24h: c.high,
+                 low24h: c.low,
+                 timestamp: new Date(c.time).toISOString(),
+                 direction: "unchanged",
+                 ms: Date.now(),
+                 source: "metaapi"
+               };
+           } else {
+               res.status(503).json({ error: "Market data unavailable" });
+               return;
+           }
+      } catch (e) {
+          res.status(503).json({ error: "Market data unavailable" });
+          return;
       }
-      res.json(priceData);
     }
+    res.json(live);
   } catch (err) {
     req.log.error({ err }, "Error fetching price");
     res.status(500).json({ error: "price_fetch_error", message: "Failed to fetch gold price" });
@@ -102,8 +142,6 @@ router.get("/price", async (req, res) => {
 router.get("/connections", (req, res) => {
   res.json({
     metaapi: getMetaApiStatus(),
-    twelvedata: getTwelveDataStatus(),
-    finnhub: getFinnhubStatus(),
     activeSource: getLatestPrice()?.source || "none"
   });
 });
@@ -111,20 +149,28 @@ router.get("/connections", (req, res) => {
 // ── Signal endpoint ────────────────────────────────────────────────────────
 router.get("/signal", async (req, res) => {
   try {
-    const live = getLatestPrice();
-    const dataSource = process.env.DATA_SOURCE || "twelvedata";
+    let live = getLatestPrice();
     
-    // We get the current price from the live price emitter (which handles MetaApi or TwelveData internally)
+    
     let price: number;
     if (live) {
         price = live.price;
     } else {
-        const p = getLatestPrice(); 
-        if(!p) {
-          res.status(503).json({ error: "Market data unavailable" });
-          return;
+        // Fallback to historical candle close if live tick hasn't arrived
+        try {
+           const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
+           const recent = await getMetaApiHistoricalOHLC("1m", 1);
+           if (recent && recent.length > 0) {
+               price = recent[recent.length - 1].close;
+               req.log.info({ price }, "Using recent 1m candle close for signal since live price is unavailable");
+           } else {
+               res.status(503).json({ error: "Market data unavailable" });
+               return;
+           }
+        } catch (histErr) {
+           res.status(503).json({ error: "Market data unavailable" });
+           return;
         }
-        price = p.price;
     }
     const signal = await generateSignal(price);
 
@@ -143,7 +189,7 @@ router.get("/signal", async (req, res) => {
 });
 
 // ── History endpoint ───────────────────────────────────────────────────────
-router.get("/history", async (req, res) => {
+router.get(["/history", "/signals"], async (req, res) => {
   try {
     const limitParam = parseInt((req.query.limit as string) ?? "200", 10);
     const limit = isNaN(limitParam) || limitParam < 1 ? 200 : Math.min(limitParam, 500);
@@ -199,6 +245,31 @@ router.delete("/history/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Error deleting signal");
     res.status(500).json({ error: "delete_error", message: "Failed to delete signal" });
+  }
+});
+
+
+router.post("/signals/:id/close", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const signal = await getSignalById(id);
+    if (!signal) {
+      res.status(404).json({ error: "not_found", message: "Signal not found" });
+      return;
+    }
+    
+    const p = getLatestPrice();
+    const currentPrice = p?.price || signal.entryPrice;
+    
+    const isLong = signal.signal === "LONG";
+    const pnl = isLong ? currentPrice - signal.entryPrice : signal.entryPrice - currentPrice;
+    
+    await updateTradeStatus(id, "MANUALLY_CLOSED", currentPrice, Number(pnl.toFixed(2)));
+    
+    res.json({ success: true, closedPrice: currentPrice, pnl: Number(pnl.toFixed(2)) });
+  } catch (err) {
+    req.log.error({ err }, "Error closing signal manually");
+    res.status(500).json({ error: "close_error", message: "Failed to close signal: " + (err.message || String(err)) });
   }
 });
 

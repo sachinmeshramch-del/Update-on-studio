@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   History, TrendingUp, TrendingDown, Clock, Trash2,
-  RotateCcw, Repeat2, ChevronDown, Check,
+  RotateCcw, Repeat, Repeat2, ChevronDown, Check,
 } from "lucide-react";
 import { formatDistanceStrict } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -24,6 +24,12 @@ function toLocalTime(ts: string) {
 
 type TradeStatus  = "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD";
 type SignalFilter = "ALL" | "TREND_FOLLOW" | "REVERSAL";
+type OutcomeFilter = "ALL" | "WINNING" | "LOSING";
+const OUTCOME_LABELS: Record<OutcomeFilter, string> = {
+  ALL: "All Outcomes",
+  WINNING: "Winning",
+  LOSING: "Losing",
+};
 type Period       = "ALL" | "TODAY" | "7D" | "30D";
 
 const PERIOD_LABELS: Record<Period, string> = {
@@ -163,7 +169,15 @@ function DeleteButton({ id, onDelete }: { id: string; onDelete: (id: string) => 
 }
 
 function TypeBadge({ type }: { type?: string | null }) {
+  
+  
+  if (type === "RANGE") return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 whitespace-nowrap">
+      <Repeat className="w-2.5 h-2.5" /> RANGE
+    </span>
+  );
   if (type === "REVERSAL") return (
+
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 whitespace-nowrap">
       <RotateCcw className="w-2.5 h-2.5" /> REVERSAL
     </span>
@@ -307,6 +321,49 @@ function PnlSummary({ signals, currentPrice, period }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+
+function OutcomeDropdown({ value, onChange }: { value: OutcomeFilter; onChange: (o: OutcomeFilter) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 hover:border-border transition-all text-foreground"
+      >
+        {OUTCOME_LABELS[value]}
+        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
+          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 border-b border-border">
+            Outcome
+          </div>
+          {(["ALL", "WINNING", "LOSING"] as OutcomeFilter[]).map(o => (
+            <button
+              key={o}
+              onClick={() => { onChange(o); setOpen(false); }}
+              className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            >
+              <span className={value === o ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                {OUTCOME_LABELS[o]}
+              </span>
+              {value === o && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HistoryTable() {
   const { data, isLoading, isError, refetch } = useGetHistory({
     query: { refetchInterval: 10000 } as any,
@@ -319,6 +376,7 @@ export function HistoryTable() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
   const [period, setPeriod]             = useState<Period>("TODAY");
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
 
   function handleDelete(id: string) {
     deleteSignal(
@@ -345,9 +403,24 @@ export function HistoryTable() {
     : allSignals;
 
   // Type filter
-  const signals = typeFilter === "ALL"
+  let signals = typeFilter === "ALL"
     ? periodSignals
     : periodSignals.filter(s => (s as any).signalType === typeFilter);
+
+  // Outcome filter
+  if (outcomeFilter !== "ALL") {
+    signals = signals.filter(s => {
+      if (s.signal === "HOLD") return false;
+      let pts = 0;
+      const status = (s.tradeStatus ?? "RUNNING") as TradeStatus;
+      if (status === "TARGET_HIT" || status === "STOP_HIT") {
+        pts = s.pnlPoints ?? 0;
+      } else {
+        pts = s.signal === "LONG" ? currentPrice - s.entryPrice : s.entryPrice - currentPrice;
+      }
+      return outcomeFilter === "WINNING" ? pts > 0 : pts <= 0;
+    });
+  }
 
   return (
     <Card className="border-border bg-card/50 overflow-hidden">
@@ -384,6 +457,8 @@ export function HistoryTable() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            {/* Outcome picker */}
+            <OutcomeDropdown value={outcomeFilter} onChange={setOutcomeFilter} />
             {/* Period picker */}
             <PeriodDropdown value={period} onChange={setPeriod} />
 
@@ -450,7 +525,7 @@ export function HistoryTable() {
                 <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">P&amp;L (pts)</th>
                 <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Duration</th>
                 <th className="px-4 py-3 font-semibold tracking-wider">Conf.</th>
-                <th className="px-4 py-3 font-semibold tracking-wider text-center">Del</th>
+                <th className="px-4 py-3 font-semibold tracking-wider text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-mono">
@@ -484,7 +559,26 @@ export function HistoryTable() {
                         <TypeBadge type={(row as any).signalType} />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <StatusBadge status={status} />
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={status} />
+                          {status === "RUNNING" && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Are you sure you want to forcefully close this trade at the current market price?")) return;
+                                try {
+                                  const res = await fetch(`/api/signals/${row.id}/close`, { method: "POST" });
+                                  if (!res.ok) throw new Error("Failed to close");
+                                  toast.success("Trade manually closed successfully!");
+                                } catch (e) {
+                                  toast.error("Failed to close trade.");
+                                }
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold tracking-wider uppercase text-white bg-red-600/80 hover:bg-red-500 rounded-md transition-colors shadow-sm"
+                            >
+                              Close
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-foreground font-semibold">
                         {formatPrice(row.entryPrice)}

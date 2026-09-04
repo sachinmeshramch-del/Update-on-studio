@@ -1,4 +1,5 @@
-import { Activity, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server } from "lucide-react";
+import { Link } from "wouter";
+import { Activity, History, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server , RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePriceStream } from "@/hooks/usePriceStream";
@@ -172,18 +173,11 @@ export function Header() {
             <span className="text-muted-foreground uppercase">Auto Real:</span>
             <button
               type="button"
-              onClick={() => {
-                toggleMutation.mutate({ autoTradingRealEnabled: !settings?.autoTradingRealEnabled });
-              }}
-              title="Click to toggle Real Auto-Trading"
-              className={cn(
-                "font-bold uppercase px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all hover:opacity-80 active:scale-95",
-                settings?.autoTradingRealEnabled
-                  ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 shadow-xs"
-                  : "bg-muted text-muted-foreground/70 border border-border"
-              )}
+              disabled
+              title="Real Auto-Trading is strictly disabled for safety"
+              className="font-bold uppercase px-1.5 py-0.5 rounded text-[10px] cursor-not-allowed transition-all opacity-50 bg-muted text-red-500/50 border border-border"
             >
-              {settings?.autoTradingRealEnabled ? "ON" : "OFF"}
+              OFF
             </button>
           </div>
 
@@ -213,10 +207,10 @@ export function Header() {
         <div className="container mx-auto px-2 sm:px-4 h-[60px] sm:h-[72px] flex items-center justify-between gap-2 sm:gap-4 overflow-x-auto hide-scrollbar">
 
           {/* ── Brand ───────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 cursor-pointer hover:opacity-80 transition-opacity">
+            <Link href="/" className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0 hover:opacity-80 transition-opacity">
               <Activity className="text-black w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
+            </Link>
             <div className="hidden sm:block relative group">
               <h1 className="text-base font-bold tracking-tight text-foreground leading-none">Gold Scalp AI</h1>
                             <div className="flex items-center gap-2 mt-1 cursor-help">
@@ -340,6 +334,25 @@ export function Header() {
           
           {/* ── Theme Toggle & Notifications ───────────────────────────── */}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                queryClient.invalidateQueries();
+                toast({
+                  title: "Data Refreshed",
+                  description: "Market data and signals have been updated.",
+                });
+              }}
+              title="Refresh Data"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600 dark:hover:text-amber-400 transition-all shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <Link href="/backtest" className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600 dark:hover:text-amber-400 transition-all shrink-0">
+              <History className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Backtest</span>
+              <span className="sm:hidden">Test</span>
+            </Link>
             <SettingsDialog />
             <ModeToggle />
 

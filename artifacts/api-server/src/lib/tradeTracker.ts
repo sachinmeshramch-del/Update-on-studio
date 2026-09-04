@@ -42,19 +42,33 @@ async function checkRunningTrades() {
           closedPrice = stopLoss;
           pnlPoints   = +(stopLoss - entryPrice).toFixed(2);
         } else {
-          // Trailing SL: When trade reaches 50% of the distance to TP, lock in exactly +2 points of profit
+          // Trailing SL: Dynamic scaling
           const distanceToTarget = +(takeProfit - entryPrice).toFixed(2);
           const currentProfit = +(currentPrice - entryPrice).toFixed(2);
-          const halfwayDistance = distanceToTarget * 0.5;
+          
+          if (distanceToTarget > 0) {
+            let targetSl = stopLoss; // default no change
+            
+            // Phase 1: At 25% to TP, move to Break-Even (entry price)
+            if (currentProfit >= distanceToTarget * 0.25 && currentProfit < distanceToTarget * 0.5) {
+              targetSl = entryPrice; 
+            }
+            // Phase 2: At 50% to TP, lock in 25% of the target profit
+            else if (currentProfit >= distanceToTarget * 0.5 && currentProfit < distanceToTarget * 0.75) {
+              targetSl = +(entryPrice + (distanceToTarget * 0.25)).toFixed(2);
+            }
+            // Phase 3: At 75% to TP, lock in 50% of the target profit
+            else if (currentProfit >= distanceToTarget * 0.75) {
+              targetSl = +(entryPrice + (distanceToTarget * 0.5)).toFixed(2);
+            }
 
-          if (distanceToTarget > 0 && currentProfit >= halfwayDistance) {
-            const targetSl = +(entryPrice + 2.0).toFixed(2); // Lock in exactly +2 points of profit
-            if (stopLoss < targetSl) {
+            // Only update if the new target SL is higher than the current SL
+            if (targetSl > stopLoss) {
               await updateTradeStopLoss(id as string, targetSl);
               await modifyOpenPositionsStopLoss("LONG", targetSl);
               logger.info(
                 { id, signal, entryPrice, currentPrice, oldSl: stopLoss, newSl: targetSl, distanceToTarget, currentProfit },
-                "Trailing Stop Loss: 50% target distance reached — locked in +2.0 points profit"
+                "Trailing Stop Loss: Dynamic trailing level updated"
               );
             }
           }
@@ -69,19 +83,33 @@ async function checkRunningTrades() {
           closedPrice = stopLoss;
           pnlPoints   = +(entryPrice - stopLoss).toFixed(2);
         } else {
-          // Trailing SL: When trade reaches 50% of the distance to TP, lock in exactly +2 points of profit
+          // Trailing SL: Dynamic scaling
           const distanceToTarget = +(entryPrice - takeProfit).toFixed(2);
           const currentProfit = +(entryPrice - currentPrice).toFixed(2);
-          const halfwayDistance = distanceToTarget * 0.5;
+          
+          if (distanceToTarget > 0) {
+            let targetSl = stopLoss; // default no change
+            
+            // Phase 1: At 25% to TP, move to Break-Even (entry price)
+            if (currentProfit >= distanceToTarget * 0.25 && currentProfit < distanceToTarget * 0.5) {
+              targetSl = entryPrice; 
+            }
+            // Phase 2: At 50% to TP, lock in 25% of the target profit
+            else if (currentProfit >= distanceToTarget * 0.5 && currentProfit < distanceToTarget * 0.75) {
+              targetSl = +(entryPrice - (distanceToTarget * 0.25)).toFixed(2);
+            }
+            // Phase 3: At 75% to TP, lock in 50% of the target profit
+            else if (currentProfit >= distanceToTarget * 0.75) {
+              targetSl = +(entryPrice - (distanceToTarget * 0.5)).toFixed(2);
+            }
 
-          if (distanceToTarget > 0 && currentProfit >= halfwayDistance) {
-            const targetSl = +(entryPrice - 2.0).toFixed(2); // Lock in exactly +2 points of profit
-            if (stopLoss > targetSl) {
+            // Only update if the new target SL is LOWER than the current SL (since it's a SHORT)
+            if (targetSl < stopLoss) {
               await updateTradeStopLoss(id as string, targetSl);
               await modifyOpenPositionsStopLoss("SHORT", targetSl);
               logger.info(
                 { id, signal, entryPrice, currentPrice, oldSl: stopLoss, newSl: targetSl, distanceToTarget, currentProfit },
-                "Trailing Stop Loss: 50% target distance reached — locked in +2.0 points profit"
+                "Trailing Stop Loss: Dynamic trailing level updated"
               );
             }
           }

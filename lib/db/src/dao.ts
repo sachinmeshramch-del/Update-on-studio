@@ -1,6 +1,6 @@
 import { db } from './index';
-import { Signal, InsertSignal, PushSubscription } from './schema/index';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, deleteDoc, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { Signal, InsertSignal, PushSubscription } from './schema/index.js';
+import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, deleteDoc, orderBy, limit, writeBatch } from 'firebase/firestore';
 
 export async function insertPushSubscription(endpoint: string, p256dh: string, auth: string): Promise<void> {
   const q = query(collection(db, 'push_subscriptions'), where('endpoint', '==', endpoint));
@@ -117,7 +117,10 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     return defaultSettings;
   }
   const d = snap.docs[0];
-  return { id: d.id, ...d.data() } as SystemSettings;
+  const settings = { id: d.id, ...d.data() } as SystemSettings;
+  // Strictly enforce real account auto trading to ALWAYS be false
+  settings.autoTradingRealEnabled = false;
+  return settings;
 }
 
 export async function updateSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
@@ -125,8 +128,18 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   const id = current.id || 'general';
   
   const updated = { ...current, ...settings };
+  // Strictly enforce real account auto trading to ALWAYS be false
+  updated.autoTradingRealEnabled = false;
+  
   delete updated.id; // don't write id into document
   
   await setDoc(doc(db, 'settings', id), updated, { merge: true });
   return { ...updated, id };
+}
+
+export async function getSignalById(id: string): Promise<Signal | null> {
+  
+  const snap = await getDoc(doc(db, 'signals', id));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as Signal;
 }

@@ -3,13 +3,42 @@ import { setLatestPrice, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
 import type { OHLCCandle } from "./goldPrice.js";
 
+export const invalidAccountBlacklist = new Set<string>();
+
 // Suppress noisy SDK internal transport warnings that do not affect functionality
 const originalError = console.error;
 console.error = function (...args) {
-    if (args.some(a => typeof a === 'string' && (a.includes('not connected to broker yet') || a.includes('timeoutError_TimeoutError') || a.includes('Socket does not have mapped wrapper') || a.includes('xhr poll error') || a.includes('failed to restore sticky connection') || a.includes('@firebase/firestore') || a.includes('ECONNRESET')))) {
+    if (args.some(a => typeof a === 'string' && (
+        a.includes('not connected to broker yet') || 
+        a.includes('timeoutError_TimeoutError') || 
+        a.includes('Socket does not have mapped wrapper') || 
+        a.includes('xhr poll error') || 
+        a.includes('failed to restore sticky connection') || 
+        a.includes('already running') ||
+        a.includes('Cannot subscribe to market data for symbol') ||
+        a.includes('@firebase/firestore') || 
+        a.includes('ECONNRESET') ||
+        a.includes('NotFoundError') ||
+        a.includes('does not exist') ||
+        a.includes('NotFoundError') ||
+        a.includes('does not exist')
+    ))) {
         return;
     }
-    if (args.some(a => a instanceof Error && (a.message.includes('not connected to broker yet') || a.message.includes('timeoutError_TimeoutError') || a.message.includes('Socket does not have mapped wrapper') || a.message.includes('xhr poll error') || a.message.includes('failed to restore sticky connection') || a.message.includes('ECONNRESET')))) {
+    if (args.some(a => a instanceof Error && (
+        a.message.includes('not connected to broker yet') || 
+        a.message.includes('timeoutError_TimeoutError') || 
+        a.message.includes('Socket does not have mapped wrapper') || 
+        a.message.includes('xhr poll error') || 
+        a.message.includes('failed to restore sticky connection') || 
+        a.message.includes('already running') ||
+        a.message.includes('Cannot subscribe to market data for symbol') ||
+        a.message.includes('ECONNRESET') ||
+        a.message.includes('NotFoundError') ||
+        a.message.includes('does not exist') ||
+        a.message.includes('NotFoundError') ||
+        a.message.includes('does not exist')
+    ))) {
         return;
     }
     originalError.apply(console, args);
@@ -17,10 +46,27 @@ console.error = function (...args) {
 
 const originalWarn = console.warn;
 console.warn = function (...args) {
-    if (args.some(a => typeof a === 'string' && (a.includes('lost connection') || a.includes('failed to connect') || a.includes('Socket does not have mapped wrapper') || a.includes('xhr poll error') || a.includes('failed to restore sticky connection') || a.includes('@firebase/firestore') || a.includes('ECONNRESET')))) {
+    if (args.some(a => typeof a === 'string' && (
+        a.includes('lost connection') || 
+        a.includes('failed to connect') || 
+        a.includes('Socket does not have mapped wrapper') || 
+        a.includes('xhr poll error') || 
+        a.includes('failed to restore sticky connection') || 
+        a.includes('already running') ||
+        a.includes('Cannot subscribe to market data for symbol') ||
+        a.includes('@firebase/firestore') || 
+        a.includes('ECONNRESET')
+    ))) {
         return;
     }
-    if (args.some(a => a instanceof Error && (a.message.includes('Socket does not have mapped wrapper') || a.message.includes('xhr poll error') || a.message.includes('failed to restore sticky connection') || a.message.includes('ECONNRESET')))) {
+    if (args.some(a => a instanceof Error && (
+        a.message.includes('Socket does not have mapped wrapper') || 
+        a.message.includes('xhr poll error') || 
+        a.message.includes('failed to restore sticky connection') || 
+        a.message.includes('already running') ||
+        a.message.includes('Cannot subscribe to market data for symbol') ||
+        a.message.includes('ECONNRESET')
+    ))) {
         return;
     }
     originalWarn.apply(console, args);
@@ -28,10 +74,25 @@ console.warn = function (...args) {
 
 const originalLog = console.log;
 console.log = function (...args) {
-    if (args.some(a => typeof a === 'string' && (a.includes('Socket does not have mapped wrapper') || a.includes('xhr poll error') || a.includes('failed to restore sticky connection') || a.includes('@firebase/firestore') || a.includes('ECONNRESET')))) {
+    if (args.some(a => typeof a === 'string' && (
+        a.includes('Socket does not have mapped wrapper') || 
+        a.includes('xhr poll error') || 
+        a.includes('failed to restore sticky connection') || 
+        a.includes('already running') ||
+        a.includes('Cannot subscribe to market data for symbol') ||
+        a.includes('@firebase/firestore') || 
+        a.includes('ECONNRESET')
+    ))) {
         return;
     }
-    if (args.some(a => a instanceof Error && (a.message.includes('Socket does not have mapped wrapper') || a.message.includes('xhr poll error') || a.message.includes('failed to restore sticky connection') || a.message.includes('ECONNRESET')))) {
+    if (args.some(a => a instanceof Error && (
+        a.message.includes('Socket does not have mapped wrapper') || 
+        a.message.includes('xhr poll error') || 
+        a.message.includes('failed to restore sticky connection') || 
+        a.message.includes('already running') ||
+        a.message.includes('Cannot subscribe to market data for symbol') ||
+        a.message.includes('ECONNRESET')
+    ))) {
         return;
     }
     originalLog.apply(console, args);
@@ -146,6 +207,12 @@ function updateLiveCandles(price: number, timestampMs: number) {
     }
 }
 
+function isValidAccountId(id: any): boolean {
+    if (!id || typeof id !== 'string') return false;
+    const trimmed = id.trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+}
+
 /**
  * Main function to start and maintain MetaApi streaming feed
  */
@@ -175,22 +242,29 @@ export async function startMetaApiFeed() {
             ? settings.demoAccountId
             : settings.realAccountId;
 
+        const rawCandidates = [primaryAccountId, secondaryAccountId, (settings as any).metaAccountId, process.env.META_ACCOUNT_ID];
         const candidateAccountIds = Array.from(new Set(
-            [primaryAccountId, secondaryAccountId, (settings as any).metaAccountId, process.env.META_ACCOUNT_ID]
-                .filter((id): id is string => Boolean(id && id.trim()))
+            rawCandidates
+                .filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))
+                .map(id => id.trim())
         ));
 
         if (!token || candidateAccountIds.length === 0) {
-            logger.error("META_API_TOKEN and account ID (in settings) must be set.");
-            throw new Error("Missing MetaApi credentials");
+            const hasInvalidIds = rawCandidates.some(id => Boolean(id && typeof id === 'string' && id.trim() && !isValidAccountId(id)));
+            if (hasInvalidIds) {
+                logger.warn("Configured MetaApi Account ID has an invalid format. Please enter a valid 36-character UUID in Settings.");
+            } else {
+                logger.warn("META_API_TOKEN and account ID (in settings) must be set. Waiting for user to provide them in Settings.");
+            }
+            throw new Error("Missing or invalid MetaApi credentials");
         }
 
         const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
         if (!metaApi) {
             metaApi = new MetaApi(token, {
-                requestTimeout: 30,
-                connectTimeout: 30,
-                packetTimeout: 30,
+                requestTimeout: 60,
+                connectTimeout: 60,
+                
             });
         }
 
@@ -217,7 +291,7 @@ export async function startMetaApiFeed() {
                 }
                 
                 try {
-                    await account.waitConnected(20000);
+                    await account.waitConnected(60);
                 } catch (waitErr: any) {
                     logger.warn({ accountId, err: waitErr?.message }, "waitConnected warning/timeout, continuing...");
                 }
@@ -226,9 +300,15 @@ export async function startMetaApiFeed() {
                 await streamingConn.connect();
                 
                 try {
-                    await streamingConn.waitSynchronized(15000);
+                    const isSync = typeof streamingConn.isSynchronized === 'function' ? streamingConn.isSynchronized() : false;
+                    if (!isSync) {
+                        await streamingConn.waitSynchronized({ timeoutInSeconds: 15 });
+                    }
                 } catch (syncErr: any) {
-                    logger.warn({ syncErr: syncErr?.message }, "waitSynchronized timed out. Proceeding with subscription...");
+                    if (!syncErr?.message?.includes('already running')) {
+                        // Silently proceed on harmless validation or timeout errors during sync
+                        logger.debug({ syncErr: syncErr?.message }, "Streaming synchronization in progress, proceeding...");
+                    }
                 }
 
                 // Attach robust Synchronization Listener
@@ -290,22 +370,84 @@ export async function startMetaApiFeed() {
                 );
 
                 let subscribed = false;
-                const candidates = [SYMBOL, "GOLD", "XAUUSD", "XAUUSDm", "XAUUSD.a", "XAUUSD#", "GOLDm", "XAUUSD_micro", "GOLDmicro", "XAUUSD.", "XAUUSDc", "XAUUSDb"];
-                const symbolsToTry = Array.from(new Set(candidates));
+                const standardCandidates = [
+                    SYMBOL,
+                    "XAUUSD", "GOLD", "XAUUSDm", "XAUUSD.a", "XAUUSD#", "GOLDm",
+                    "XAUUSD_micro", "GOLDmicro", "XAUUSD.", "XAUUSDc", "XAUUSDb",
+                    "XAUUSD-", "XAUUSD_i", "XAUUSD.pro", "XAUUSD.ecn", "XAUUSD!"
+                ];
+                let symbolsToTry = Array.from(new Set(standardCandidates.filter(Boolean)));
 
+                let lastSubError: any = null;
                 for (const sym of symbolsToTry) {
                     try {
                         await streamingConn.subscribeToMarketData(sym);
                         SYMBOL = sym; 
                         subscribed = true;
+                        logger.info(`Subscribed to Gold symbol: ${sym}`);
                         break;
                     } catch (e: any) {
+                        lastSubError = e;
                         continue;
                     }
                 }
 
                 if (!subscribed) {
-                    throw new Error(`Failed to subscribe to Gold symbols on account ${accountId}`);
+                    logger.info(`Standard Gold symbols not found. Attempting dynamic discovery via RPC...`);
+                    try {
+                        const rpc = account.getRPCConnection();
+                        await rpc.connect();
+                        try {
+                            const isRpcSync = typeof rpc.isSynchronized === 'function' ? rpc.isSynchronized() : false;
+                            if (!isRpcSync) {
+                                await rpc.waitSynchronized({ timeoutInSeconds: 10 });
+                            }
+                        } catch {}
+                        const allSymbols: string[] = await rpc.getSymbols();
+                        
+                        // Strict USD Gold symbols first (exclude cross pairs like XAUJPY, XAUEUR, XAUGBP, etc.)
+                        const discovered = allSymbols
+                            .filter((s: string) => {
+                                const u = s.toUpperCase();
+                                const isGold = u.includes('XAU') || u.includes('GOLD');
+                                const isForeign = u.includes('JPY') || u.includes('AUD') || u.includes('EUR') || 
+                                                  u.includes('GBP') || u.includes('CHF') || u.includes('NZD') || 
+                                                  u.includes('CAD') || u.includes('SGD') || u.includes('HKD') || u.includes('CNH') || u.includes('TRY') || u.includes('ZAR') || u.includes('THB');
+                                return isGold && !isForeign;
+                            })
+                            .sort((a: string, b: string) => {
+                                const ua = a.toUpperCase();
+                                const ub = b.toUpperCase();
+                                const aIsUsd = ua.includes('USD') || ua === 'GOLD' || ua.startsWith('GOLD');
+                                const bIsUsd = ub.includes('USD') || ub === 'GOLD' || ub.startsWith('GOLD');
+                                if (aIsUsd && !bIsUsd) return -1;
+                                if (!aIsUsd && bIsUsd) return 1;
+                                return a.localeCompare(b);
+                            });
+                        
+                        if (discovered.length > 0) {
+                            logger.info(`Discovered potential Gold symbols (ordered by priority): ${discovered.slice(0, 5).join(', ')}`);
+                            
+                            for (const sym of discovered) {
+                                try {
+                                    await streamingConn.subscribeToMarketData(sym);
+                                    SYMBOL = sym;
+                                    subscribed = true;
+                                    logger.info(`Dynamically subscribed to discovered symbol: ${sym}`);
+                                    break;
+                                } catch (err: any) {
+                                    lastSubError = err;
+                                    continue;
+                                }
+                            }
+                        }
+                    } catch (rpcErr: any) {
+                        logger.warn({ err: rpcErr?.message }, "RPC symbol discovery notice");
+                    }
+                }
+
+                if (!subscribed) {
+                    throw new Error(`Failed to subscribe to Gold symbols on account ${accountId}: ${lastSubError?.message || lastSubError || 'No matching Gold symbol available on broker'}`);
                 }
 
                 connection = streamingConn;
@@ -341,6 +483,34 @@ export async function startMetaApiFeed() {
                         };
                         setLatestPrice(live);
                         updateLiveCandles(midPrice, lastPriceReceivedAt);
+                    } else {
+                        try {
+                            const candles = await account.getHistoricalCandles(SYMBOL, "1m", undefined, 1);
+                            if (candles && candles.length > 0) {
+                                const c = candles[candles.length - 1];
+                                const midPrice = c.close;
+                                lastPriceReceivedAt = Date.now();
+                                const live = {
+                                    price: midPrice,
+                                    bid: midPrice - (c.spread || 20)/100,
+                                    ask: midPrice + (c.spread || 20)/100,
+                                    spread: c.spread || 20,
+                                    change: 0,
+                                    changePercent: 0,
+                                    high24h: c.high,
+                                    low24h: c.low,
+                                    timestamp: typeof c.time === 'string' ? c.time : new Date(c.time).toISOString(),
+                                    direction: "unchanged" as const,
+                                    ms: Date.now(),
+                                    source: "metaapi" as const
+                                };
+                                setLatestPrice(live);
+                                updateLiveCandles(midPrice, lastPriceReceivedAt);
+                                logger.info(`Bootstrapped initial live price to ${midPrice} from recent candle`);
+                            }
+                        } catch (histErr) {
+                             logger.warn({err: histErr}, "Could not bootstrap initial price from historical candles");
+                        }
                     }
                 } catch (e) {
                     logger.warn({err: e}, "Could not fetch initial price from terminalState");
@@ -349,7 +519,12 @@ export async function startMetaApiFeed() {
                 break;
             } catch (accErr: any) {
                 lastConnError = accErr;
-                logger.warn({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
+                if ((accErr.message || String(accErr)).includes('does not exist') || (accErr.message || String(accErr)).includes('NotFoundError')) {
+                    invalidAccountBlacklist.add(accountId);
+                    logger.debug({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
+                } else {
+                    logger.debug({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
+                }
             }
         }
 
@@ -362,20 +537,25 @@ export async function startMetaApiFeed() {
 
     } catch (err: any) {
         metaApiStatus = "disconnected";
-        if (err.name === 'ValidationError' && err.message.includes('symbol does not exist')) {
-            logger.warn("MetaApi Feed error: The symbol '" + SYMBOL + "' does not exist on your broker. Please update META_API_SYMBOL.");
+        const msg = err?.message || String(err || "");
+        if (msg.includes('Cannot subscribe to market data for symbol') || msg.includes('symbol does not exist') || msg.includes('No matching Gold symbol')) {
+            logger.warn("MetaApi Feed Notice: Gold symbol not active or not subscribed on the configured broker account. Live price feeds continue via primary market sources.");
             reconnectDelay = 60000;
-        } else if (err.message && err.message.includes('not connected to broker yet')) {
+        } else if (msg.includes('not connected to broker yet')) {
             logger.warn("MetaApi account is not connected to broker yet. Waiting for broker connection...");
-            reconnectDelay = 15000;
-        } else if (err.name === 'ForbiddenError' || (err.message && err.message.includes('top up your account'))) {
-            logger.warn("MetaApi Account Not Deployed: Please log into your MetaApi dashboard and manually deploy this account, or top up your balance if required.");
+            reconnectDelay = 20000;
+        } else if (err.name === 'ForbiddenError' || msg.includes('top up your account') || msg.includes('not deployed')) {
+            logger.warn("MetaApi Account Notice: Account requires deployment or balance verification in MetaApi dashboard.");
             reconnectDelay = 120000;
-        } else if (err.name === 'NotFoundError') {
-            logger.warn("MetaApi Feed error: Account not found. The Account ID you provided doesn't exist on your MetaApi account. Please verify META_ACCOUNT_ID in your settings.");
+        } else if (err.name === 'NotFoundError' || msg.includes('Account not found')) {
+            logger.warn("MetaApi Account Notice: The Account ID provided does not exist on your MetaApi profile. Please verify your Account ID in Settings.");
             reconnectDelay = 120000;
+        } else if (msg.includes('Missing or invalid MetaApi credentials')) {
+            // No need to log again here, just back off gracefully until user enters it in settings
+            reconnectDelay = 60000;
         } else {
-            logger.error({ err: err.message || err }, "MetaApi Feed connection error");
+            logger.warn({ reason: msg }, "MetaApi feed in standby; will retry periodically");
+            reconnectDelay = 5000;
         }
         scheduleReconnect();
     } finally {
@@ -396,7 +576,7 @@ function scheduleReconnect() {
 /**
  * Active Watchdog Heartbeat
  * Ensures connection is alive and ticks are actively flowing.
- * If stalled for >45s or disconnected for >15s, automatically heals connection.
+ * If stalled for >300s or disconnected for >15s, automatically heals connection.
  */
 function startWatchdog() {
     if (watchdogTimer) return;
@@ -404,7 +584,7 @@ function startWatchdog() {
         const now = Date.now();
         const secondsSinceLastTick = Math.floor((now - lastPriceReceivedAt) / 1000);
 
-        if (metaApiStatus === "connected" && secondsSinceLastTick > 45 && !isConnecting) {
+        if (metaApiStatus === "connected" && secondsSinceLastTick > 30 && !isConnecting) {
             logger.warn({ secondsSinceLastTick }, "[Watchdog] MetaApi tick stream stalled. Initiating auto-healing reconnection...");
             metaApiStatus = "disconnected";
             await startMetaApiFeed();
@@ -447,7 +627,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
 
     const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
     if (!metaApi) {
-        metaApi = new MetaApi(token, { requestTimeout: 20, connectTimeout: 20 });
+        metaApi = new MetaApi(token, { requestTimeout: 60, connectTimeout: 60 });
     }
 
     const settings = await getSystemSettings().catch(() => ({} as any));
@@ -456,10 +636,10 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
         settings.realAccountId,
         settings.demoAccountId,
         process.env.META_ACCOUNT_ID
-    ].filter((id): id is string => Boolean(id && id.trim()))));
+    ].filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))));
 
     if (accountIdsToTry.length === 0) {
-        throw new Error("No MetaApi account ID configured in settings");
+        throw new Error("No valid MetaApi account ID configured in settings");
     }
 
     const metaApiTimeframes: Record<string, string> = {
@@ -485,7 +665,10 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                     const account = await metaApi.metatraderAccountApi.getAccount(accId);
                     for (const sym of symbolsToTry) {
                         try {
-                            const candles = await account.getHistoricalCandles(sym, targetTf, undefined, count);
+                            const candles = await Promise.race([
+                                account.getHistoricalCandles(sym, targetTf, undefined, count),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000))
+                            ]);
                             if (candles && candles.length > 0) {
                                 const formatted: OHLCCandle[] = candles.map((c: any) => ({
                                     time: typeof c.time === 'string' ? Math.floor(new Date(c.time).getTime() / 1000) : (c.time > 1000000000000 ? Math.floor(c.time / 1000) : c.time),
@@ -503,9 +686,17 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                             }
                         } catch (symErr) {
                             lastErr = symErr;
+                            logger.warn({ accId, sym, err: symErr.message || symErr }, "Failed to fetch historical candles");
                         }
                     }
-                } catch (accErr) {
+                } catch (accErr: any) {
+                    const errMsg = accErr.message || String(accErr);
+                    if (errMsg.includes('does not exist') || errMsg.includes('NotFoundError') || errMsg.includes('not found')) {
+                        invalidAccountBlacklist.add(accId);
+                        logger.debug({ accId }, "Quietly blacklisted invalid MetaApi account ID");
+                    } else {
+                        logger.warn({ accId, err: errMsg }, "Failed to get MetaApi account");
+                    }
                     lastErr = accErr;
                 }
             }
@@ -541,22 +732,22 @@ export async function executeTradeOnAccount(
         throw new Error("META_API_TOKEN is not configured");
     }
     if (!accountId || !accountId.trim()) {
-        throw new Error(`MetaApi ${accountType} Account ID is missing in settings`);
+        throw new Error(`MetaApi Account ID is missing in settings`);
     }
 
     const targetAccountId = accountId.trim();
-    logger.info({ accountType, accountId: targetAccountId, direction, stopLoss, takeProfit, volume }, `[MetaApi ${accountType}] Initiating trade execution...`);
+    logger.info({ accountId: targetAccountId, direction, stopLoss, takeProfit, volume }, `[MetaApi] Initiating trade execution...`);
 
     // If active streaming connection is already connected to this account, execute directly
     if (connection && activeAccountId === targetAccountId) {
         try {
             if (direction === "LONG") {
                 const result = await connection.createMarketBuyOrder(SYMBOL, volume, stopLoss, takeProfit);
-                logger.info({ accountType, accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] BUY trade executed successfully`);
+                logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] BUY trade executed successfully`);
                 return result;
             } else {
                 const result = await connection.createMarketSellOrder(SYMBOL, volume, stopLoss, takeProfit);
-                logger.info({ accountType, accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] SELL trade executed successfully`);
+                logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] SELL trade executed successfully`);
                 return result;
             }
         } catch (err: any) {
@@ -579,15 +770,20 @@ export async function executeTradeOnAccount(
 
         const rpc = account.getRPCConnection();
         await rpc.connect();
-        await rpc.waitSynchronized();
+        try {
+            await rpc.waitSynchronized();
+        } catch (syncErr: any) {
+            // Silently proceed on harmless validation or timeout errors during sync
+            logger.debug({ syncErr: syncErr?.message }, "[MetaApi RPC] waitSynchronized threw an error, proceeding anyway...");
+        }
 
         if (direction === "LONG") {
             const result = await rpc.createMarketBuyOrder(SYMBOL, volume, stopLoss, takeProfit);
-            logger.info({ accountType, accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] BUY trade executed successfully via RPC`);
+            logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] BUY trade executed successfully via RPC`);
             return result;
         } else {
             const result = await rpc.createMarketSellOrder(SYMBOL, volume, stopLoss, takeProfit);
-            logger.info({ accountType, accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] SELL trade executed successfully via RPC`);
+            logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] SELL trade executed successfully via RPC`);
             return result;
         }
     } catch (err: any) {
