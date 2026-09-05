@@ -417,8 +417,8 @@ export function SignalPanel() {
           <div className="flex justify-between items-center pt-1 border-t border-border mt-0.5">
             <span className="text-[10px] text-muted-foreground">Raw score</span>
             <span className="text-sm font-bold font-mono text-foreground">
-              {Math.max(0, (emaScore ?? 0) + (rsiScore ?? 0) + (macdScore ?? 0) + (momentumScore ?? 0) + (fvgScore ?? 0) + (sweepScore ?? 0) + (obScore ?? 0) + (candleScore ?? 0))}
-              <span className="text-muted-foreground font-normal">/200</span>
+              {Math.round((confidence / 100) * 125)}
+              <span className="text-muted-foreground font-normal">/125</span>
               <span className="text-muted-foreground font-normal text-[11px] ml-2">
                 = {confidence}%
               </span>

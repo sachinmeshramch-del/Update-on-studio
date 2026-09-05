@@ -686,7 +686,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                             }
                         } catch (symErr) {
                             lastErr = symErr;
-                            logger.warn({ accId, sym, err: symErr.message || symErr }, "Failed to fetch historical candles");
+                            logger.debug({ accId, sym, err: symErr.message || symErr }, "Symbol check failed");
                         }
                     }
                 } catch (accErr: any) {
