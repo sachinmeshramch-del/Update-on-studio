@@ -1,22 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock, AlertCircle } from 'lucide-react';
 import { SiGoogle } from 'react-icons/si';
 
 export default function LoginScreen() {
   const { loginWithGoogle, loading } = useAuth();
-  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
+    setErrorMsg("");
     try {
       await loginWithGoogle();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-    } finally {
       setIsLoggingIn(false);
+      setErrorMsg(err.message || "Failed to log in. Please try again.");
     }
   };
 
@@ -35,37 +37,30 @@ export default function LoginScreen() {
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-emerald-900/10 rounded-full blur-[120px]" />
       </div>
       
-      <Card className="w-full max-w-md bg-zinc-900/50 border-zinc-800 backdrop-blur-xl relative z-10">
+      <Card className="w-full max-w-md bg-zinc-900/50 border-zinc-800 backdrop-blur-xl relative z-10 shadow-2xl">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto bg-zinc-800/50 p-3 rounded-2xl w-fit ring-1 ring-white/10">
-            <svg
-              className="w-10 h-10 text-emerald-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-              />
-            </svg>
+          <div className="mx-auto bg-zinc-800/50 p-3 rounded-2xl w-fit ring-1 ring-white/10 shadow-inner">
+            <Lock className="w-10 h-10 text-emerald-500" />
           </div>
           <div className="space-y-2">
             <CardTitle className="text-2xl font-bold tracking-tight text-zinc-100">
-              Gold Swing AI
+              Secure Access
             </CardTitle>
             <CardDescription className="text-zinc-400">
-              Private trading dashboard. Sign in to access your signals.
+              Please sign in with your authorized account to continue.
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="pt-4">
+        <CardContent className="pt-4 space-y-4">
+          {errorMsg && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-500 text-sm text-left">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="break-words">{errorMsg}</p>
+            </div>
+          )}
           <Button
             size="lg"
-            className="w-full font-medium transition-all"
+            className="w-full font-medium transition-all bg-white text-zinc-900 hover:bg-zinc-200"
             onClick={handleLogin}
             disabled={isLoggingIn}
           >
