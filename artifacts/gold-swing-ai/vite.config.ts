@@ -18,7 +18,7 @@ if (Number.isNaN(port) || port <= 0) {
   console.log(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
+const basePath = process.env.BASE_PATH || "/";
 
 if (!basePath) { process.env.BASE_PATH = "/"; 
   console.log(
