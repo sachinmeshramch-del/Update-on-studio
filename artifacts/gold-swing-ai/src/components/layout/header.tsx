@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Activity, History, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server , RefreshCw } from "lucide-react";
+import { LogOut, Activity, History, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server , RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePriceStream } from "@/hooks/usePriceStream";
@@ -7,6 +7,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useConnections } from "@/hooks/useConnections";
 import { cn } from "@/lib/utils";
 import { ModeToggle } from "@/components/mode-toggle";
+import { useAuth } from "@/lib/firebase/auth-context";
 import { SettingsDialog } from "./settings-dialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -21,6 +22,7 @@ function splitPrice(price: number) {
 }
 
 export function Header() {
+  const { logout } = useAuth();
   const { data, connected, error, transport } = usePriceStream();
   const { status: notifStatus, enable: enableNotifs, disable: disableNotifs } = useNotifications();
   const connections = useConnections();
@@ -353,7 +355,16 @@ export function Header() {
               <span className="hidden sm:inline">Backtest</span>
               <span className="sm:hidden">Test</span>
             </Link>
+            
+            <button
+              onClick={() => logout()}
+              title="Sign Out"
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
             <SettingsDialog />
+    
             <ModeToggle />
 
           {notifStatus !== "unsupported" && (

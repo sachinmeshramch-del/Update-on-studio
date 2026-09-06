@@ -6,7 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Backtest from "@/pages/backtest";
+import LoginScreen from "@/pages/login";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider, useAuth } from "@/lib/firebase/auth-context";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,13 +19,22 @@ const queryClient = new QueryClient({
   },
 });
 
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <LoginScreen />;
+  return <>{children}</>;
+}
+
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/backtest" component={Backtest} />
-      <Route component={NotFound} />
-    </Switch>
+    <AuthGuard>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/backtest" component={Backtest} />
+        <Route component={NotFound} />
+      </Switch>
+    </AuthGuard>
   );
 }
 
@@ -32,12 +43,14 @@ function App() {
     <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="dark" storageKey="gold-swing-theme">
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
     </ErrorBoundary>

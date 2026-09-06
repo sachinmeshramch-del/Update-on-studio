@@ -1,8 +1,0 @@
-{
-  "name": "Gold Swing AI",
-  "description": "AI-powered XAUUSD trading dashboard and market analysis",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
