@@ -1,0 +1,36 @@
+--- artifacts/api-server/src/lib/technicalIndicators.ts
++++ artifacts/api-server/src/lib/technicalIndicators.ts
+@@ -877,4 +877,26 @@
+   return levels;
+ }
++
++export interface FVG {
++  type: "BULLISH" | "BEARISH";
++  top: number;
++  bottom: number;
++  candleIndex: number; // The index of the large displacement candle
++}
++
++export function detectFVG(candles: OHLCCandle[], lookback: number = 5): FVG | null {
++  if (candles.length < 3) return null;
++  
++  // Look for FVG in the recent closed candles
++  // An FVG requires 3 candles:
++  // Bearish FVG: Candle 1 low > Candle 3 high (Gap down)
++  // Bullish FVG: Candle 1 high < Candle 3 low (Gap up)
++  for (let i = candles.length - 2; i >= Math.max(2, candles.length - lookback); i--) {
++    const c1 = candles[i - 2];
++    const c2 = candles[i - 1]; // The displacement candle
++    const c3 = candles[i];     // The most recent closed candle
++    
++    // Bearish FVG (Massive Drop)
++    if (c1.low > c3.high) {
++      return { type: "BEARISH", top: c1.low, bottom: c3.high, candleIndex: i - 1 };
++    }
++    // Bullish FVG (Massive Pump)
++    if (c1.high < c3.low) {
++      return { type: "BULLISH", top: c3.low, bottom: c1.high, candleIndex: i - 1 };
++    }
++  }
++  return null;
++}

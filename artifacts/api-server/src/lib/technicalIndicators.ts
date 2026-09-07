@@ -889,3 +889,30 @@ export function getNearestSwingLevels(
 
   return { nearestSwingHigh, nearestSwingLow };
 }
+
+export interface FVG {
+  type: "BULLISH" | "BEARISH";
+  top: number;
+  bottom: number;
+  candleIndex: number;
+}
+
+export function detectFVG(candles: OHLCCandle[], lookback: number = 5): FVG | null {
+  if (candles.length < 3) return null;
+  // Look for FVG in the recent closed candles
+  for (let i = candles.length - 1; i >= Math.max(2, candles.length - lookback); i--) {
+    const c1 = candles[i - 2];
+    const c2 = candles[i - 1]; // Displacement candle
+    const c3 = candles[i];
+    
+    // Bearish FVG (Massive Drop)
+    if (c1.low > c3.high) {
+      return { type: "BEARISH", top: c1.low, bottom: c3.high, candleIndex: i - 1 };
+    }
+    // Bullish FVG (Massive Pump)
+    if (c1.high < c3.low) {
+      return { type: "BULLISH", top: c3.low, bottom: c1.high, candleIndex: i - 1 };
+    }
+  }
+  return null;
+}

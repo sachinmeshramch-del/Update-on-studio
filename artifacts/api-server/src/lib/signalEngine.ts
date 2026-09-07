@@ -20,6 +20,7 @@ import {
 } from "./technicalIndicators.js";
 import { getAnalyticsSummary, isSmartMode } from "./performanceAnalytics.js";
 import { logger } from "./logger.js";
+import { sendTelegramNotification } from "./telegram.js";
 import { getLatestSignal, getRecentSignals, getRunningTrades } from "@workspace/db";
 
 
@@ -557,6 +558,14 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const isCleanBearishDisplacement = candle.close < candle.open && body >= atr * 1.5 && lowerWick <= body * 0.35;
       const isDirectionalExpansion = isCleanBullishDisplacement || isCleanBearishDisplacement;
 
+      // 🚨 Liquidity Plunge / Flash Crash Detection (4x ATR anomaly)
+      const isFlashCrash = range >= atr * 4.0;
+      
+      if (isFlashCrash) {
+         logger.warn({ range, atr }, "🚨 FLASH CRASH DETECTED! Massive liquidity plunge anomaly.");
+         sendTelegramNotification("🚨 *FLASH CRASH DETECTED* 🚨\nMassive liquidity plunge on Gold! Pausing normal trading algorithms to protect capital. Waiting for Fair Value Gap (FVG) recovery opportunity...").catch(console.error);
+      }
+
       // News chop spike: two-sided massive wicks (range much larger than body, or giant opposing wick)
       const isWhipsawSpike = (range > spikeThreshold * 2.0 && !isDirectionalExpansion) || (body > spikeThreshold && !isDirectionalExpansion);
       
@@ -564,7 +573,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const lastClose = candidates[1] ? candidates[1].close : candle.close;
       const isFeedGlitch = Math.abs(currentPrice - lastClose) > atr * 5.0;
 
-      let spikeDetected = isWhipsawSpike || isFeedGlitch;
+      let spikeDetected = isWhipsawSpike || isFeedGlitch || isFlashCrash;
 
       logger.info(
         { "Candle body": +body.toFixed(2), "Range": +range.toFixed(2), "ATR": +atr.toFixed(2), "Threshold": +spikeThreshold.toFixed(2), "Spike detected": spikeDetected, isDirectionalExpansion },
