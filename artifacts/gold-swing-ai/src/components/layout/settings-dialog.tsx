@@ -130,17 +130,17 @@ export function SettingsDialog() {
               </div>
               <div className="flex items-center justify-between mt-2">
                 <div className="flex flex-col">
-                  <Label className="font-bold text-red-500/50" htmlFor="auto-trading-real">Auto Trading (Real)</Label>
-                  <span className="text-[10px] text-red-500 font-medium">Strictly disabled for safety</span>
+                  <Label className="font-bold text-red-500" htmlFor="auto-trading-real">Auto Trading (Real)</Label>
+                  <span className="text-[10px] text-red-500 font-medium">Live Execution Enabled</span>
                 </div>
                 <Switch
                   id="auto-trading-real"
-                  checked={false}
-                  disabled={true}
+                  checked={formData.autoTradingRealEnabled ?? false}
+                  onCheckedChange={(c) => handleToggle("autoTradingRealEnabled", c)}
                 />
               </div>
               <p className="text-[11px] text-muted-foreground mt-2">
-                Switches save instantly to database and stay strictly OFF across page reloads.
+                Switches save instantly to database and persist across page reloads.
               </p>
             </div>
 

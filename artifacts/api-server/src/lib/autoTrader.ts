@@ -1,5 +1,5 @@
 import { getSystemSettings } from "@workspace/db";
-import { executeTradeOnAccount } from "./metaApiFeed.js";
+import { executeTradeOnAccount, getAccountFundsInfo } from "./metaApiFeed.js";
 import { logger } from "./logger.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { getLatestPrice } from "./priceEvents.js";
@@ -33,15 +33,21 @@ export async function executeTradeWithCapitalManagement(
 
     logger.info({ accountId, riskPerTrade, dailyTarget, dailyStop }, `[AutoTrader] Evaluating trade with capital management...`);
 
-    // In a real scenario, we would fetch live equity from MetaApi:
-    // const info = await connection.getAccountInformation();
-    // const equity = info.equity;
-    // For this demonstration, we'll assume a $1000 standard balance if we can't fetch it dynamically here without the connection object directly exposed.
-    // To keep it simple without breaking the existing metaApiFeed.ts state, we'll calculate a standard lot size based on fixed equity unless we fetch it.
+    // Fetch live equity and leverage from MetaApi
+    let fundsInfo = await getAccountFundsInfo(accountId);
+    let actualEquity = fundsInfo ? fundsInfo.equity : null;
+    let leverage = fundsInfo ? fundsInfo.leverage : 0;
     
-    const assumedEquity = 1000; 
+    // Fallback if the connection failed
+    if (!actualEquity || actualEquity <= 0) {
+        logger.warn({ accountId }, "[AutoTrader] Could not fetch live equity, defaulting to $1000 fallback balance for safety.");
+        actualEquity = 1000;
+    }
+
+    logger.info({ accountId, actualEquity, leverage, riskPerTrade }, `[AutoTrader] Dynamically calculating risk based on live available funds (Leverage: 1:${leverage})...`);
+
     // Risk amount = Equity * Risk%
-    const riskAmount = assumedEquity * (riskPerTrade / 100);
+    const riskAmount = actualEquity * (riskPerTrade / 100);
     // SL distance in pips/points (Gold)
     const slDistance = Math.abs(entryPrice - stopLoss);
     

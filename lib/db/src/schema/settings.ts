@@ -1,6 +1,8 @@
 export interface SystemSettings {
   id?: string;
+  demoAccountId?: string;
   realAccountId: string;
+  autoTradingDemoEnabled?: boolean;
   autoTradingRealEnabled: boolean;
   autoTradingEnabled?: boolean;
   metaApiSymbol?: string;

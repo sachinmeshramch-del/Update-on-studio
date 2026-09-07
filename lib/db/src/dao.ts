@@ -118,8 +118,6 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   }
   const d = snap.docs[0];
   const settings = { id: d.id, ...d.data() } as SystemSettings;
-  // Strictly enforce real account auto trading to ALWAYS be false
-  settings.autoTradingRealEnabled = false;
   return settings;
 }
 
@@ -128,8 +126,6 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   const id = current.id || 'general';
   
   const updated = { ...current, ...settings };
-  // Strictly enforce real account auto trading to ALWAYS be false
-  updated.autoTradingRealEnabled = false;
   
   delete updated.id; // don't write id into document
   
