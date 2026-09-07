@@ -1,25 +1,99 @@
 import { generateSignal } from "./signalEngine.js";
 import { getLatestPrice } from "./priceEvents.js";
-import { insertSignal, getLatestSignal, getRunningTrades } from "@workspace/db";
+import { insertSignal, getLatestSignal, getRunningTrades, updateTradeStatus } from "@workspace/db";
 import { sendPushToAll } from "./pushNotifications.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { logger } from "./logger.js";
 import { getSystemSettings } from "@workspace/db";
-import { getMetaApiStatus, executeTradeOnAccount } from "./metaApiFeed.js";
+import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions } from "./metaApiFeed.js";
 import { executeTradeWithCapitalManagement } from "./autoTrader.js";
 
-const SCHEDULER_INTERVAL = 5_000; // 5 seconds
+const SCHEDULER_INTERVAL = 5_000 + Math.floor(Math.random() * 2000); // 5-7 seconds with jitter to prevent Cloud Run multi-instance collision
 
 let isScheduling = false;
+
+let isRolloverClosing = false;
+let rolloverClosedDate = "";
+
+async function checkDailyRolloverAndClose(): Promise<void> {
+    if (isRolloverClosing) return;
+    isRolloverClosing = true;
+    try {
+        const now = new Date();
+        const nyFormatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/New_York",
+            hour12: false,
+            hour: "numeric",
+            minute: "numeric",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            weekday: "short"
+        });
+        const parts = nyFormatter.formatToParts(now);
+        let nyHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+        if (nyHour === 24) nyHour = 0;
+        const nyMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+        const nyDayStr = parts.find(p => p.type === 'weekday')?.value;
+        const currentDateKey = `${parts.find(p => p.type === 'year')?.value}-${parts.find(p => p.type === 'month')?.value}-${parts.find(p => p.type === 'day')?.value}`;
+
+        // 15 minutes before 5 PM NY time = 16:45 NY time
+        // Weekend close check: Friday at 16:45. Daily check: Mon-Thu at 16:45
+        if (nyHour === 16 && nyMin >= 45 && nyDayStr !== 'Sat' && nyDayStr !== 'Sun') {
+            if (rolloverClosedDate !== currentDateKey) {
+                logger.info("[Rollover Check] Approaching daily/weekend rollover. Auto-closing all open positions.");
+                const settings = await getSystemSettings();
+                
+                if (settings.autoTradingDemoEnabled && settings.demoAccountId) {
+                    await closeAllPositions(settings.demoAccountId);
+                }
+                if (settings.autoTradingRealEnabled && settings.realAccountId) {
+                    await closeAllPositions(settings.realAccountId);
+                }
+                
+                // Mark running trades in DB as closed
+                const running = await getRunningTrades();
+                const currentPrice = getLatestPrice()?.price || 0;
+                for (const trade of running) {
+                    if (trade.id) {
+                        await updateTradeStatus(trade.id, "CLOSED", currentPrice, 0);
+                        logger.info({ tradeId: trade.id }, "Marked trade as CLOSED due to rollover");
+                    }
+                }
+
+                rolloverClosedDate = currentDateKey;
+            }
+        }
+    } catch (e: any) {
+        logger.error({ err: e.message || e }, "Rollover check failed");
+    } finally {
+        isRolloverClosing = false;
+    }
+}
+
 async function runScheduledSignal(): Promise<void> {
   if (isScheduling) return;
   isScheduling = true;
   try {
+    await checkDailyRolloverAndClose();
+
     const live  = getLatestPrice();
     const price = live?.price;
-    if (!price) {
+    if (!price || !live) {
       logger.warn("Skipping signal evaluation: no live price available");
       return;
+    }
+
+    // ── Feed Staleness & Market Closure Guard ──
+    // If the broker stops sending quotes (e.g. daily break, weekend, or holiday like Labor Day),
+    // the live feed will go stale. We pause signals to prevent the bot from hallucinating on old data.
+    const msSinceLastPrice = Date.now() - live.ms;
+    if (msSinceLastPrice > 5 * 60 * 1000) {
+        // Log once every 5 minutes to avoid spam
+        if (Date.now() % (5 * 60 * 1000) < 5000) {
+            logger.warn({ msSinceLastPrice }, "Skipping signal evaluation: Price feed is stale (market likely closed for holiday or daily break)");
+        }
+        return;
     }
 
     const signal = await generateSignal(price, true);
@@ -82,12 +156,12 @@ async function runScheduledSignal(): Promise<void> {
 
       // 1. Demo Account Execution: strictly triggered only if Demo Auto Trading is ON
       if (settings.autoTradingDemoEnabled) {
-                if (demoId) {
-          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Automatically executing trade on DEMO MT5 account...");
+                if (settings.demoAccountId) {
+          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: settings.demoAccountId }, "[MetaApi Execution] Automatically executing trade on DEMO MT5 account...");
           try {
-            await executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);
+            await executeTradeWithCapitalManagement(settings.demoAccountId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);
           } catch (demoErr: any) {
-            logger.error({ err: demoErr.message || demoErr, accountId: demoId }, "[MetaApi Execution] DEMO trade execution failed");
+            logger.error({ err: demoErr.message || demoErr, accountId: settings.demoAccountId }, "[MetaApi Execution] DEMO trade execution failed");
           }
         } else {
           logger.warn("[MetaApi Execution] Auto-trading (Demo) is ON, but Demo Account ID is not configured in settings.");

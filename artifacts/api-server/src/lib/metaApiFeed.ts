@@ -684,7 +684,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                                 candleCache.set(cacheKey, { timestamp: Date.now(), data: formatted });
                                 return formatted;
                             }
-                        } catch (symErr) {
+                        } catch (symErr: any) {
                             lastErr = symErr;
                             logger.debug({ accId, sym, err: symErr.message || symErr }, "Symbol check failed");
                         }
@@ -818,6 +818,31 @@ export async function modifyOpenPositionsStopLoss(direction: "LONG" | "SHORT", n
     }
 }
 
+export async function closeAllPositions(accountId: string) {
+    if (!accountId) return;
+    try {
+        const account = await metaApi.metatraderAccountApi.getAccount(accountId.trim());
+        const rpc = account.getRPCConnection();
+        await rpc.connect();
+        await rpc.waitSynchronized();
+        
+        const positions = await rpc.getPositions();
+        let closedCount = 0;
+        for (const pos of positions) {
+            if (pos.symbol === SYMBOL || pos.symbol === "XAUUSD") {
+                await rpc.closePosition(pos.id);
+                logger.info({ accountId, positionId: pos.id, symbol: pos.symbol }, "[MetaApi Execution] Auto-closed position before rollover.");
+                closedCount++;
+            }
+        }
+        if (closedCount > 0) {
+            logger.info({ accountId, closedCount }, "[MetaApi] Successfully closed positions before daily rollover.");
+        }
+        try { rpc.close(); } catch(e) {}
+    } catch (err: any) {
+        logger.warn({ err: err.message || String(err), accountId }, "[MetaApi Execution] Failed to auto-close positions for rollover");
+    }
+}
 
 export interface AccountFundsInfo {
     equity: number;

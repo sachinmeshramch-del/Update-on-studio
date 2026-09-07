@@ -7,7 +7,7 @@ let TELEGRAM_CHAT_ID: string | null = null;
 async function fetchChatId() {
     try {
         const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`);
-        const data = await response.json();
+        const data = await response.json() as any;
         if (data.ok && data.result.length > 0) {
             // Get the chat ID from the latest message
             const lastUpdate = data.result[data.result.length - 1];
@@ -48,7 +48,7 @@ export async function sendTelegramNotification(message: string) {
             })
         });
 
-        const data = await response.json();
+        const data = await response.json() as any;
         if (!data.ok) {
             logger.error({ error: data.description }, "[Telegram] Failed to send message");
         } else {

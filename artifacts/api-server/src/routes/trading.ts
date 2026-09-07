@@ -72,7 +72,7 @@ router.get("/gold-price", async (req, res) => {
                  price: c.close,
                  bid: c.close,
                  ask: c.close,
-                 spread: c.spread || 20,
+                 spread: (c as any).spread || 20,
                  change: 0,
                  changePercent: 0,
                  high24h: c.high,
@@ -92,7 +92,7 @@ router.get("/gold-price", async (req, res) => {
       }
     }
     res.json(live);
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error fetching price");
     res.status(500).json({ error: "price_fetch_error", message: "Failed to fetch gold price" });
   }
@@ -112,7 +112,7 @@ router.get("/price", async (req, res) => {
                  price: c.close,
                  bid: c.close,
                  ask: c.close,
-                 spread: c.spread || 20,
+                 spread: (c as any).spread || 20,
                  change: 0,
                  changePercent: 0,
                  high24h: c.high,
@@ -132,7 +132,7 @@ router.get("/price", async (req, res) => {
       }
     }
     res.json(live);
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error fetching price");
     res.status(500).json({ error: "price_fetch_error", message: "Failed to fetch gold price" });
   }
@@ -215,7 +215,7 @@ router.get(["/history", "/signals"], async (req, res) => {
     }));
 
     res.json({ signals });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error fetching history");
     res.json({ signals: [] });
   }
@@ -226,7 +226,7 @@ router.delete("/history/clear", async (req, res) => {
   try {
     const deletedCount = await clearAllHistory();
     res.json({ deleted: deletedCount });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error clearing history");
     res.status(500).json({ error: "clear_error", message: "Failed to clear history" });
   }
@@ -242,7 +242,7 @@ router.delete("/history/:id", async (req, res) => {
       return;
     }
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error deleting signal");
     res.status(500).json({ error: "delete_error", message: "Failed to delete signal" });
   }
@@ -267,7 +267,7 @@ router.post("/signals/:id/close", async (req, res) => {
     await updateTradeStatus(id, "MANUALLY_CLOSED", currentPrice, Number(pnl.toFixed(2)));
     
     res.json({ success: true, closedPrice: currentPrice, pnl: Number(pnl.toFixed(2)) });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error closing signal manually");
     res.status(500).json({ error: "close_error", message: "Failed to close signal: " + (err.message || String(err)) });
   }
@@ -278,7 +278,7 @@ router.get("/analytics", async (req, res) => {
   try {
     const analytics = await getAnalyticsSummary();
     res.json(analytics);
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Error fetching analytics");
     res.status(500).json({ error: "analytics_error", message: "Failed to fetch analytics" });
   }
@@ -314,7 +314,7 @@ router.post("/push/subscribe", async (req, res) => {
   try {
     await insertPushSubscription(endpoint, keys.p256dh, keys.auth);
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Failed to save push subscription");
     res.status(500).json({ error: "db_error", message: "Failed to save subscription" });
   }
@@ -329,7 +329,7 @@ router.post("/push/unsubscribe", async (req, res) => {
   try {
     await deletePushSubscription(endpoint);
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Failed to delete push subscription");
     res.status(500).json({ error: "db_error", message: "Failed to remove subscription" });
   }
@@ -345,7 +345,7 @@ router.get("/push/test", async (req, res) => {
       entryPrice: 2000,
     });
     res.json({ success: true, message: "Pushed to all" });
-  } catch (err) {
+  } catch (err: any) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });

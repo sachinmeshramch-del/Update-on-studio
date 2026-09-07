@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useState, useRef, useEffect } from "react";
 import { useGetHistory, useDeleteSignal, useClearHistory } from "@workspace/api-client-react";
 import { usePriceStream } from "@/hooks/usePriceStream";

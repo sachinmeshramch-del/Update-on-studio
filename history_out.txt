@@ -1,0 +1,10 @@
+Fetching 15m...
+Got 100 candles
+{
+  time: 1788804900,
+  open: 4404.76,
+  high: 4406.07,
+  low: 4403.48,
+  close: 4405.28,
+  volume: 726
+}

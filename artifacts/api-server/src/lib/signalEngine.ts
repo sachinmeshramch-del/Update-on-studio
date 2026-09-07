@@ -130,35 +130,51 @@ const CANDLE_5M_MS         = 300_000; // 5 min in ms
 const SIGNAL_CACHE_TTL        = 60_000;   // 1 minute
 const COOLDOWN_MS             = 900_000;  // 15 minutes between signals
 const MIN_SIGNAL_INTERVAL_MS  = 5 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
-const MIN_CONF_NORMAL         = 70;
-const MIN_CONF_STRONG         = 70;
-const MIN_CONF_REVERSAL       = 70;  // counter-trend trades need higher conviction
-const MIN_CONF_RANGE          = 70;  // range-bound / consolidation markets require high conviction
+const MIN_CONF_NORMAL         = 50;
+const MIN_CONF_STRONG         = 65;
+const MIN_CONF_REVERSAL       = 60;  // counter-trend trades need higher conviction
+const MIN_CONF_RANGE          = 55;  // range-bound / consolidation markets require high conviction
 const MIN_PRICE_MOVE_PCT      = 0.002;    // 0.2% to override standard cooldown (raised from 0.1% — $4→$8 on gold)
 const MAX_RAW_SCORE           = 125;      // realistic max without all institutional factors aligning
 
 // ── Session detection ─────────────────────────────────────────────────────
 function getCurrentSession(): SessionInfo {
-  const now  = new Date();
-  const day  = now.getUTCDay();   // 0 = Sun, 6 = Sat
-  const h    = now.getUTCHours();
+  const now = new Date();
+  
+  // Use America/New_York timezone to perfectly handle Daylight Saving Time
+  const nyFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "numeric",
+    minute: "numeric",
+    weekday: "short"
+  });
+  const parts = nyFormatter.formatToParts(now);
+  let nyHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+  if (nyHour === 24) nyHour = 0;
+  const nyDayStr = parts.find(p => p.type === 'weekday')?.value;
 
-  // Gold forex market is closed: all of Saturday + Sunday before 22:00 UTC
-  const isWeekend = day === 6 || (day === 0 && h < 22);
+  // NY Close is Friday 5 PM. Opens Sunday 5 PM.
+  // Daily break is 5 PM to 6 PM NY time (17:00 to 18:00)
+  const isWeekend = nyDayStr === 'Sat' || (nyDayStr === 'Fri' && nyHour >= 17) || (nyDayStr === 'Sun' && nyHour < 17);
+  const isDailyBreak = !isWeekend && nyHour === 17;
 
-  const london  = !isWeekend && h >= 7  && h < 17;
-  const newYork = !isWeekend && h >= 13 && h < 22;
-  const asian   = !isWeekend && (h >= 22 || h < 7);
+  const marketOpen = !isWeekend && !isDailyBreak;
+
+  const h = now.getUTCHours(); // Keep basic UTC hours for session names
+  const london  = marketOpen && h >= 7  && h < 17;
+  const newYork = marketOpen && h >= 13 && h < 22;
+  const asian   = marketOpen && (h >= 22 || h < 7);
 
   const active =
-    isWeekend         ? "Market Closed" :
+    !marketOpen       ? "Market Closed" :
     london && newYork ? "London / New York" :
     london            ? "London" :
     newYork           ? "New York" :
     asian             ? "Asian" :
     "Off-hours";
 
-  return { london, newYork, asian, active, marketOpen: !isWeekend };
+  return { london, newYork, asian, active, marketOpen };
 }
 
 function overallTrend(
@@ -987,34 +1003,33 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     let isTrueBreakout = false;
     let isFalseBreakout = false;
     
-    if (isMarketConsolidating && rangeInfo.isRanging && intendedSignal !== "HOLD") {
+    if (isMarketConsolidating && rangeInfo.isRanging ) {
       const breakoutBuffer = atr * 0.2;
       
       // True Breakout: Price pushes cleanly beyond the boundary with momentum
-      if (intendedSignal === "LONG" && currentPrice > (rangeInfo.resistance + breakoutBuffer) && macdHistogram > 0 && rsi > 55) {
+      if (intendedSignal === "LONG" && currentPrice > (rangeInfo.resistance + breakoutBuffer) && macdHist > 0 && rsi > 55) {
         isTrueBreakout = true;
-      } else if (intendedSignal === "SHORT" && currentPrice < (rangeInfo.support - breakoutBuffer) && macdHistogram < 0 && rsi < 45) {
+      } else if (intendedSignal === "SHORT" && currentPrice < (rangeInfo.support - breakoutBuffer) && macdHist < 0 && rsi < 45) {
         isTrueBreakout = true;
       }
       
       // False Breakout (Sweep Rejection): Swept liquidity outside boundary but rejected back in
-      if (intendedSignal === "LONG" && sweepRej.detected && sweepRej.rejectionType === "BULLISH" && sweepRej.sweptLevel <= rangeInfo.support) {
+      if (intendedSignal === "LONG" && sweepRej.detected && sweepRej.rejectionType === "BULLISH" && sweepRej.sweptLevel !== null && sweepRej.sweptLevel <= rangeInfo.support) {
         isFalseBreakout = true;
-      } else if (intendedSignal === "SHORT" && sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel >= rangeInfo.resistance) {
+      } else if (intendedSignal === "SHORT" && sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel !== null && sweepRej.sweptLevel >= rangeInfo.resistance) {
         isFalseBreakout = true;
       }
     }
 
 
-    let signalType: "TREND_FOLLOW" | "REVERSAL" = isAgainstTrend ? "REVERSAL" : "TREND_FOLLOW";
+    let signalType: "TREND_FOLLOW" | "REVERSAL" | "RANGE" | "BREAKOUT" = (isMarketConsolidating && rangeInfo.isRanging) ? "RANGE" : isAgainstTrend ? "REVERSAL" : "TREND_FOLLOW";
 
     if (finalSignal !== "HOLD" && isAgainstTrend) {
       if (isFalseBreakout) {
          logger.info({ finalSignal }, "[Breakout] False breakout (Sweep Rejection) detected. Allowing reversal trade.");
       } else {
-        // SOLUTION 1: Reversal trades (counter-trend) are completely disabled.
-        finalSignal = "HOLD";
-        suppressionReason = "Reversal trades are disabled. Only trend-following allowed.";
+        // Allow reversal trades if confidence is high enough
+        logger.info({ finalSignal }, "[MacroFilter] Allowing reversal trade (counter-trend).");
       }
     }
     
@@ -1024,6 +1039,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         logger.info({ finalSignal }, "[Breakout] True breakout detected. Bypassing NEUTRAL trend filter.");
       } else if (isFalseBreakout) {
         logger.info({ finalSignal }, "[Breakout] False breakout detected. Bypassing NEUTRAL trend filter.");
+      } else if (signalType === "RANGE") {
+        logger.info({ finalSignal }, "[MacroFilter] Range trade detected. Bypassing NEUTRAL trend filter.");
       } else {
         logger.warn({ finalSignal }, "[MacroFilter] Suppressed because effective trend is NEUTRAL");
         finalSignal = "HOLD";
@@ -1049,9 +1066,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     // In consolidation/ranging conditions, reject trend-following breakouts in the middle of chop
     // and prevent buying into range resistance or selling into range support.
     if (finalSignal !== "HOLD" && isMarketConsolidating && rangeInfo.isRanging) {
-      logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressed signal because range trading is disabled");
-      finalSignal = "HOLD";
-      suppressionReason = `Range trading disabled (${rangeInfo.support.toFixed(1)} – ${rangeInfo.resistance.toFixed(1)})`;
+      logger.info({ rangeInfo, finalSignal }, "[RangeFilter] Range trade validated and allowed.");
     }
 
     // ── Macro Trend Filter (15m Structure & Trend) ────────────────────────
@@ -1164,8 +1179,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     } else {
       const bestDir  = longNorm >= shortNorm ? "LONG" : "SHORT";
       const bestConf = Math.max(longNorm, shortNorm);
+      const reqConf  = bestDir === "LONG" ? longMinConf : shortMinConf;
       const rangeText = (isMarketConsolidating && rangeInfo.isRanging) ? ` · Range ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)})` : "";
-      reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${dynamicMinConf}%)${rangeText}`;
+      reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${reqConf}%)${rangeText}`;
     }
 
     if (finalSignal !== "HOLD" && isCommit) {

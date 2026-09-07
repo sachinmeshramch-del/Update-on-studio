@@ -1,0 +1,54 @@
+Evaluating...
+[18:21:51.177] [32mINFO[39m: [36m[SpikeGuard] Cooldown active[39m
+    [35mspikeCooldownActive[39m: false
+    [35mcandlesRemaining[39m: 0
+{
+  "signal": "HOLD",
+  "confidence": 0,
+  "entryPrice": 2600,
+  "stopLoss": 2597,
+  "takeProfit": 2604.5,
+  "trend": "NEUTRAL",
+  "reason": "HOLD – Signal generation failed; using safe defaults Error: Primary data source unavailable for 1m candles.\n    at fetchWithFallback (/app/applet/artifacts/api-server/src/lib/signalEngine.ts:430:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async generateSignal (/app/applet/artifacts/api-server/src/lib/signalEngine.ts:446:21)\n    at async run (/app/applet/test_eval2.ts:4:15)",
+  "timestamp": "2026-09-07T18:22:33.854Z",
+  "tradeDuration": "5-30 minutes",
+  "cooldownRemaining": 0,
+  "smartMode": false,
+  "session": {
+    "london": false,
+    "newYork": true,
+    "asian": false,
+    "active": "New York",
+    "marketOpen": true
+  },
+  "signalStrength": null,
+  "spikeCooldownCandles": 0,
+  "spikeCooldownRemaining": 0,
+  "emaScore": 0,
+  "rsiScore": 0,
+  "macdScore": 0,
+  "momentumScore": 0,
+  "fvgScore": 0,
+  "sweepScore": 0,
+  "obScore": 0,
+  "candleScore": 0,
+  "candlePattern": null,
+  "signalType": "TREND_FOLLOW",
+  "patternDetected": null,
+  "patternStrength": 0,
+  "contextValid": false,
+  "confluenceMet": false,
+  "confirmationStatus": null,
+  "indicators": {
+    "rsi": 50,
+    "ema9": 2600,
+    "ema21": 2600,
+    "macdLine": 0,
+    "macdSignal": 0,
+    "macdHistogram": 0,
+    "atr": 3,
+    "trend5m": "NEUTRAL",
+    "trend1m": "NEUTRAL"
+  }
+}
+
