@@ -15,7 +15,7 @@ import { initWebPush } from "./lib/pushNotifications.js";
 import { startSignalScheduler } from "./lib/signalScheduler.js";
 import { startTradeTracker } from "./lib/tradeTracker.js";
 
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 const server = app.listen(port, "0.0.0.0", (err) => {
   if (err) {
