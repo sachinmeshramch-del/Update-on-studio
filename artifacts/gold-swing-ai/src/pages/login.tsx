@@ -1,24 +1,28 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Lock, AlertCircle } from 'lucide-react';
-import { SiGoogle } from 'react-icons/si';
+import { Loader2, Lock, AlertCircle, KeyRound } from 'lucide-react';
 
 export default function LoginScreen() {
-  const { loginWithGoogle, loading } = useAuth();
+  const { loginWithPasscode, loading } = useAuth();
+  const [passcode, setPasscode] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handleLogin = async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passcode) return;
+    
     setIsLoggingIn(true);
     setErrorMsg("");
     try {
-      await loginWithGoogle();
+      await loginWithPasscode(passcode);
     } catch (err: any) {
       console.error(err);
       setIsLoggingIn(false);
-      setErrorMsg(err.message || "Failed to log in. Please try again.");
+      setErrorMsg(err.message || "Failed to log in.");
     }
   };
 
@@ -47,7 +51,7 @@ export default function LoginScreen() {
               Secure Access
             </CardTitle>
             <CardDescription className="text-zinc-400">
-              Please sign in with your authorized account to continue.
+              Please enter the secret passcode to continue.
             </CardDescription>
           </div>
         </CardHeader>
@@ -58,19 +62,29 @@ export default function LoginScreen() {
               <p className="break-words">{errorMsg}</p>
             </div>
           )}
-          <Button
-            size="lg"
-            className="w-full font-medium transition-all bg-white text-zinc-900 hover:bg-zinc-200"
-            onClick={handleLogin}
-            disabled={isLoggingIn}
-          >
-            {isLoggingIn ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : (
-              <SiGoogle className="mr-2 h-4 w-4" />
-            )}
-            {isLoggingIn ? 'Connecting...' : 'Sign in with Google'}
-          </Button>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Input
+                type="password"
+                placeholder="Enter passcode"
+                className="pl-9 bg-zinc-800/50 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+              />
+            </div>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full font-medium transition-all bg-white text-zinc-900 hover:bg-zinc-200"
+              disabled={isLoggingIn || !passcode}
+            >
+              {isLoggingIn ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : null}
+              {isLoggingIn ? 'Verifying...' : 'Unlock Dashboard'}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>
