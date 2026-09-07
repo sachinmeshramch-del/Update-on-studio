@@ -200,7 +200,7 @@ export function AnalyticsPanel() {
             <p className="text-xs text-muted-foreground italic">No completed scalp trades yet</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {data.last10.map(t => (
+              {data.last10.map((t: any) => (
                 <WinDot key={t.id} result={t.result} pnl={t.pnlPoints} />
               ))}
               {Array.from({ length: Math.max(0, 10 - (data.last10?.length ?? 0)) }).map((_, i) => (

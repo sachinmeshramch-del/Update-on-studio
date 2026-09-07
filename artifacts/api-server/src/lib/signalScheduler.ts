@@ -6,6 +6,7 @@ import { sendTelegramNotification } from "./telegram.js";
 import { logger } from "./logger.js";
 import { getSystemSettings } from "@workspace/db";
 import { getMetaApiStatus, executeTradeOnAccount } from "./metaApiFeed.js";
+import { executeTradeWithCapitalManagement } from "./autoTrader.js";
 
 const SCHEDULER_INTERVAL = 5_000; // 5 seconds
 
@@ -84,7 +85,7 @@ async function runScheduledSignal(): Promise<void> {
                 if (demoId) {
           logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Automatically executing trade on DEMO MT5 account...");
           try {
-            await executeTradeOnAccount(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, 0.01);
+            await executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);
           } catch (demoErr: any) {
             logger.error({ err: demoErr.message || demoErr, accountId: demoId }, "[MetaApi Execution] DEMO trade execution failed");
           }
@@ -99,7 +100,7 @@ async function runScheduledSignal(): Promise<void> {
         if (realId) {
           logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Automatically executing trade on REAL MT5 account...");
           try {
-            await executeTradeOnAccount(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, 0.01);
+            await executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);
           } catch (realErr: any) {
             logger.error({ err: realErr.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed");
           }
