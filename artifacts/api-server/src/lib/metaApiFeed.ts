@@ -339,9 +339,9 @@ export async function startMetaApiFeed() {
                                             changePercent: 0,
                                             high24h: midPrice,
                                             low24h: midPrice,
-                                            timestamp: new Date().toISOString(),
+                                            timestamp: price.time ? new Date(price.time).toISOString() : new Date().toISOString(),
                                             direction: "unchanged" as const,
-                                            ms: Date.now(),
+                                            ms: price.time ? new Date(price.time).getTime() : Date.now(),
                                             source: "metaapi" as const
                                         };
                                         setLatestPrice(live);
@@ -501,7 +501,7 @@ export async function startMetaApiFeed() {
                                     low24h: c.low,
                                     timestamp: typeof c.time === 'string' ? c.time : new Date(c.time).toISOString(),
                                     direction: "unchanged" as const,
-                                    ms: Date.now(),
+                                    ms: typeof c.time === 'string' ? new Date(c.time).getTime() : new Date(c.time).getTime(),
                                     source: "metaapi" as const
                                 };
                                 setLatestPrice(live);
