@@ -10,6 +10,13 @@ import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+console.log("APP START: __dirname is", __dirname);
+const publicPath = path.join(__dirname, "../../gold-swing-ai/dist/public");
+console.log("APP START: publicPath is", publicPath);
+console.log("APP START: exists?", fs.existsSync(publicPath));
+if (fs.existsSync(publicPath)) {
+  console.log("APP START: contents:", fs.readdirSync(publicPath));
+}
 
 const app: Express = express();
 
@@ -71,6 +78,9 @@ app.use("/api", router);
 app.use(express.static(path.join(__dirname, "../../gold-swing-ai/dist/public")));
 
 app.get(/.*/, (req, res) => {
+  if (req.path.startsWith('/assets/')) {
+    return res.status(404).send('Asset not found');
+  }
   const filePath = path.join(__dirname, "../../gold-swing-ai/dist/public/index.html");
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);

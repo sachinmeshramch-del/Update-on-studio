@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Check local storage for existing session
-    const storedAuth = localStorage.getItem('gold_swing_auth');
+    let storedAuth = null; try { storedAuth = localStorage.getItem('gold_swing_auth'); } catch (e) { console.error('LocalStorage blocked', e); }
     if (storedAuth === 'true') {
       setUser({ email: 'admin' });
     }
@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithPasscode = async (passcode: string) => {
     // Hardcoded simple passcode
     if (passcode === 'goldswing2024') {
-      localStorage.setItem('gold_swing_auth', 'true');
+      try { localStorage.setItem('gold_swing_auth', 'true'); } catch (e) {}
       setUser({ email: 'admin' });
     } else {
       throw new Error("Invalid passcode");
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    localStorage.removeItem('gold_swing_auth');
+    try { localStorage.removeItem('gold_swing_auth'); } catch (e) {}
     setUser(null);
   };
 
