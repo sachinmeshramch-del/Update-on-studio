@@ -305,7 +305,8 @@ async function getTrainingSamples(): Promise<Sample[]> {
       smcScore:        r.smcScore,
       confidence:      r.confidence,
     });
-    const label = r.tradeStatus === "TARGET_HIT"
+    const isWin = r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) > 0;
+    const label = isWin
       ? (r.signal === "LONG" ? 0 : 1)
       : 2;
     samples.push({ features, label });

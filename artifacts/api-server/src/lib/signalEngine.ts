@@ -76,6 +76,9 @@ export interface SignalResult {
     trend5m: "BULLISH" | "BEARISH" | "NEUTRAL";
     trend1m: "BULLISH" | "BEARISH" | "NEUTRAL";
   };
+  circuitBreakerActive: boolean;
+  circuitBreakerRemainingMinutes: number;
+  consecutiveLosses: number;
 }
 
 interface LastSignalState {
@@ -233,22 +236,31 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
     
     let countingStreak = true;
     for (const r of completed) {
-      const tradeTime = r.createdAt ? new Date(r.createdAt).getTime() : 0;
-      if (r.tradeStatus === "STOP_HIT") {
+      const tradeTime = r.closedAt ? new Date(r.closedAt).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : 0);
+      const pnl = r.pnlPoints ?? 0;
+
+      // Real capital loss: ONLY when pnlPoints < 0 (initial protective SL hit)
+      // If pnlPoints > 0, it was a profitable trailing stop exit (a WIN!)
+      // If pnlPoints === 0, it was break-even (capital preserved)
+      if (pnl < 0) {
         if (tradeTime > oneHourAgo) recentLossCount1h++;
         if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
         if (countingStreak) consecutiveLosses++;
-      } else if (r.tradeStatus === "TARGET_HIT") {
+      } else if (pnl > 0 || r.tradeStatus === "TARGET_HIT") {
+        // Any profitable trade (TP or trailing stop in profit) breaks the loss streak!
         countingStreak = false;
       }
     }
 
     for (const r of completed.slice(0, 5)) {
-      if (r.signal === "LONG"  && r.tradeStatus === "STOP_HIT") longStops++;
-      if (r.signal === "SHORT" && r.tradeStatus === "STOP_HIT") shortStops++;
+      const pnl = r.pnlPoints ?? 0;
+      if (pnl < 0) {
+        if (r.signal === "LONG")  longStops++;
+        if (r.signal === "SHORT") shortStops++;
+      }
     }
 
-    // Circuit breaker: 2+ consecutive losses OR 2+ losses in past hour -> 30-min protection cooldown
+    // Circuit breaker: 2+ consecutive REAL losses OR 2+ REAL losses in past hour -> 30-min protection cooldown
     const CIRCUIT_BREAKER_WINDOW_MS = 30 * 60 * 1000;
     const inCircuitBreakerCooldown =
       (consecutiveLosses >= 2 || recentLossCount1h >= 2) &&
@@ -460,7 +472,24 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       } else {
         candles5m = await fetchWithFallback("5m", 300);
         candles1m = await fetchWithFallback("1m", 300);
-        candles15m = await fetchWithFallback("15m", 100);
+        try {
+          candles15m = await fetchWithFallback("15m", 100);
+        } catch {
+          // Synthesize 15m candles from 5m candles if direct 15m REST fetch is delayed
+          candles15m = [];
+          for (let i = 0; i < candles5m.length; i += 3) {
+            const chunk = candles5m.slice(i, i + 3);
+            if (chunk.length === 0) continue;
+            candles15m.push({
+              time: chunk[0].time,
+              open: chunk[0].open,
+              high: Math.max(...chunk.map(c => c.high)),
+              low: Math.min(...chunk.map(c => c.low)),
+              close: chunk[chunk.length - 1].close,
+              volume: chunk.reduce((sum, c) => sum + (c.volume || 1), 0),
+            });
+          }
+        }
         cachedCandles5m = candles5m.map(c => ({ ...c }));
         cachedCandles1m = candles1m.map(c => ({ ...c }));
         cachedCandles15m = candles15m.map(c => ({ ...c }));
@@ -901,11 +930,11 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const contextValid        = confirmedCandleResult?.contextValid    ?? pendingPattern?.contextValid    ?? false;
     const confluenceMet       = confirmedCandleResult?.confluenceMet   ?? false;
 
-    const confidence = direction !== "HOLD"
+    let confidence = direction !== "HOLD"
       ? (direction === "LONG" ? longNorm : shortNorm)
       : Math.max(longNorm, shortNorm);
 
-    const signalStrength: "STRONG" | "NORMAL" | null =
+    let signalStrength: "STRONG" | "NORMAL" | null =
       direction !== "HOLD" && confidence >= MIN_CONF_STRONG ? "STRONG" :
       direction !== "HOLD" && confidence >= MIN_CONF_NORMAL ? "NORMAL" :
       null;
@@ -944,17 +973,18 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     }
 
     // ── Global Circuit Breaker Protection (30-min window after 2+ losses) ──
-    if (finalSignal !== "HOLD" && recentStops.inCircuitBreakerCooldown) {
-      // Only an exceptional high-conviction institutional reversal can bypass circuit breaker
-      const hasMajorInstitutionalReversal = (choch.detected || sweepRej.detected) && confidence >= 80;
-      if (!hasMajorInstitutionalReversal) {
+    // Uncompromising capital preservation: Absolutely ZERO signals allowed during circuit breaker cooldown
+    if (recentStops.inCircuitBreakerCooldown) {
+      if (finalSignal !== "HOLD") {
         logger.warn(
-          { consecutiveLosses: recentStops.consecutiveLosses, cooldownMins: recentStops.cooldownRemainingMinutes },
-          "[CircuitBreaker] Trade suppressed by circuit breaker cooldown"
+          { consecutiveLosses: recentStops.consecutiveLosses, cooldownMins: recentStops.cooldownRemainingMinutes, suppressedSignal: finalSignal },
+          "[CircuitBreaker] Hard Halt: Signal strictly suppressed by circuit breaker cooldown"
         );
-        finalSignal = "HOLD";
-        suppressionReason = `Circuit Breaker active (${recentStops.cooldownRemainingMinutes}m left)`;
       }
+      finalSignal = "HOLD";
+      confidence = 0;
+      signalStrength = null;
+      suppressionReason = `Circuit Breaker active (${recentStops.cooldownRemainingMinutes}m left)`;
     }
 
     // ── DB Deduplication Guard (Prevents redundant signals if trade is already running) ──
@@ -1166,7 +1196,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const strPrefix = signalStrength ? `${signalStrength} ` : "";
       reason = `${strPrefix}${finalSignal}${typeTag} ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
     } else if (recentStops.inCircuitBreakerCooldown) {
-      reason = `HOLD – Circuit Breaker (${recentStops.cooldownRemainingMinutes}m cooldown after ${recentStops.consecutiveLosses} consecutive stops) · Preserving capital during consolidation`;
+      reason = `HOLD – Circuit Breaker (${recentStops.cooldownRemainingMinutes}m cooldown after ${recentStops.consecutiveLosses} consecutive losses) · Preserving capital during consolidation`;
     } else if (suppressionReason.length > 0) {
       const rangeText = (isMarketConsolidating && rangeInfo.isRanging) ? ` · Range ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)})` : "";
       reason = `HOLD – ${suppressionReason} ${sessionNote} · Best: ${dominant} ${Math.max(longNorm, shortNorm)}%${rangeText}`;
@@ -1232,6 +1262,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         trend5m,
         trend1m,
       },
+      circuitBreakerActive:            recentStops.inCircuitBreakerCooldown,
+      circuitBreakerRemainingMinutes:  recentStops.cooldownRemainingMinutes,
+      consecutiveLosses:               recentStops.consecutiveLosses,
     };
 
     cachedSignal = result;
@@ -1282,6 +1315,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
         trend5m: "NEUTRAL", trend1m: "NEUTRAL",
       },
+      circuitBreakerActive: false,
+      circuitBreakerRemainingMinutes: 0,
+      consecutiveLosses: 0,
     };
     return fallback;
   }

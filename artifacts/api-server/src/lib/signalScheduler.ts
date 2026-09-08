@@ -101,7 +101,16 @@ async function runScheduledSignal(): Promise<void> {
 
     const signal = await generateSignal(price, true);
 
-    if (signal.signal === "HOLD") return;
+    // ── Circuit Breaker & HOLD Guard ─────────────────────────────────────────
+    if (signal.signal === "HOLD" || signal.circuitBreakerActive) {
+      if (signal.circuitBreakerActive) {
+        logger.info(
+          { cooldownMins: signal.circuitBreakerRemainingMinutes, consecutiveLosses: signal.consecutiveLosses },
+          "Scheduler: Circuit Breaker active — trade execution strictly blocked"
+        );
+      }
+      return;
+    }
 
     // ── Deduplication Guard (Scheduler Level) ───────────────────────────────
     try {

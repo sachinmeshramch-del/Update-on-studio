@@ -68,13 +68,13 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
     );
 
     const totalCompleted = completed.length;
-    const wins   = completed.filter((r: any) => r.tradeStatus === "TARGET_HIT").length;
-    const losses = completed.filter((r: any) => r.tradeStatus === "STOP_HIT").length;
+    const wins   = completed.filter((r: any) => r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) > 0).length;
+    const losses = completed.filter((r: any) => (r.pnlPoints ?? 0) < 0).length;
     const winRate  = totalCompleted > 0 ? Math.round((wins   / totalCompleted) * 100) : 0;
     const lossRate = totalCompleted > 0 ? Math.round((losses / totalCompleted) * 100) : 0;
 
-    const winPnls  = completed.filter((r: any) => r.tradeStatus === "TARGET_HIT").map((r: any) => r.pnlPoints ?? 0);
-    const lossPnls = completed.filter((r: any) => r.tradeStatus === "STOP_HIT").map((r: any) => r.pnlPoints ?? 0);
+    const winPnls  = completed.filter((r: any) => (r.pnlPoints ?? 0) > 0).map((r: any) => r.pnlPoints ?? 0);
+    const lossPnls = completed.filter((r: any) => (r.pnlPoints ?? 0) < 0).map((r: any) => r.pnlPoints ?? 0);
 
     const avgProfit = winPnls.length  > 0
       ? winPnls.reduce((s: any, v: any)  => s + v, 0) / winPnls.length  : 0;
@@ -86,7 +86,7 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
     const last10: TradeRecord[] = completed.slice(0, 10).map((r: any) => ({
       id:          r.id,
       signal:      r.signal as "LONG" | "SHORT",
-      result:      r.tradeStatus === "TARGET_HIT" ? "WIN" : "LOSS",
+      result:      (r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) >= 0) ? "WIN" : "LOSS",
       entryPrice:  r.entryPrice,
       closedPrice: r.closedPrice ?? r.entryPrice,
       pnlPoints:   r.pnlPoints ?? 0,

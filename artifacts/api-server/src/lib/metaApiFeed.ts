@@ -889,7 +889,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                         try {
                             const candles = await Promise.race([
                                 account.getHistoricalCandles(sym, targetTf, undefined, count),
-                                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000))
+                                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 20000))
                             ]);
                             if (candles && candles.length > 0) {
                                 const formatted: OHLCCandle[] = candles.map((c: any) => ({

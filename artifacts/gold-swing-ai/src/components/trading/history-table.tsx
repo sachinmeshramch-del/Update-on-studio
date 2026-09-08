@@ -64,19 +64,35 @@ function periodStart(period: Period): Date | null {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: TradeStatus }) {
+function StatusBadge({ status, pnlPoints }: { status: TradeStatus; pnlPoints?: number | null }) {
   if (status === "TARGET_HIT")
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-success/15 text-success border border-success/30 whitespace-nowrap">
-        ✅ TARGET HIT
+        ✅ FULL TP
       </span>
     );
-  if (status === "STOP_HIT")
+  if (status === "STOP_HIT") {
+    const pts = pnlPoints ?? 0;
+    if (pts > 0) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap" title={`Trailing stop closed in profit (+${pts.toFixed(2)} pts)`}>
+          🎯 TRAILING SL (+PROFIT)
+        </span>
+      );
+    }
+    if (pts === 0) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 whitespace-nowrap" title="Trailing stop moved to break-even (0 loss)">
+          🛡️ BREAK-EVEN
+        </span>
+      );
+    }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-destructive/15 text-destructive border border-destructive/30 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-destructive/15 text-destructive border border-destructive/30 whitespace-nowrap" title={`Initial protective stop loss hit (${pts.toFixed(2)} pts)`}>
         ❌ STOP LOSS
       </span>
     );
+  }
   if (status === "MANUALLY_CLOSED" || status === "CLOSED")
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/30 whitespace-nowrap">
@@ -259,8 +275,9 @@ function PnlSummary({ signals, currentPrice, period }: {
 }) {
   const tradeable = signals.filter(s => s.signal !== "HOLD");
   const closed    = tradeable.filter(s => s.tradeStatus === "TARGET_HIT" || s.tradeStatus === "STOP_HIT");
-  const wins      = closed.filter(s => s.tradeStatus === "TARGET_HIT").length;
-  const losses    = closed.filter(s => s.tradeStatus === "STOP_HIT").length;
+  const wins      = closed.filter(s => s.tradeStatus === "TARGET_HIT" || (s.pnlPoints ?? 0) > 0).length;
+  const breakEven = closed.filter(s => s.tradeStatus === "STOP_HIT" && (s.pnlPoints ?? 0) === 0).length;
+  const losses    = closed.filter(s => (s.pnlPoints ?? 0) < 0).length;
   const winRate   = closed.length > 0 ? Math.round((wins / closed.length) * 100) : null;
 
   // Sum all closed P&L + live P&L for running trades
@@ -292,12 +309,18 @@ function PnlSummary({ signals, currentPrice, period }: {
 
       <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
 
-      {/* Win / Loss */}
+      {/* Win / Loss / BE */}
       <div className="flex items-center gap-2">
         <span className="flex items-center gap-1">
-          <span className="text-success font-mono font-bold">{wins}W</span>
+          <span className="text-success font-mono font-bold" title="Winning trades (Target Hit + Trailing Stop Profit)">{wins}W</span>
           <span className="text-muted-foreground">/</span>
-          <span className="text-destructive font-mono font-bold">{losses}L</span>
+          <span className="text-destructive font-mono font-bold" title="Losing trades (Initial Stop Loss Hit)">{losses}L</span>
+          {breakEven > 0 && (
+            <>
+              <span className="text-muted-foreground">/</span>
+              <span className="text-cyan-400 font-mono font-bold" title="Break-even trades">{breakEven}BE</span>
+            </>
+          )}
         </span>
         {winRate !== null && (
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
@@ -567,7 +590,7 @@ export function HistoryTable() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <StatusBadge status={status} />
+                          <StatusBadge status={status} pnlPoints={row.pnlPoints} />
                           {status === "RUNNING" && (
                             <button
                               onClick={async () => {

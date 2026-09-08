@@ -1,4 +1,4 @@
-import { getSystemSettings } from "@workspace/db";
+import { getSystemSettings, getRecentSignals } from "@workspace/db";
 import { executeTradeOnAccount, getAccountFundsInfo } from "./metaApiFeed.js";
 import { logger } from "./logger.js";
 import { sendTelegramNotification } from "./telegram.js";
@@ -67,6 +67,32 @@ export async function executeTradeWithCapitalManagement(
     if (dailyStats.tradingHalted) {
         logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit.`);
         return;
+    }
+
+    // Circuit Breaker Guard: Strictly block trade if in circuit breaker cooldown
+    try {
+        const recentSignals = await getRecentSignals(10);
+        const completed = recentSignals.filter((r: any) => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");
+        let consecutiveLosses = 0;
+        let lastLossTime = 0;
+        const now = Date.now();
+        for (const r of completed) {
+            const tradeTime = r.closedAt ? new Date(r.closedAt).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : 0);
+            const pnl = r.pnlPoints ?? 0;
+            if (pnl < 0) {
+                if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
+                consecutiveLosses++;
+            } else if (pnl > 0 || r.tradeStatus === "TARGET_HIT") {
+                break;
+            }
+        }
+        if (consecutiveLosses >= 2 && lastLossTime > 0 && (now - lastLossTime < 30 * 60 * 1000)) {
+            const remainingMins = Math.max(1, Math.ceil((30 * 60 * 1000 - (now - lastLossTime)) / 60000));
+            logger.warn({ consecutiveLosses, remainingMins }, `[AutoTrader] Execution BLOCKED: Circuit Breaker active (${remainingMins}m left after ${consecutiveLosses} consecutive losses)`);
+            return;
+        }
+    } catch (cbErr) {
+        logger.warn({ cbErr }, "[AutoTrader] Circuit breaker pre-check non-blocking error");
     }
 
     try {

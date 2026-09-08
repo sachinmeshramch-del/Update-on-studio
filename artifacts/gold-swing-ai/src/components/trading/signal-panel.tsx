@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import {
   AlertCircle, Target, ShieldX, ArrowRightCircle,
   TrendingUp, TrendingDown, Minus, Zap,
-  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX,
+  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX, ShieldAlert,
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
 import { motion } from "framer-motion";
@@ -211,6 +211,15 @@ export function SignalPanel() {
 
   const session = signalData.session;
 
+  const isCircuitBreaker = Boolean(
+    (signalData as any).circuitBreakerActive || 
+    (reason && reason.toLowerCase().includes("circuit breaker"))
+  );
+  const circuitBreakerRemainingMinutes = (signalData as any).circuitBreakerRemainingMinutes ?? 
+    (reason && reason.match(/(\d+)m cooldown/)?.[1] ? parseInt(reason.match(/(\d+)m cooldown/)![1], 10) : 0);
+  const consecutiveLosses = (signalData as any).consecutiveLosses ?? 
+    (reason && reason.match(/after (\d+) consecutive/)?.[1] ? parseInt(reason.match(/after (\d+) consecutive/)![1], 10) : 0);
+
   const signalColors = {
     LONG:  "bg-success text-success-foreground shadow-[0_0_40px_rgba(34,197,94,0.25)] border-success/50",
     SHORT: "bg-destructive text-destructive-foreground shadow-[0_0_40px_rgba(239,68,68,0.25)] border-destructive/50",
@@ -274,6 +283,14 @@ export function SignalPanel() {
                 {signal}
               </motion.div>
               <div className="flex flex-col gap-1.5">
+                {isCircuitBreaker && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30">
+                    <ShieldAlert className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+                    <span className="text-xs font-bold text-red-500 tracking-wide">
+                      CIRCUIT BREAKER {circuitBreakerRemainingMinutes > 0 ? `(${circuitBreakerRemainingMinutes}m)` : "ACTIVE"}
+                    </span>
+                  </div>
+                )}
                 {signalType === "RANGE" && <RangeBadge />}
                 
                 {signalType === "REVERSAL" && <ReversalBadge />}
@@ -429,11 +446,21 @@ export function SignalPanel() {
         {/* ── Entry / SL / TP ───────────────────────────────────────────────── */}
         <div className="flex items-center justify-between mb-[-10px]">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-            {signal === "HOLD" 
+            {isCircuitBreaker
+              ? "CIRCUIT BREAKER ACTIVE · TRADING HALTED"
+              : signal === "HOLD" 
               ? (stopLoss > entryPrice ? "Preparing SHORT Setup" : "Preparing LONG Setup")
               : (signal === "SHORT" ? "Active SHORT Trade" : "Active LONG Trade")}
           </span>
         </div>
+        {isCircuitBreaker && (
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-500 dark:text-red-400 text-xs">
+            <ShieldAlert className="w-4 h-4 shrink-0 text-red-500" />
+            <span>
+              <strong>Capital Protection Lock:</strong> Signal generation and trade executions are strictly locked for {circuitBreakerRemainingMinutes}m {consecutiveLosses > 0 ? `after ${consecutiveLosses} consecutive stop-outs` : ""} to preserve capital. No trades will be triggered until the cooldown expires.
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-black/30 border border-border rounded-xl p-3 flex flex-col items-center gap-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
