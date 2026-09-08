@@ -2,6 +2,78 @@ import { getSystemSettings } from "@workspace/db";
 import { setLatestPrice, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
 import type { OHLCCandle } from "./goldPrice.js";
+import { EventEmitter } from "events";
+
+export interface BrokerPosition {
+    id: string;
+    accountId: string;
+    symbol: string;
+    type: "LONG" | "SHORT";
+    volume: number;
+    openPrice: number;
+    currentPrice: number;
+    stopLoss: number;
+    takeProfit: number;
+    profit: number;
+    time: string;
+}
+
+export interface BrokerClosedDeal {
+    id: string;
+    positionId: string;
+    accountId: string;
+    symbol: string;
+    type: "DEAL_TYPE_BUY" | "DEAL_TYPE_SELL";
+    price: number;
+    profit: number;
+    time: string;
+    reason: string;
+    comment: string;
+}
+
+export const brokerEvents = new EventEmitter();
+brokerEvents.setMaxListeners(50);
+
+// In-memory real-time position cache updated by streaming events (<1ms access)
+export const liveBrokerPositions = new Map<string, BrokerPosition>();
+// In-memory real-time closed deals cache updated by streaming events (<1ms access)
+export const liveClosedDeals: BrokerClosedDeal[] = [];
+
+// In-flight closure tracking: positions that are currently being closed or have completed an exit deal
+export const pendingClosurePositions = new Map<string, { timestamp: number; reason: string }>();
+
+export function markPositionClosing(positionId: string, reason: string = "CLOSURE_INITIATED") {
+    if (!positionId) return;
+    pendingClosurePositions.set(String(positionId), { timestamp: Date.now(), reason });
+    logger.debug({ positionId, reason }, "[MetaApi Execution] Marked position in closure sequence");
+}
+
+export function isPositionInClosureSequence(positionId: string): boolean {
+    if (!positionId) return false;
+    const idStr = String(positionId);
+    
+    // 1. Check in-flight closure tracker
+    const record = pendingClosurePositions.get(idStr);
+    if (record) {
+        if (Date.now() - record.timestamp < 45_000) {
+            return true;
+        } else {
+            pendingClosurePositions.delete(idStr);
+        }
+    }
+
+    // 2. Check if deal already exited
+    const closedDeal = liveClosedDeals.find(d => String(d.positionId) === idStr);
+    if (closedDeal) {
+        return true;
+    }
+
+    return false;
+}
+
+export function clearPositionClosure(positionId: string) {
+    pendingClosurePositions.delete(String(positionId));
+}
 
 
 // Intercept and suppress noisy MetaApi SDK background timeout errors
@@ -225,6 +297,43 @@ function isValidAccountId(id: any): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
 }
 
+// In-memory fast funds cache (equity, leverage, freeMargin) to prevent trade blocking
+const accountFundsCache = new Map<string, { equity: number; leverage: number; freeMargin: number; updatedAt: number }>();
+
+// In-memory pre-warmed RPC connection pool to eliminate 20s connection latency
+const rpcConnectionPool = new Map<string, { rpc: any; connected: boolean; lastUsed: number }>();
+
+async function getOrInitRpcConnection(accountId: string) {
+    const trimmed = accountId.trim();
+    const existing = rpcConnectionPool.get(trimmed);
+    if (existing && existing.connected) {
+        existing.lastUsed = Date.now();
+        return existing.rpc;
+    }
+
+    const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
+    if (!metaApi) {
+        metaApi = new MetaApi(token, { requestTimeout: 30, connectTimeout: 30 });
+    }
+
+    const account = await metaApi.metatraderAccountApi.getAccount(trimmed);
+    if (account.state !== 'DEPLOYED') {
+        await Promise.race([
+            account.deploy(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Deploy timeout")), 4000))
+        ]).catch(() => {});
+    }
+
+    const rpc = account.getRPCConnection();
+    await Promise.race([
+        rpc.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("RPC connect timeout")), 5000))
+    ]);
+
+    rpcConnectionPool.set(trimmed, { rpc, connected: true, lastUsed: Date.now() });
+    return rpc;
+}
+
 /**
  * Main function to start and maintain MetaApi streaming feed
  */
@@ -360,6 +469,80 @@ export async function startMetaApiFeed() {
                                     }
                                 };
                             }
+                            if (prop === 'onAccountInformationUpdated') {
+                                return (instanceIndex: string, accountInformation: any) => {
+                                    if (connectedAccountId && accountInformation) {
+                                        accountFundsCache.set(connectedAccountId, {
+                                            equity: accountInformation.equity,
+                                            leverage: accountInformation.leverage || 1000,
+                                            freeMargin: accountInformation.freeMargin || accountInformation.equity,
+                                            updatedAt: Date.now()
+                                        });
+                                        logger.debug({ accountId: connectedAccountId, equity: accountInformation.equity }, "Live account funds updated from streaming listener");
+                                    }
+                                };
+                            }
+                            if (prop === 'onPositionUpdated') {
+                                return (instanceIndex: string, pos: any) => {
+                                    if (!pos) return;
+                                    const sym = (pos.symbol || "").toUpperCase();
+                                    if (sym.includes("XAU") || sym.includes("GOLD")) {
+                                        const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
+                                        const updated: BrokerPosition = {
+                                            id: String(pos.id),
+                                            accountId: connectedAccountId || activeAccountId || "",
+                                            symbol: pos.symbol,
+                                            type: isBuy ? "LONG" : "SHORT",
+                                            volume: pos.volume || 0.01,
+                                            openPrice: pos.openPrice || 0,
+                                            currentPrice: pos.currentPrice || pos.openPrice || 0,
+                                            stopLoss: pos.stopLoss || 0,
+                                            takeProfit: pos.takeProfit || 0,
+                                            profit: pos.profit || 0,
+                                            time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
+                                        };
+                                        liveBrokerPositions.set(String(pos.id), updated);
+                                        brokerEvents.emit("positionUpdated", updated);
+                                        logger.debug({ positionId: pos.id, type: updated.type, openPrice: updated.openPrice, sl: updated.stopLoss, tp: updated.takeProfit }, "[MetaApi Streaming] Position updated in real time");
+                                    }
+                                };
+                            }
+                            if (prop === 'onPositionRemoved') {
+                                return (instanceIndex: string, positionId: string) => {
+                                    const idStr = String(positionId);
+                                    markPositionClosing(idStr, "POSITION_REMOVED_STREAMING");
+                                    const removedPos = liveBrokerPositions.get(idStr);
+                                    liveBrokerPositions.delete(idStr);
+                                    logger.info({ positionId: idStr }, "[MetaApi Streaming] Position removed/closed on MT5 in real time");
+                                    brokerEvents.emit("positionRemoved", { positionId: idStr, accountId: connectedAccountId || activeAccountId || "", position: removedPos });
+                                };
+                            }
+                            if (prop === 'onDealAdded') {
+                                return (instanceIndex: string, deal: any) => {
+                                    if (!deal) return;
+                                    const sym = (deal.symbol || "").toUpperCase();
+                                    if ((sym.includes("XAU") || sym.includes("GOLD")) && (deal.entryType === "DEAL_ENTRY_OUT" || deal.entryType === 1)) {
+                                        const posIdStr = String(deal.positionId);
+                                        markPositionClosing(posIdStr, `DEAL_ENTRY_OUT_${deal.id}`);
+                                        const closedDeal: BrokerClosedDeal = {
+                                            id: String(deal.id),
+                                            positionId: posIdStr,
+                                            accountId: connectedAccountId || activeAccountId || "",
+                                            symbol: deal.symbol,
+                                            type: deal.type,
+                                            price: deal.price,
+                                            profit: deal.profit,
+                                            time: deal.time ? new Date(deal.time).toISOString() : new Date().toISOString(),
+                                            reason: deal.reason || "",
+                                            comment: deal.comment || deal.brokerComment || ""
+                                        };
+                                        liveClosedDeals.unshift(closedDeal);
+                                        if (liveClosedDeals.length > 100) liveClosedDeals.pop();
+                                        logger.info({ dealId: deal.id, positionId: deal.positionId, price: deal.price, profit: deal.profit, reason: deal.reason, comment: deal.comment }, "[MetaApi Streaming] Exit deal executed on MT5 (TP/SL/Close)");
+                                        brokerEvents.emit("dealClosed", closedDeal);
+                                    }
+                                };
+                            }
                             if (prop === 'onDisconnected') {
                                 return () => {
                                     logger.warn("MetaApi streaming disconnected. Will auto-recover.");
@@ -472,6 +655,33 @@ export async function startMetaApiFeed() {
                 logger.info(`Successfully subscribed to MetaApi market data for ${SYMBOL} on account ${connectedAccountId}`);
                 reconnectDelay = 5000;
                 
+                // Pre-populate in-memory positions from terminalState
+                try {
+                    const existingPositions = streamingConn.terminalState?.positions || [];
+                    for (const pos of existingPositions) {
+                        const sym = (pos.symbol || "").toUpperCase();
+                        if (sym.includes("XAU") || sym.includes("GOLD")) {
+                            const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
+                            liveBrokerPositions.set(String(pos.id), {
+                                id: String(pos.id),
+                                accountId: connectedAccountId,
+                                symbol: pos.symbol,
+                                type: isBuy ? "LONG" : "SHORT",
+                                volume: pos.volume || 0.01,
+                                openPrice: pos.openPrice || 0,
+                                currentPrice: pos.currentPrice || pos.openPrice || 0,
+                                stopLoss: pos.stopLoss || 0,
+                                takeProfit: pos.takeProfit || 0,
+                                profit: pos.profit || 0,
+                                time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
+                            });
+                        }
+                    }
+                    if (liveBrokerPositions.size > 0) {
+                        logger.info({ positionCount: liveBrokerPositions.size }, "[MetaApi Feed] Initialized in-memory open broker positions from terminalState");
+                    }
+                } catch {}
+
                 // Emit initial price if available in terminalState
                 try {
                     const initialPrice = streamingConn.terminalState.price(SYMBOL);
@@ -731,6 +941,348 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
     return fetchPromise;
 }
 
+export interface OrderVerificationOptions {
+    accountId?: string;
+    orderId?: string;
+    pollIntervalMs?: number;
+    maxWaitMs?: number;
+}
+
+export interface OrderVerificationStatus {
+    canUpdate: boolean;
+    status: "CONFIRMED_ACTIVE" | "IN_FILL_SEQUENCE" | "IN_CLOSURE_SEQUENCE" | "CLOSED" | "NOT_FOUND" | "REJECTED" | "TIMEOUT";
+    reason: string;
+    position?: BrokerPosition | null;
+    openPrice?: number;
+    currentStopLoss?: number;
+    currentTakeProfit?: number;
+}
+
+/**
+ * Asynchronous 'Verify-before-Update' loop.
+ * Checks current order/position status using a lightweight polling interval (e.g. 50ms)
+ * to ensure we never attempt to modify orders that are in the middle of a fill or closure sequence.
+ */
+export async function verifyOrderStatusBeforeUpdate(
+    positionId: string,
+    options?: OrderVerificationOptions
+): Promise<OrderVerificationStatus> {
+    const pollInterval = options?.pollIntervalMs ?? 50;
+    const maxWait = options?.maxWaitMs ?? 1000;
+    const startTime = Date.now();
+    const targetAccountId = options?.accountId || activeAccountId;
+    const targetOrderId = options?.orderId;
+
+    logger.debug({ positionId, orderId: targetOrderId, maxWait }, "[Verify-before-Update] Checking order status before sending SL/TP update...");
+
+    let iteration = 0;
+    while (Date.now() - startTime <= maxWait) {
+        iteration++;
+
+        // 1. Check if position is currently in a closure sequence
+        if (isPositionInClosureSequence(positionId)) {
+            logger.info(
+                { positionId, iteration, elapsedMs: Date.now() - startTime },
+                "[Verify-before-Update] Position is currently undergoing closure; ABORTING SL/TP update"
+            );
+            return {
+                canUpdate: false,
+                status: "IN_CLOSURE_SEQUENCE",
+                reason: "Position is currently undergoing closure or has already been closed"
+            };
+        }
+
+        // 2. Check if an exit deal has closed this position in the deals cache
+        const matchingDeal = liveClosedDeals.find(d => String(d.positionId) === String(positionId));
+        if (matchingDeal) {
+            markPositionClosing(positionId, `EXIT_DEAL_${matchingDeal.id}`);
+            logger.info(
+                { positionId, dealId: matchingDeal.id, elapsedMs: Date.now() - startTime },
+                "[Verify-before-Update] Detected closed deal for position; ABORTING SL/TP update"
+            );
+            return {
+                canUpdate: false,
+                status: "CLOSED",
+                reason: `Position already closed via deal ${matchingDeal.id}`
+            };
+        }
+
+        // 3. Inspect streaming terminalState if available
+        if (connection && (!targetAccountId || targetAccountId === activeAccountId)) {
+            const rawPositions = connection.terminalState?.positions || [];
+            const rawOrders = connection.terminalState?.orders || [];
+
+            // A. Check for any in-flight order closing this position
+            const closeOrder = rawOrders.find((o: any) => 
+                String(o.positionId) === String(positionId) && 
+                (o.state === 'ORDER_STATE_PLACED' || o.state === 'ORDER_STATE_FILLING' || o.type === 'ORDER_TYPE_CLOSE_BY' || o.type === 'ORDER_TYPE_CLOSE')
+            );
+            if (closeOrder) {
+                markPositionClosing(positionId, `CLOSE_ORDER_${closeOrder.id}`);
+                logger.info(
+                    { positionId, orderId: closeOrder.id, state: closeOrder.state },
+                    "[Verify-before-Update] In-flight close order detected in terminalState; ABORTING SL/TP update"
+                );
+                return {
+                    canUpdate: false,
+                    status: "IN_CLOSURE_SEQUENCE",
+                    reason: `In-flight close order ${closeOrder.id} active in broker queue`
+                };
+            }
+
+            // B. Check if order is still in the middle of filling
+            const matchingOrder = rawOrders.find((o: any) => 
+                (targetOrderId && String(o.id) === String(targetOrderId)) || 
+                String(o.positionId) === String(positionId)
+            );
+            if (matchingOrder) {
+                if (matchingOrder.state === 'ORDER_STATE_PLACED' || matchingOrder.state === 'ORDER_STATE_FILLING' || matchingOrder.state === 'ORDER_STATE_REQUEST_ADD') {
+                    // Order is currently in the broker matching engine / filling
+                    logger.debug(
+                        { positionId, orderId: matchingOrder.id, state: matchingOrder.state, iteration },
+                        "[Verify-before-Update] Order is currently in fill sequence; polling until fill completes..."
+                    );
+                    await new Promise(resolve => setTimeout(resolve, pollInterval));
+                    continue;
+                }
+                if (matchingOrder.state === 'ORDER_STATE_REJECTED' || matchingOrder.state === 'ORDER_STATE_CANCELED' || matchingOrder.state === 'ORDER_STATE_EXPIRED') {
+                    logger.warn(
+                        { positionId, orderId: matchingOrder.id, state: matchingOrder.state },
+                        "[Verify-before-Update] Order fill was rejected or cancelled; ABORTING SL/TP update"
+                    );
+                    return {
+                        canUpdate: false,
+                        status: "REJECTED",
+                        reason: `Order failed with state ${matchingOrder.state}`
+                    };
+                }
+            }
+
+            // C. Check if position exists and is confirmed active with valid open price
+            const foundRawPos = rawPositions.find((p: any) => String(p.id) === String(positionId));
+            if (foundRawPos && (foundRawPos.openPrice > 0 || foundRawPos.volume > 0)) {
+                const isBuy = foundRawPos.type === "POSITION_TYPE_BUY" || foundRawPos.type === 0;
+                const pos: BrokerPosition = {
+                    id: String(foundRawPos.id),
+                    accountId: targetAccountId || activeAccountId || "",
+                    symbol: foundRawPos.symbol,
+                    type: isBuy ? "LONG" : "SHORT",
+                    volume: foundRawPos.volume || 0.01,
+                    openPrice: foundRawPos.openPrice || 0,
+                    currentPrice: foundRawPos.currentPrice || foundRawPos.openPrice || 0,
+                    stopLoss: foundRawPos.stopLoss || 0,
+                    takeProfit: foundRawPos.takeProfit || 0,
+                    profit: foundRawPos.profit || 0,
+                    time: foundRawPos.time ? new Date(foundRawPos.time).toISOString() : new Date().toISOString()
+                };
+                liveBrokerPositions.set(positionId, pos);
+
+                return {
+                    canUpdate: true,
+                    status: "CONFIRMED_ACTIVE",
+                    reason: "Position verified open, filled, and active",
+                    position: pos,
+                    openPrice: pos.openPrice,
+                    currentStopLoss: pos.stopLoss,
+                    currentTakeProfit: pos.takeProfit
+                };
+            }
+        }
+
+        // 4. Check in-memory position cache
+        const cachedPos = liveBrokerPositions.get(positionId);
+        if (cachedPos && cachedPos.openPrice > 0) {
+            return {
+                canUpdate: true,
+                status: "CONFIRMED_ACTIVE",
+                reason: "Position verified active in live position cache",
+                position: cachedPos,
+                openPrice: cachedPos.openPrice,
+                currentStopLoss: cachedPos.stopLoss,
+                currentTakeProfit: cachedPos.takeProfit
+            };
+        }
+
+        // 5. If account is RPC or streaming has not populated position yet, check via RPC
+        if (targetAccountId && targetAccountId !== activeAccountId) {
+            try {
+                const rpc = await getOrInitRpcConnection(targetAccountId);
+                if (rpc) {
+                    const rpcPositions = await rpc.getPositions().catch(() => []);
+                    const foundRpcPos = rpcPositions?.find((p: any) => String(p.id) === String(positionId));
+                    if (foundRpcPos) {
+                        const isBuy = foundRpcPos.type === "POSITION_TYPE_BUY" || foundRpcPos.type === 0;
+                        const pos: BrokerPosition = {
+                            id: String(foundRpcPos.id),
+                            accountId: targetAccountId,
+                            symbol: foundRpcPos.symbol,
+                            type: isBuy ? "LONG" : "SHORT",
+                            volume: foundRpcPos.volume || 0.01,
+                            openPrice: foundRpcPos.openPrice || 0,
+                            currentPrice: foundRpcPos.currentPrice || foundRpcPos.openPrice || 0,
+                            stopLoss: foundRpcPos.stopLoss || 0,
+                            takeProfit: foundRpcPos.takeProfit || 0,
+                            profit: foundRpcPos.profit || 0,
+                            time: foundRpcPos.time ? new Date(foundRpcPos.time).toISOString() : new Date().toISOString()
+                        };
+                        liveBrokerPositions.set(positionId, pos);
+                        return {
+                            canUpdate: true,
+                            status: "CONFIRMED_ACTIVE",
+                            reason: "Position verified active via RPC connection",
+                            position: pos,
+                            openPrice: pos.openPrice,
+                            currentStopLoss: pos.stopLoss,
+                            currentTakeProfit: pos.takeProfit
+                        };
+                    }
+                }
+            } catch (rpcErr: any) {
+                logger.debug({ err: rpcErr?.message }, "[Verify-before-Update] RPC verification tick note");
+            }
+        }
+
+        // Wait for next lightweight polling interval
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    logger.warn(
+        { positionId, elapsedMs: Date.now() - startTime },
+        "[Verify-before-Update] Timeout verifying position status; aborting update to prevent race conditions"
+    );
+    return {
+        canUpdate: false,
+        status: "TIMEOUT",
+        reason: `Verification timed out after ${Date.now() - startTime}ms without confirming active position`
+    };
+}
+
+/**
+ * Safely modifies SL and TP for an open position with an asynchronous 'Verify-before-Update' loop.
+ * - Prevents modifying positions that are filling or undergoing closure.
+ * - Compensates for execution slippage if intendedEntryPrice is provided.
+ * - Dispatches via ultra-low-latency streaming or fast RPC fallback.
+ */
+export async function safeModifyPositionSLTP(params: {
+    positionId: string;
+    accountId?: string;
+    orderId?: string;
+    stopLoss?: number;
+    takeProfit?: number;
+    intendedEntryPrice?: number;
+    direction?: "LONG" | "SHORT";
+    reason?: string;
+}): Promise<{ success: boolean; reason: string; calibratedSL?: number; calibratedTP?: number }> {
+    const { positionId, accountId, orderId, reason = "SL/TP Update", intendedEntryPrice, direction } = params;
+
+    // Phase 1: Asynchronous 'Verify-before-Update' Loop
+    const verification = await verifyOrderStatusBeforeUpdate(positionId, {
+        accountId,
+        orderId,
+        pollIntervalMs: 50,
+        maxWaitMs: 1000
+    });
+
+    if (!verification.canUpdate) {
+        logger.warn(
+            { positionId, reason, verificationStatus: verification.status, failureReason: verification.reason },
+            `[Verify-before-Update] Pre-update verification failed. Aborting MetaApi SL/TP modification.`
+        );
+        return { success: false, reason: verification.reason };
+    }
+
+    const pos = verification.position;
+    let targetSL = params.stopLoss !== undefined ? Number(params.stopLoss.toFixed(2)) : (pos ? pos.stopLoss : 0);
+    let targetTP = params.takeProfit !== undefined ? Number(params.takeProfit.toFixed(2)) : (pos ? pos.takeProfit : 0);
+
+    // Phase 2: Slippage Calibrated Stops (if intendedEntryPrice is provided)
+    if (intendedEntryPrice && pos && pos.openPrice) {
+        const slippage = Number((pos.openPrice - intendedEntryPrice).toFixed(2));
+        if (Math.abs(slippage) >= 0.15 && params.stopLoss && params.takeProfit) {
+            const slDist = Math.abs(intendedEntryPrice - params.stopLoss);
+            const tpDist = Math.abs(intendedEntryPrice - params.takeProfit);
+            const dir = direction || pos.type;
+            targetSL = dir === "LONG" 
+                ? Number((pos.openPrice - slDist).toFixed(2)) 
+                : Number((pos.openPrice + slDist).toFixed(2));
+            targetTP = dir === "LONG" 
+                ? Number((pos.openPrice + tpDist).toFixed(2)) 
+                : Number((pos.openPrice - tpDist).toFixed(2));
+
+            logger.info(
+                { positionId, actualFill: pos.openPrice, intendedEntryPrice, slippage, targetSL, targetTP },
+                "[Verify-before-Update] Recalibrated SL/TP to verified actual fill price"
+            );
+        }
+    }
+
+    // Check if target SL/TP are effectively identical to current stops (avoid spamming broker)
+    if (pos && targetSL > 0 && Math.abs(pos.stopLoss - targetSL) < 0.05 && 
+        (targetTP === 0 || Math.abs(pos.takeProfit - targetTP) < 0.05)) {
+        logger.debug({ positionId, currentSL: pos.stopLoss, targetSL }, "[Verify-before-Update] Stops already match target; skipping modification");
+        return { success: true, reason: "ALREADY_MATCHED", calibratedSL: targetSL, calibratedTP: targetTP };
+    }
+
+    // Phase 3: Dispatch Modification to MetaApi
+    const targetAccId = accountId || pos?.accountId || activeAccountId;
+    let modified = false;
+
+    // Fast-path: Active streaming connection
+    if (connection && activeAccountId === targetAccId && typeof connection.modifyPosition === 'function') {
+        try {
+            await connection.modifyPosition(positionId, targetSL, targetTP);
+            modified = true;
+            logger.info(
+                { positionId, newSL: targetSL, newTP: targetTP, reason },
+                "[MetaApi Execution] Verified and modified position SL/TP on MT5 via streaming connection"
+            );
+        } catch (streamErr: any) {
+            const errMsg = streamErr?.message || String(streamErr);
+            if (errMsg.includes('POSITION_CLOSED') || errMsg.includes('10004') || errMsg.includes('INVALID_TICKET')) {
+                markPositionClosing(positionId, "BROKER_REPORTED_CLOSED");
+                liveBrokerPositions.delete(positionId);
+                return { success: false, reason: "POSITION_CLOSED_BY_BROKER" };
+            }
+            logger.debug({ positionId, err: errMsg }, "[MetaApi] Streaming modifyPosition fallback to RPC...");
+        }
+    }
+
+    // Fallback path: Pre-warmed RPC connection
+    if (!modified && targetAccId) {
+        try {
+            const rpc = await getOrInitRpcConnection(targetAccId);
+            if (rpc) {
+                await rpc.modifyPosition(positionId, targetSL, targetTP);
+                modified = true;
+                logger.info(
+                    { positionId, newSL: targetSL, newTP: targetTP, targetAccId, reason },
+                    "[MetaApi Execution] Verified and modified position SL/TP on MT5 via fast RPC"
+                );
+            }
+        } catch (rpcErr: any) {
+            const errMsg = rpcErr?.message || String(rpcErr);
+            if (errMsg.includes('POSITION_CLOSED') || errMsg.includes('10004') || errMsg.includes('INVALID_TICKET')) {
+                markPositionClosing(positionId, "BROKER_REPORTED_CLOSED");
+                liveBrokerPositions.delete(positionId);
+                return { success: false, reason: "POSITION_CLOSED_BY_BROKER" };
+            }
+            logger.warn({ positionId, err: errMsg }, "[MetaApi Execution] Failed to modify position SL/TP via RPC");
+            return { success: false, reason: errMsg };
+        }
+    }
+
+    if (modified) {
+        // Update local position cache
+        const cached = liveBrokerPositions.get(positionId);
+        if (cached) {
+            cached.stopLoss = targetSL;
+            cached.takeProfit = targetTP;
+        }
+        return { success: true, reason: "MODIFIED", calibratedSL: targetSL, calibratedTP: targetTP };
+    }
+
+    return { success: false, reason: "NO_ACTIVE_CONNECTION" };
+}
 
 export async function executeTradeOnAccount(
     accountId: string,
@@ -738,7 +1290,9 @@ export async function executeTradeOnAccount(
     direction: "LONG" | "SHORT",
     stopLoss: number,
     takeProfit: number,
-    volume: number = 0.01
+    volume: number = 0.01,
+    intendedEntryPrice?: number,
+    signalTimestamp?: number
 ) {
     if (!token) {
         throw new Error("META_API_TOKEN is not configured");
@@ -747,60 +1301,164 @@ export async function executeTradeOnAccount(
         throw new Error(`MetaApi Account ID is missing in settings`);
     }
 
+    const dispatchStart = Date.now();
+    const latencyFromSignal = signalTimestamp ? (dispatchStart - signalTimestamp) : null;
     const targetAccountId = accountId.trim();
-    logger.info({ accountId: targetAccountId, direction, stopLoss, takeProfit, volume }, `[MetaApi] Initiating trade execution...`);
+    const formattedSL = Number(stopLoss.toFixed(2));
+    const formattedTP = Number(takeProfit.toFixed(2));
+    const formattedVol = Number(Math.max(0.01, Math.min(volume, 5.0)).toFixed(2));
+    const tradeSymbol = SYMBOL || "GOLD";
+    const tradeOptions = { comment: "GoldSwing AI" };
 
-    // If active streaming connection is already connected to this account, execute directly
+    logger.info({ 
+        accountId: targetAccountId, 
+        accountType, 
+        direction, 
+        formattedSL, 
+        formattedTP, 
+        formattedVol, 
+        tradeSymbol,
+        latencyFromSignal: latencyFromSignal !== null ? `${latencyFromSignal}ms` : undefined
+    }, `[MetaApi FastTrader] Fast dispatching trade execution...`);
+
+    let executionResult: any = null;
+
+    // Helper to calibrate stops if broker filled at a slightly different price (slippage protection)
+    const calibrateStopsOnFill = async (posId?: string, orderId?: string) => {
+        if (!posId || !intendedEntryPrice) return;
+        try {
+            await safeModifyPositionSLTP({
+                positionId: posId,
+                accountId: targetAccountId,
+                orderId,
+                stopLoss,
+                takeProfit,
+                intendedEntryPrice,
+                direction,
+                reason: "Slippage stop calibration"
+            });
+        } catch (calErr: any) {
+            logger.debug({ err: calErr?.message }, "Slippage stop calibration notice");
+        }
+    };
+
+    // 1. If active streaming connection is already connected to this account, execute directly (fastest: ~80-120ms)
     if (connection && activeAccountId === targetAccountId) {
         try {
-            if (direction === "LONG") {
-                const result = await connection.createMarketBuyOrder(SYMBOL, volume, stopLoss, takeProfit);
-                logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] BUY trade executed successfully`);
-                return result;
-            } else {
-                const result = await connection.createMarketSellOrder(SYMBOL, volume, stopLoss, takeProfit);
-                logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] SELL trade executed successfully`);
-                return result;
+            executionResult = direction === "LONG"
+                ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
+                : await connection.createMarketSellOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
+
+            const execTimeMs = Date.now() - dispatchStart;
+            logger.info({ 
+                accountId: targetAccountId, 
+                orderId: executionResult.orderId, 
+                positionId: executionResult.positionId,
+                execTimeMs: `${execTimeMs}ms`,
+                latencyFromSignal: latencyFromSignal !== null ? `${latencyFromSignal}ms` : undefined
+            }, `[MetaApi ${accountType}] ${direction} executed immediately via streaming connection`);
+
+            if (executionResult.positionId) {
+                calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
             }
+            return executionResult;
         } catch (err: any) {
-            logger.warn({ accountType, accountId: targetAccountId, err: err.message || String(err) }, `[MetaApi ${accountType}] Streaming connection trade execution failed, trying RPC connection fallback...`);
+            const errMsg = err?.message || String(err);
+            // If rejected due to broker stop level proximity (e.g. XM minimum stop level 10016), execute market first, then attach stops with Verify-before-Update loop
+            if (errMsg.includes('INVALID_STOPS') || errMsg.includes('10016') || errMsg.includes('stops') || errMsg.includes('STOPS')) {
+                logger.warn({ accountType, err: errMsg }, "[MetaApi Execution] Broker rejected stops proximity. Executing market fill instantly with 2-stage SL/TP attachment...");
+                try {
+                    executionResult = direction === "LONG"
+                        ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions)
+                        : await connection.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
+                    
+                    if (executionResult.positionId) {
+                        await safeModifyPositionSLTP({
+                            positionId: String(executionResult.positionId),
+                            accountId: targetAccountId,
+                            orderId: String(executionResult.orderId),
+                            stopLoss: formattedSL,
+                            takeProfit: formattedTP,
+                            intendedEntryPrice,
+                            direction,
+                            reason: "Streaming 2-stage post-fill SL/TP attachment"
+                        });
+                    }
+                    return executionResult;
+                } catch (retryErr: any) {
+                    logger.warn({ err: retryErr?.message }, "[MetaApi] Streaming 2-stage retry failed, falling back to RPC...");
+                }
+            } else {
+                logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Streaming execution failed, attempting fast RPC connection fallback...`);
+            }
         }
     }
 
-    // Secondary / targeted account execution via RPC connection
+    // 2. Pre-warmed RPC connection execution (NO waitSynchronized: ~200ms)
     try {
-        const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
-        if (!metaApi) {
-            metaApi = new MetaApi(token);
-        }
-
-        const account = await metaApi.metatraderAccountApi.getAccount(targetAccountId);
-        if (account.state !== 'DEPLOYED') {
-            await account.deploy();
-        }
-        await account.waitConnected();
-
-        const rpc = account.getRPCConnection();
-        await rpc.connect();
+        const rpc = await getOrInitRpcConnection(targetAccountId);
         try {
-            await rpc.waitSynchronized();
-        } catch (syncErr: any) {
-            // Silently proceed on harmless validation or timeout errors during sync
-            logger.debug({ syncErr: syncErr?.message }, "[MetaApi RPC] waitSynchronized threw an error, proceeding anyway...");
+            executionResult = direction === "LONG"
+                ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
+                : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
+        } catch (stopsErr: any) {
+            const sMsg = stopsErr?.message || String(stopsErr);
+            if (sMsg.includes('INVALID_STOPS') || sMsg.includes('10016') || sMsg.includes('stops') || sMsg.includes('STOPS')) {
+                logger.warn({ err: sMsg }, "[MetaApi Execution] RPC stops level constraint. Executing pure market order then attaching stops via Verify-before-Update loop...");
+                executionResult = direction === "LONG"
+                    ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions)
+                    : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
+                if (executionResult?.positionId) {
+                    await safeModifyPositionSLTP({
+                        positionId: String(executionResult.positionId),
+                        accountId: targetAccountId,
+                        orderId: String(executionResult.orderId),
+                        stopLoss: formattedSL,
+                        takeProfit: formattedTP,
+                        intendedEntryPrice,
+                        direction,
+                        reason: "RPC 2-stage post-fill SL/TP attachment"
+                    });
+                }
+            } else {
+                throw stopsErr;
+            }
         }
 
-        if (direction === "LONG") {
-            const result = await rpc.createMarketBuyOrder(SYMBOL, volume, stopLoss, takeProfit);
-            logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] BUY trade executed successfully via RPC`);
-            return result;
-        } else {
-            const result = await rpc.createMarketSellOrder(SYMBOL, volume, stopLoss, takeProfit);
-            logger.info({ accountId: targetAccountId, orderId: result.orderId, volume, stopLoss, takeProfit }, `[MetaApi ${accountType}] SELL trade executed successfully via RPC`);
-            return result;
+        const execTimeMs = Date.now() - dispatchStart;
+        logger.info({ 
+            accountId: targetAccountId, 
+            orderId: executionResult.orderId, 
+            execTimeMs: `${execTimeMs}ms`,
+            latencyFromSignal: latencyFromSignal !== null ? `${latencyFromSignal}ms` : undefined
+        }, `[MetaApi ${accountType}] ${direction} executed successfully via fast RPC connection`);
+
+        if (executionResult?.positionId) {
+            calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
         }
+        return executionResult;
     } catch (err: any) {
-        logger.error({ accountType, accountId: targetAccountId, err: err.message || String(err) }, `[MetaApi ${accountType}] Trade execution failed`);
-        throw err;
+        const errMsg = err?.message || String(err);
+        logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Primary trade attempt failed, checking alternative symbol...`);
+
+        // If symbol wasn't found (e.g. if SYMBOL was XAUUSD instead of GOLD on XM MT5), retry with alternate
+        const altSymbol = tradeSymbol.toUpperCase().includes("GOLD") ? "XAUUSD" : "GOLD";
+        try {
+            const rpc = await getOrInitRpcConnection(targetAccountId);
+            executionResult = direction === "LONG"
+                ? await rpc.createMarketBuyOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
+                : await rpc.createMarketSellOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
+
+            SYMBOL = altSymbol; // Update active symbol to working one
+            logger.info({ accountId: targetAccountId, orderId: executionResult.orderId, altSymbol }, `[MetaApi ${accountType}] Executed successfully with alternative symbol`);
+            if (executionResult?.positionId) {
+                calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
+            }
+            return executionResult;
+        } catch (retryErr: any) {
+            logger.error({ accountType, accountId: targetAccountId, err: retryErr?.message || String(retryErr) }, `[MetaApi ${accountType}] Trade execution failed`);
+            throw err;
+        }
     }
 }
 
@@ -809,33 +1467,6 @@ export async function executeTrade(direction: "LONG" | "SHORT", stopLoss: number
         throw new Error("No active MetaApi account configured");
     }
     return executeTradeOnAccount(activeAccountId, "DEMO", direction, stopLoss, takeProfit, volume);
-}
-
-export interface BrokerPosition {
-    id: string;
-    accountId: string;
-    symbol: string;
-    type: "LONG" | "SHORT";
-    volume: number;
-    openPrice: number;
-    currentPrice: number;
-    stopLoss: number;
-    takeProfit: number;
-    profit: number;
-    time: string;
-}
-
-export interface BrokerClosedDeal {
-    id: string;
-    positionId: string;
-    accountId: string;
-    symbol: string;
-    type: "DEAL_TYPE_BUY" | "DEAL_TYPE_SELL";
-    price: number;
-    profit: number;
-    time: string;
-    reason: string;
-    comment: string;
 }
 
 async function getMetaApiInstance() {
@@ -848,142 +1479,61 @@ async function getMetaApiInstance() {
 }
 
 export async function getOpenBrokerPositions(): Promise<BrokerPosition[]> {
-    const results: BrokerPosition[] = [];
-    if (!token) return results;
-
-    try {
-        const settings = await getSystemSettings().catch(() => ({} as any));
-        const candidates = [settings.realAccountId, settings.demoAccountId, activeAccountId];
-        const accountIds = Array.from(new Set(candidates.filter(id => Boolean(id && typeof id === 'string' && id.trim())).map(id => id!.trim())));
-
-        // 1. From active streaming connection
-        if (connection && connection.terminalState?.positions) {
-            const rawPositions = connection.terminalState.positions || [];
-            for (const pos of rawPositions) {
-                const sym = (pos.symbol || "").toUpperCase();
-                if (sym.includes("XAU") || sym.includes("GOLD")) {
-                    const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
-                    results.push({
-                        id: String(pos.id),
-                        accountId: activeAccountId || "",
-                        symbol: pos.symbol,
-                        type: isBuy ? "LONG" : "SHORT",
-                        volume: pos.volume || 0.01,
-                        openPrice: pos.openPrice || 0,
-                        currentPrice: pos.currentPrice || pos.openPrice || 0,
-                        stopLoss: pos.stopLoss || 0,
-                        takeProfit: pos.takeProfit || 0,
-                        profit: pos.profit || 0,
-                        time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
-                    });
-                }
-            }
-        }
-
-        // 2. From RPC for configured accounts not already queried
-        const instance = await getMetaApiInstance();
-        if (instance) {
-            for (const accId of accountIds) {
-                if (accId === activeAccountId && results.length > 0) continue;
-                try {
-                    const account = await instance.metatraderAccountApi.getAccount(accId);
-                    if (account.state === 'DEPLOYED') {
-                        const rpc = account.getRPCConnection();
-                        await rpc.connect();
-                        try {
-                            await rpc.waitSynchronized({ timeoutInSeconds: 4 });
-                        } catch {}
-                        const rpcPositions = await rpc.getPositions();
-                        for (const pos of (rpcPositions || [])) {
-                            const sym = (pos.symbol || "").toUpperCase();
-                            if (sym.includes("XAU") || sym.includes("GOLD")) {
-                                const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
-                                if (!results.some(r => r.id === String(pos.id))) {
-                                    results.push({
-                                        id: String(pos.id),
-                                        accountId: accId,
-                                        symbol: pos.symbol,
-                                        type: isBuy ? "LONG" : "SHORT",
-                                        volume: pos.volume || 0.01,
-                                        openPrice: pos.openPrice || 0,
-                                        currentPrice: pos.currentPrice || pos.openPrice || 0,
-                                        stopLoss: pos.stopLoss || 0,
-                                        takeProfit: pos.takeProfit || 0,
-                                        profit: pos.profit || 0,
-                                        time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
-                                    });
-                                }
-                            }
-                        }
-                        setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
-                    }
-                } catch {}
-            }
-        }
-    } catch (err: any) {
-        logger.debug({ err: err?.message || err }, "getOpenBrokerPositions error");
+    // 1. Zero-latency path (<1ms): return in-memory live positions updated by streaming WebSocket
+    if (liveBrokerPositions.size > 0) {
+        return Array.from(liveBrokerPositions.values());
     }
 
-    return results;
+    // 2. Fast-path: active streaming connection terminalState
+    if (connection && connection.terminalState?.positions) {
+        const results: BrokerPosition[] = [];
+        const rawPositions = connection.terminalState.positions || [];
+        for (const pos of rawPositions) {
+            const sym = (pos.symbol || "").toUpperCase();
+            if (sym.includes("XAU") || sym.includes("GOLD")) {
+                const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
+                const p: BrokerPosition = {
+                    id: String(pos.id),
+                    accountId: activeAccountId || "",
+                    symbol: pos.symbol,
+                    type: isBuy ? "LONG" : "SHORT",
+                    volume: pos.volume || 0.01,
+                    openPrice: pos.openPrice || 0,
+                    currentPrice: pos.currentPrice || pos.openPrice || 0,
+                    stopLoss: pos.stopLoss || 0,
+                    takeProfit: pos.takeProfit || 0,
+                    profit: pos.profit || 0,
+                    time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
+                };
+                liveBrokerPositions.set(String(pos.id), p);
+                results.push(p);
+            }
+        }
+        if (results.length > 0) return results;
+    }
+
+    return [];
 }
 
 export async function getRecentlyClosedBrokerDeals(since: Date): Promise<BrokerClosedDeal[]> {
-    const results: BrokerClosedDeal[] = [];
-    if (!token) return results;
-
-    try {
-        const settings = await getSystemSettings().catch(() => ({} as any));
-        const candidates = [settings.realAccountId, settings.demoAccountId, activeAccountId];
-        const accountIds = Array.from(new Set(candidates.filter(id => Boolean(id && typeof id === 'string' && id.trim())).map(id => id!.trim())));
-
-        const instance = await getMetaApiInstance();
-        if (!instance) return results;
-
-        for (const accId of accountIds) {
-            try {
-                const account = await instance.metatraderAccountApi.getAccount(accId);
-                if (account.state === 'DEPLOYED') {
-                    const rpc = account.getRPCConnection();
-                    await rpc.connect();
-                    try {
-                        await rpc.waitSynchronized({ timeoutInSeconds: 4 });
-                    } catch {}
-                    const res = await rpc.getDealsByTimeRange(since, new Date());
-                    const deals = res.deals || res || [];
-                    for (const d of deals) {
-                        const sym = (d.symbol || "").toUpperCase();
-                        if ((sym.includes("XAU") || sym.includes("GOLD")) && d.entryType === "DEAL_ENTRY_OUT") {
-                            results.push({
-                                id: String(d.id),
-                                positionId: String(d.positionId),
-                                accountId: accId,
-                                symbol: d.symbol,
-                                type: d.type,
-                                price: d.price,
-                                profit: d.profit,
-                                time: d.time ? new Date(d.time).toISOString() : new Date().toISOString(),
-                                reason: d.reason || "",
-                                comment: d.comment || d.brokerComment || ""
-                            });
-                        }
-                    }
-                    setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
-                }
-            } catch {}
-        }
-    } catch (err: any) {
-        logger.debug({ err: err?.message || err }, "getRecentlyClosedBrokerDeals error");
+    // 1. Zero-latency path: return in-memory live closed deals received from streaming WebSocket
+    if (liveClosedDeals.length > 0) {
+        const sinceMs = since.getTime();
+        const filtered = liveClosedDeals.filter(d => new Date(d.time).getTime() >= sinceMs);
+        if (filtered.length > 0) return filtered;
     }
 
-    return results;
+    return [...liveClosedDeals];
 }
 
 export async function closeBrokerPosition(positionId: string, accountId?: string): Promise<boolean> {
     if (!token || !positionId) return false;
+    markPositionClosing(positionId, "CLOSE_BROKER_POSITION_INVOKED");
     try {
         if (connection && typeof connection.closePosition === 'function') {
             try {
                 await connection.closePosition(positionId);
+                liveBrokerPositions.delete(positionId);
                 logger.info({ positionId }, "[MetaApi Execution] Position closed on MT5 via streaming connection");
                 return true;
             } catch (err: any) {
@@ -995,17 +1545,14 @@ export async function closeBrokerPosition(positionId: string, accountId?: string
         const targetAccId = accountId || activeAccountId || settings.realAccountId || settings.demoAccountId;
         if (!targetAccId) return false;
 
-        const instance = await getMetaApiInstance();
-        if (!instance) return false;
-
-        const account = await instance.metatraderAccountApi.getAccount(targetAccId.trim());
-        const rpc = account.getRPCConnection();
-        await rpc.connect();
-        await rpc.waitSynchronized({ timeoutInSeconds: 4 });
-        await rpc.closePosition(positionId);
-        logger.info({ positionId, accountId: targetAccId }, "[MetaApi Execution] Position closed on MT5 via RPC");
-        setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
-        return true;
+        const rpc = await getOrInitRpcConnection(targetAccId.trim());
+        if (rpc) {
+            await rpc.closePosition(positionId);
+            liveBrokerPositions.delete(positionId);
+            logger.info({ positionId, accountId: targetAccId }, "[MetaApi Execution] Position closed on MT5 via fast RPC");
+            return true;
+        }
+        return false;
     } catch (err: any) {
         logger.warn({ positionId, err: err?.message || String(err) }, "[MetaApi Execution] Failed to close position on broker");
         return false;
@@ -1018,6 +1565,7 @@ export async function closeOpenBrokerPositionsForSignal(direction: "LONG" | "SHO
         const positions = await getOpenBrokerPositions();
         for (const pos of positions) {
             if (pos.type === direction) {
+                markPositionClosing(pos.id, "OPPOSING_SIGNAL_CLOSE");
                 const ok = await closeBrokerPosition(pos.id, pos.accountId);
                 if (ok) closed++;
             }
@@ -1034,41 +1582,28 @@ export async function modifyOpenPositionsStopLoss(direction: "LONG" | "SHORT", n
         const positions = await getOpenBrokerPositions();
         for (const pos of positions) {
             if (pos.type === direction) {
+                // If position is already in a closure sequence or deal completed, skip immediately
+                if (isPositionInClosureSequence(pos.id)) {
+                    logger.debug({ positionId: pos.id }, "[Trailing SL] Skipping position in closure sequence");
+                    continue;
+                }
                 if (pos.stopLoss > 0 && Math.abs(pos.stopLoss - newStopLoss) < 0.05) {
                     continue;
                 }
 
-                let modified = false;
-                if (connection && activeAccountId === pos.accountId && typeof connection.modifyPosition === 'function') {
-                    try {
-                        await connection.modifyPosition(pos.id, newStopLoss, pos.takeProfit);
-                        modified = true;
-                        logger.info({ positionId: pos.id, newStopLoss, symbol: pos.symbol }, "[MetaApi Execution] Updated open position trailing Stop Loss on MT5 via streaming");
-                    } catch (streamErr: any) {
-                        logger.debug({ positionId: pos.id, err: streamErr?.message }, "[MetaApi] Streaming modifyPosition fallback to RPC");
-                    }
-                }
-
-                if (!modified) {
-                    try {
-                        const instance = await getMetaApiInstance();
-                        if (instance) {
-                            const account = await instance.metatraderAccountApi.getAccount(pos.accountId);
-                            const rpc = account.getRPCConnection();
-                            await rpc.connect();
-                            await rpc.waitSynchronized({ timeoutInSeconds: 4 });
-                            await rpc.modifyPosition(pos.id, newStopLoss, pos.takeProfit);
-                            logger.info({ positionId: pos.id, newStopLoss, symbol: pos.symbol, accountId: pos.accountId }, "[MetaApi Execution] Updated open position trailing Stop Loss on MT5 via RPC");
-                            setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
-                        }
-                    } catch (rpcErr: any) {
-                        logger.warn({ positionId: pos.id, err: rpcErr?.message }, "[MetaApi Execution] Failed to modify position Stop Loss on MT5");
-                    }
-                }
+                // Execute safe modify using the asynchronous Verify-before-Update loop
+                await safeModifyPositionSLTP({
+                    positionId: pos.id,
+                    accountId: pos.accountId,
+                    stopLoss: newStopLoss,
+                    takeProfit: pos.takeProfit,
+                    direction,
+                    reason: `Dynamic trailing stop loss update to ${newStopLoss}`
+                });
             }
         }
     } catch (err: any) {
-        logger.warn({ err: err?.message || String(err) }, "[MetaApi Execution] Failed to update position Stop Loss on MT5");
+        logger.warn({ err: err?.message || String(err) }, "[MetaApi Execution] Failed in modifyOpenPositionsStopLoss");
     }
 }
 
@@ -1084,6 +1619,7 @@ export async function closeAllPositions(accountId: string) {
         let closedCount = 0;
         for (const pos of positions) {
             if (pos.symbol === SYMBOL || pos.symbol === "XAUUSD") {
+                markPositionClosing(pos.id, "ROLLOVER_AUTO_CLOSE");
                 await rpc.closePosition(pos.id);
                 logger.info({ accountId, positionId: pos.id, symbol: pos.symbol }, "[MetaApi Execution] Auto-closed position before rollover.");
                 closedCount++;
@@ -1106,31 +1642,45 @@ export interface AccountFundsInfo {
 
 export async function getAccountFundsInfo(accountId: string): Promise<AccountFundsInfo | null> {
     try {
-        if (!token) return null;
-        if (!accountId) return null;
-        
-        // If we have an active streaming connection for this exact account, get it instantly
-        if (connection && activeAccountId === accountId.trim() && connection.terminalState?.accountInformation) {
-            const info = connection.terminalState.accountInformation;
-            return { equity: info.equity, leverage: info.leverage || 0, freeMargin: info.freeMargin || 0 };
+        if (!token || !accountId) return null;
+        const trimmed = accountId.trim();
+
+        // 1. Check in-memory funds cache (instant: 0ms)
+        const cached = accountFundsCache.get(trimmed);
+        if (cached && Date.now() - cached.updatedAt < 120_000) {
+            return { equity: cached.equity, leverage: cached.leverage, freeMargin: cached.freeMargin };
         }
 
-        // Otherwise fallback to RPC
-        const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
-        if (!metaApi) metaApi = new MetaApi(token);
-        
-        const account = await metaApi.metatraderAccountApi.getAccount(accountId.trim());
-        const rpc = account.getRPCConnection();
-        await rpc.connect();
-        await rpc.waitSynchronized();
-        const info = await rpc.getAccountInformation();
-        
-        // Cleanup RPC connection to prevent memory leaks
-        setTimeout(() => {
-           try { rpc.close(); } catch(e) {}
-        }, 5000);
-        
-        return { equity: info.equity, leverage: info.leverage || 0, freeMargin: info.freeMargin || 0 };
+        // 2. Check active streaming connection terminal state (instant: 0ms)
+        if (connection && activeAccountId === trimmed && connection.terminalState?.accountInformation) {
+            const info = connection.terminalState.accountInformation;
+            const res = { equity: info.equity, leverage: info.leverage || 1000, freeMargin: info.freeMargin || info.equity };
+            accountFundsCache.set(trimmed, { ...res, updatedAt: Date.now() });
+            return res;
+        }
+
+        // 3. Fallback to cached value even if slightly older (prevents trade execution delay)
+        if (cached) {
+            return { equity: cached.equity, leverage: cached.leverage, freeMargin: cached.freeMargin };
+        }
+
+        // 4. Fast RPC query with 2s timeout (NO waitSynchronized!)
+        try {
+            const rpc = await getOrInitRpcConnection(trimmed);
+            const info = await Promise.race([
+                rpc.getAccountInformation(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("RPC info timeout")), 2000))
+            ]) as any;
+            if (info && info.equity) {
+                const res = { equity: info.equity, leverage: info.leverage || 1000, freeMargin: info.freeMargin || info.equity };
+                accountFundsCache.set(trimmed, { ...res, updatedAt: Date.now() });
+                return res;
+            }
+        } catch (rpcErr: any) {
+            logger.debug({ err: rpcErr?.message, accountId: trimmed }, "Fast RPC funds info fetch timed out or failed");
+        }
+
+        return null;
     } catch (err: any) {
         logger.error({ err: err.message || err, accountId }, "[MetaApi] Failed to fetch account funds info");
         return null;

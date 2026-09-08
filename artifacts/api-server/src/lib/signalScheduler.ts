@@ -1,5 +1,5 @@
 import { generateSignal } from "./signalEngine.js";
-import { getLatestPrice } from "./priceEvents.js";
+import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { insertSignal, getLatestSignal, getRunningTrades, updateTradeStatus } from "@workspace/db";
 import { sendPushToAll } from "./pushNotifications.js";
 import { sendTelegramNotification } from "./telegram.js";
@@ -8,7 +8,10 @@ import { getSystemSettings } from "@workspace/db";
 import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions } from "./metaApiFeed.js";
 import { executeTradeWithCapitalManagement } from "./autoTrader.js";
 
-const SCHEDULER_INTERVAL = 5_000 + Math.floor(Math.random() * 2000); // 5-7 seconds with jitter to prevent Cloud Run multi-instance collision
+const SCHEDULER_INTERVAL = 5_000 + Math.floor(Math.random() * 2000); // 5-7 seconds with jitter fallback
+let lastTickEvaluatedAt = 0;
+let lastTickPrice = 0;
+const MIN_TICK_EVALUATION_GAP = 1200; // 1.2s debounce to allow indicators to compute smoothly
 
 let isScheduling = false;
 
@@ -119,72 +122,76 @@ async function runScheduledSignal(): Promise<void> {
       logger.warn({ checkErr }, "Scheduler: Failed to check DB deduplication");
     }
 
-    try {
-      await insertSignal({
-        signal:        signal.signal,
-        confidence:    signal.confidence,
-        entryPrice:    signal.entryPrice,
-        stopLoss:      signal.stopLoss,
-        takeProfit:    signal.takeProfit,
-        trend:         signal.trend,
-        reason:        signal.reason,
-        tradeDuration: signal.tradeDuration,
-        tradeStatus:   "RUNNING",
-        closedPrice:   null,
-        closedAt:      null,
-        pnlPoints:     null,
-        marketStructure: null,
-        bosPresent: null,
-        liquiditySweep: null,
-        inOrderBlock: null,
-        smcScore: null,
-        obScore: null,
-        obType: null,
-        obHigh: null,
-        obLow: null,
-        signalType:    signal.signalType,
-        candlePattern: null,
-        candleScore: null
-      });
-    } catch (dbErr) {
-      logger.warn({ dbErr }, "Scheduler: failed to persist signal");
-    }
+    // ── Auto-Trading MetaApi Order Execution (Ultra-Fast Concurrent Dispatch) ──────
+    const tradePromises: Promise<any>[] = [];
+    const signalDetectedAt = Date.now();
 
-    // ── Auto-Trading MetaApi Order Execution (Demo & Real Distinguished) ──────
     try {
       const settings = await getSystemSettings();
 
-      // 1. Demo Account Execution: strictly triggered only if Demo Auto Trading is ON
-      if (settings.autoTradingDemoEnabled) {
-                if (settings.demoAccountId) {
-          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: settings.demoAccountId }, "[MetaApi Execution] Automatically executing trade on DEMO MT5 account...");
-          try {
-            await executeTradeWithCapitalManagement(settings.demoAccountId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);
-          } catch (demoErr: any) {
-            logger.error({ err: demoErr.message || demoErr, accountId: settings.demoAccountId }, "[MetaApi Execution] DEMO trade execution failed");
-          }
-        } else {
-          logger.warn("[MetaApi Execution] Auto-trading (Demo) is ON, but Demo Account ID is not configured in settings.");
-        }
-      }
-
-      // 2. Real Account Execution: strictly triggered only if Real Auto Trading is ON
+      // 1. Real Account Execution (Concurrent)
       if (settings.autoTradingRealEnabled) {
         const realId = settings.realAccountId?.trim();
         if (realId) {
-          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Automatically executing trade on REAL MT5 account...");
-          try {
-            await executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);
-          } catch (realErr: any) {
-            logger.error({ err: realErr.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed");
-          }
+          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Dispatching trade to REAL MT5 account immediately...");
+          tradePromises.push(
+            executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
+              .catch((realErr: any) => logger.error({ err: realErr?.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed"))
+          );
         } else {
           logger.warn("[MetaApi Execution] Auto-trading (Real) is ON, but Real Account ID is not configured in settings.");
+        }
+      }
+
+      // 2. Demo Account Execution (Concurrent)
+      if (settings.autoTradingDemoEnabled) {
+        const demoId = settings.demoAccountId?.trim();
+        if (demoId) {
+          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Dispatching trade to DEMO MT5 account concurrently...");
+          tradePromises.push(
+            executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
+              .catch((demoErr: any) => logger.error({ err: demoErr?.message || demoErr, accountId: demoId }, "[MetaApi Execution] DEMO trade execution failed"))
+          );
+        } else {
+          logger.warn("[MetaApi Execution] Auto-trading (Demo) is ON, but Demo Account ID is not configured in settings.");
         }
       }
     } catch (e: any) {
       logger.error({ err: e.message || e }, "Failed to evaluate auto-trade execution");
     }
+
+    // Persist signal concurrently so database write latency doesn't delay broker execution
+    const dbPersistPromise = insertSignal({
+      signal:        signal.signal,
+      confidence:    signal.confidence,
+      entryPrice:    signal.entryPrice,
+      stopLoss:      signal.stopLoss,
+      takeProfit:    signal.takeProfit,
+      trend:         signal.trend,
+      reason:        signal.reason,
+      tradeDuration: signal.tradeDuration,
+      tradeStatus:   "RUNNING",
+      closedPrice:   null,
+      closedAt:      null,
+      pnlPoints:     null,
+      marketStructure: null,
+      bosPresent: null,
+      liquiditySweep: null,
+      inOrderBlock: null,
+      smcScore: null,
+      obScore: null,
+      obType: null,
+      obHigh: null,
+      obLow: null,
+      signalType:    signal.signalType,
+      candlePattern: null,
+      candleScore: null
+    }).catch(dbErr => {
+      logger.warn({ dbErr }, "Scheduler: failed to persist signal");
+    });
+
+    // Await both broker orders and persistence
+    await Promise.allSettled([...tradePromises, dbPersistPromise]);
 
     const direction = signal.signal as "LONG" | "SHORT";
     const emoji     = direction === "LONG" ? "📈" : "📉";
@@ -223,8 +230,22 @@ Reason: ${signal.reason}`;
   }
 }
 
+function handleLivePriceTick(live: LivePrice): void {
+  const now = Date.now();
+  if (now - lastTickEvaluatedAt < MIN_TICK_EVALUATION_GAP) return;
+
+  const priceDiff = Math.abs(live.price - lastTickPrice);
+  // Trigger signal evaluation immediately if price moves by at least 25 cents or 3.5s elapsed
+  if (priceDiff >= 0.25 || (now - lastTickEvaluatedAt >= 3500)) {
+    lastTickEvaluatedAt = now;
+    lastTickPrice = live.price;
+    runScheduledSignal().catch(() => {});
+  }
+}
+
 export function startSignalScheduler(): void {
-  logger.info("Signal scheduler started");
+  logger.info("Signal scheduler started with event-driven streaming price triggers");
+  priceEmitter.on("price", handleLivePriceTick);
   const id = setInterval(runScheduledSignal, SCHEDULER_INTERVAL);
   if (typeof id === "object" && "unref" in id) (id as any).unref();
 }

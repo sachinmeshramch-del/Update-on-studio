@@ -10,4 +10,5 @@ export interface SystemSettings {
   riskPerTradePercent?: number;
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
+  dashboardPasscode?: string;
 }

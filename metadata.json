@@ -1,0 +1,6 @@
+{
+  "name": "Gold Swing AI Pro",
+  "description": "High-precision AI-powered Gold (XAUUSD) swing trading signals and automated execution engine with MetaApi integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

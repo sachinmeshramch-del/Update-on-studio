@@ -1,6 +1,17 @@
 import { useState, useEffect } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { 
+  Settings as SettingsIcon, 
+  KeyRound, 
+  ShieldCheck, 
+  ArrowLeft, 
+  Sliders, 
+  Check, 
+  X,
+  Lock,
+  Sparkles
+} from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/firebase/auth-context";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Settings {
   tradingMode: "DEMO" | "REAL";
@@ -25,12 +37,18 @@ interface Settings {
   riskPerTradePercent?: number;
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
+  dashboardPasscode?: string;
 }
 
 export function SettingsDialog() {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  const { changePasscode } = useAuth();
   const queryClient = useQueryClient();
+
+  const [currentPass, setCurrentPass] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [isChangingPass, setIsChangingPass] = useState(false);
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["settings"],
@@ -103,35 +121,100 @@ export function SettingsDialog() {
     }
   };
 
+  const handleUpdatePasscode = async () => {
+    if (!newPass || newPass.trim().length < 4) {
+      toast({ title: "Passcode too short", description: "New passcode must be at least 4 characters.", variant: "destructive" });
+      return;
+    }
+    setIsChangingPass(true);
+    try {
+      await changePasscode(currentPass || "goldswing2024", newPass.trim());
+      toast({
+        title: "Passcode Updated",
+        description: "Your login passcode has been updated successfully."
+      });
+      setCurrentPass("");
+      setNewPass("");
+    } catch (err: any) {
+      toast({
+        title: "Failed to Update Passcode",
+        description: err.message || "Please check your current passcode and try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="shrink-0 relative overflow-hidden">
-          <SettingsIcon className="w-4 h-4" />
+        <Button
+          variant="outline"
+          size="sm"
+          id="header-settings-trigger"
+          title="Trading Settings"
+          className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 h-8 rounded-lg text-xs font-medium border border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600 dark:hover:text-amber-400 transition-all shrink-0 cursor-pointer"
+        >
+          <SettingsIcon className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Settings</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Trading Settings</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="w-[95vw] sm:max-w-[490px] h-[92dvh] sm:h-auto sm:max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl border border-border/80 bg-background shadow-2xl">
+        {/* Sticky Header with Back Button */}
+        <div className="flex items-center justify-between px-3 sm:px-5 py-3 border-b border-border bg-card/60 shrink-0 z-10 pr-12">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 h-8 text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+              id="settings-back-button-header"
+              title="Go back to dashboard"
+            >
+              <ArrowLeft className="w-4 h-4 text-amber-500" />
+              <span>Back</span>
+            </Button>
+            <div className="h-4 w-px bg-border/80" />
+            <DialogTitle className="text-sm sm:text-base font-bold tracking-tight">Trading Settings</DialogTitle>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border",
+              formData.tradingMode === "REAL"
+                ? "bg-red-500/10 text-red-500 border-red-500/20"
+                : "bg-green-500/10 text-green-500 border-green-500/20"
+            )}>
+              {formData.tradingMode}
+            </span>
+          </div>
+        </div>
 
         {isLoading ? (
-          <div className="py-4 text-center text-muted-foreground text-sm">Loading settings...</div>
+          <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground text-sm">
+            Loading settings...
+          </div>
         ) : (
-          <div className="grid gap-6 py-4">
-            <div className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg border">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 overscroll-contain">
+            {/* Auto-Trading Controls */}
+            <div className="flex flex-col gap-2 p-3 sm:p-3.5 bg-muted/40 rounded-xl border border-border/70">
               <div className="flex items-center justify-between">
-                <Label className="font-bold cursor-pointer" htmlFor="auto-trading-demo">Auto Trading (Demo)</Label>
+                <Label className="font-semibold text-xs sm:text-sm cursor-pointer" htmlFor="auto-trading-demo">
+                  Auto Trading (Demo)
+                </Label>
                 <Switch
                   id="auto-trading-demo"
                   checked={formData.autoTradingDemoEnabled ?? false}
                   onCheckedChange={(c) => handleToggle("autoTradingDemoEnabled", c)}
                 />
               </div>
-              <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
                 <div className="flex flex-col">
-                  <Label className="font-bold text-red-500" htmlFor="auto-trading-real">Auto Trading (Real)</Label>
-                  <span className="text-[10px] text-red-500 font-medium">Live Execution Enabled</span>
+                  <Label className="font-semibold text-xs sm:text-sm text-red-500 cursor-pointer" htmlFor="auto-trading-real">
+                    Auto Trading (Real)
+                  </Label>
+                  <span className="text-[10px] text-red-500/80 font-medium">Live Execution Enabled</span>
                 </div>
                 <Switch
                   id="auto-trading-real"
@@ -139,19 +222,22 @@ export function SettingsDialog() {
                   onCheckedChange={(c) => handleToggle("autoTradingRealEnabled", c)}
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground mt-2">
+              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
                 Switches save instantly to database and persist across page reloads.
               </p>
             </div>
 
-            <div className="grid gap-2">
-              <Label>Trading Mode</Label>
+            {/* Trading Mode */}
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-semibold">Trading Mode</Label>
               <div className="flex bg-muted p-1 rounded-lg">
                 <button
                   type="button"
                   onClick={() => handleModeChange("DEMO")}
-                  className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all ${
-                    formData.tradingMode === "DEMO" ? "bg-background shadow-sm text-green-600 dark:text-green-400" : "text-muted-foreground hover:text-foreground"
+                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-all ${
+                    formData.tradingMode === "DEMO"
+                      ? "bg-background shadow-xs text-green-600 dark:text-green-400"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   DEMO ACCOUNT
@@ -159,8 +245,10 @@ export function SettingsDialog() {
                 <button
                   type="button"
                   onClick={() => handleModeChange("REAL")}
-                  className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all ${
-                    formData.tradingMode === "REAL" ? "bg-background shadow-sm text-red-600 dark:text-red-400" : "text-muted-foreground hover:text-foreground"
+                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-all ${
+                    formData.tradingMode === "REAL"
+                      ? "bg-background shadow-xs text-red-600 dark:text-red-400"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   REAL ACCOUNT
@@ -168,79 +256,164 @@ export function SettingsDialog() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="demo-id">MetaApi Demo Account ID</Label>
-              <Input
-                id="demo-id"
-                value={formData.demoAccountId || ""}
-                onChange={(e) => setFormData({ ...formData, demoAccountId: e.target.value })}
-                placeholder="e.g. 5f7a...3d"
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="real-id">MetaApi Real Account ID</Label>
-              <Input
-                id="real-id"
-                value={formData.realAccountId || ""}
-                onChange={(e) => setFormData({ ...formData, realAccountId: e.target.value })}
-                placeholder="e.g. 9b2c...1f"
-                className="font-mono text-sm border-red-500/20 focus-visible:ring-red-500/30"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 border-y border-border py-4 my-2">
-              <div className="grid gap-2">
-                <Label htmlFor="risk-trade" className="text-xs">Risk / Trade (%)</Label>
+            {/* Account IDs */}
+            <div className="grid gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="demo-id" className="text-xs font-semibold">MetaApi Demo Account ID</Label>
                 <Input
-                  id="risk-trade"
-                  type="number" step="0.1"
-                  value={formData.riskPerTradePercent || 1.0}
-                  onChange={(e) => setFormData({ ...formData, riskPerTradePercent: parseFloat(e.target.value) })}
-                  className="font-mono text-xs h-8"
+                  id="demo-id"
+                  value={formData.demoAccountId || ""}
+                  onChange={(e) => setFormData({ ...formData, demoAccountId: e.target.value })}
+                  placeholder="e.g. 5f7a...3d"
+                  className="font-mono text-xs sm:text-sm h-9"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="profit-target" className="text-xs text-green-500">Daily Target (%)</Label>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="real-id" className="text-xs font-semibold">MetaApi Real Account ID</Label>
                 <Input
-                  id="profit-target"
-                  type="number" step="0.1"
-                  value={formData.dailyProfitTargetPercent || 3.0}
-                  onChange={(e) => setFormData({ ...formData, dailyProfitTargetPercent: parseFloat(e.target.value) })}
-                  className="font-mono text-xs h-8"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="stop-target" className="text-xs text-red-500">Daily Stop (%)</Label>
-                <Input
-                  id="stop-target"
-                  type="number" step="0.1"
-                  value={formData.dailyStopLossPercent || 5.0}
-                  onChange={(e) => setFormData({ ...formData, dailyStopLossPercent: parseFloat(e.target.value) })}
-                  className="font-mono text-xs h-8"
+                  id="real-id"
+                  value={formData.realAccountId || ""}
+                  onChange={(e) => setFormData({ ...formData, realAccountId: e.target.value })}
+                  placeholder="e.g. 9b2c...1f"
+                  className="font-mono text-xs sm:text-sm h-9 border-red-500/30 focus-visible:ring-red-500/30"
                 />
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="meta-symbol">MetaApi Symbol</Label>
+            {/* Risk & Limits */}
+            <div className="p-3 sm:p-3.5 bg-muted/30 rounded-xl border border-border/70 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Risk & Limits</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">Balance %</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid gap-1">
+                  <Label htmlFor="risk-trade" className="text-[11px] text-muted-foreground">Risk / Trade (%)</Label>
+                  <Input
+                    id="risk-trade"
+                    type="number"
+                    step="0.1"
+                    value={formData.riskPerTradePercent ?? 1.0}
+                    onChange={(e) => setFormData({ ...formData, riskPerTradePercent: parseFloat(e.target.value) || 0 })}
+                    className="font-mono text-xs h-9 bg-background"
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="profit-target" className="text-[11px] text-green-500 font-medium">Daily Target (%)</Label>
+                  <Input
+                    id="profit-target"
+                    type="number"
+                    step="0.1"
+                    value={formData.dailyProfitTargetPercent ?? 3.0}
+                    onChange={(e) => setFormData({ ...formData, dailyProfitTargetPercent: parseFloat(e.target.value) || 0 })}
+                    className="font-mono text-xs h-9 bg-background"
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="stop-target" className="text-[11px] text-red-500 font-medium">Daily Stop (%)</Label>
+                  <Input
+                    id="stop-target"
+                    type="number"
+                    step="0.1"
+                    value={formData.dailyStopLossPercent ?? 5.0}
+                    onChange={(e) => setFormData({ ...formData, dailyStopLossPercent: parseFloat(e.target.value) || 0 })}
+                    className="font-mono text-xs h-9 bg-background"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* MetaApi Symbol */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="meta-symbol" className="text-xs font-semibold">MetaApi Symbol</Label>
               <Input
                 id="meta-symbol"
                 value={formData.metaApiSymbol || ""}
                 onChange={(e) => setFormData({ ...formData, metaApiSymbol: e.target.value })}
                 placeholder="e.g. XAUUSD or XAUUSD.a"
-                className="font-mono text-sm"
+                className="font-mono text-xs sm:text-sm h-9"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Leave blank to use default XAUUSD. Some brokers use suffixes like XAUUSD.a or XAUUSDm.
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Default is <code className="font-mono px-1 py-0.5 rounded bg-muted">XAUUSD</code>. Some brokers use suffixes like <code className="font-mono px-1 py-0.5 rounded bg-muted">XAUUSD.a</code> or <code className="font-mono px-1 py-0.5 rounded bg-muted">XAUUSDm</code>.
               </p>
             </div>
-            <Button onClick={handleSave} disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving..." : "Save Settings"}
-            </Button>
+
+            {/* Dashboard Passcode Management */}
+            <div className="border border-border/70 rounded-xl p-3 sm:p-3.5 bg-muted/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Dashboard Login Passcode</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  Default: <code className="bg-muted px-1 py-0.5 rounded font-mono text-foreground">goldswing2024</code>
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Change the passcode used to unlock the dashboard.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Current Passcode</Label>
+                  <Input
+                    type="password"
+                    placeholder="Current passcode"
+                    value={currentPass}
+                    onChange={(e) => setCurrentPass(e.target.value)}
+                    className="h-8 text-xs font-mono bg-background"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">New Passcode</Label>
+                  <Input
+                    type="password"
+                    placeholder="Min 4 chars"
+                    value={newPass}
+                    onChange={(e) => setNewPass(e.target.value)}
+                    className="h-8 text-xs font-mono bg-background"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="w-full text-xs h-8 font-medium"
+                disabled={isChangingPass || !newPass}
+                onClick={handleUpdatePasscode}
+              >
+                {isChangingPass ? "Updating Passcode..." : "Update Passcode"}
+              </Button>
+            </div>
           </div>
         )}
+
+        {/* Sticky Footer with Back and Save Buttons */}
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-border bg-card/60 shrink-0 z-10">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+            className="h-10 px-4 text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0"
+            id="settings-back-button-footer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back</span>
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={mutation.isPending}
+            className="flex-1 h-10 text-xs font-bold bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-black shadow-sm transition-all"
+            id="settings-save-button-footer"
+          >
+            {mutation.isPending ? "Saving..." : "Save Settings"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

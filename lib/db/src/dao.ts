@@ -101,7 +101,16 @@ export async function updateTradeStopLoss(id: string, stopLoss: number): Promise
 import { SystemSettings } from './schema/index';
 import { setDoc } from 'firebase/firestore';
 
-export async function getSystemSettings(): Promise<SystemSettings> {
+let cachedSettings: SystemSettings | null = null;
+let lastSettingsFetch = 0;
+const SETTINGS_CACHE_TTL = 15_000; // 15 seconds fast memory cache
+
+export async function getSystemSettings(forceRefresh = false): Promise<SystemSettings> {
+  const now = Date.now();
+  if (!forceRefresh && cachedSettings && (now - lastSettingsFetch < SETTINGS_CACHE_TTL)) {
+    return cachedSettings;
+  }
+
   const q = query(collection(db, 'settings'), limit(1));
   const snap = await getDocs(q);
   if (snap.empty) {
@@ -112,12 +121,17 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       autoTradingDemoEnabled: false,
       autoTradingRealEnabled: false,
       autoTradingEnabled: false,
-      metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD'
+      metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD',
+      dashboardPasscode: 'goldswing2024'
     };
+    cachedSettings = defaultSettings;
+    lastSettingsFetch = now;
     return defaultSettings;
   }
   const d = snap.docs[0];
-  const settings = { id: d.id, ...d.data() } as SystemSettings;
+  const settings = { id: d.id, dashboardPasscode: 'goldswing2024', ...d.data() } as SystemSettings;
+  cachedSettings = settings;
+  lastSettingsFetch = now;
   return settings;
 }
 
@@ -130,7 +144,9 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   delete updated.id; // don't write id into document
   
   await setDoc(doc(db, 'settings', id), updated, { merge: true });
-  return { ...updated, id };
+  cachedSettings = { ...updated, id };
+  lastSettingsFetch = Date.now();
+  return cachedSettings;
 }
 
 export async function getSignalById(id: string): Promise<Signal | null> {

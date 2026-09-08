@@ -359,7 +359,8 @@ export function Header() {
             <button
               onClick={() => logout()}
               title="Sign Out"
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all shrink-0"
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all shrink-0 cursor-pointer"
+              id="header-logout-button"
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>

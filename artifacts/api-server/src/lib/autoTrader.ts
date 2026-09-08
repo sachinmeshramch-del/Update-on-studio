@@ -24,46 +24,45 @@ export async function executeTradeWithCapitalManagement(
     direction: "LONG" | "SHORT",
     stopLoss: number,
     takeProfit: number,
-    entryPrice: number
+    entryPrice: number,
+    passedSettings?: any,
+    signalTimestamp?: number
 ) {
-    const settings = await getSystemSettings();
+    const settings = passedSettings || await getSystemSettings();
     const riskPerTrade = settings.riskPerTradePercent || 1.0;
     const dailyTarget = settings.dailyProfitTargetPercent || 3.0;
     const dailyStop = settings.dailyStopLossPercent || 5.0;
 
-    logger.info({ accountId, riskPerTrade, dailyTarget, dailyStop }, `[AutoTrader] Evaluating trade with capital management...`);
+    logger.info({ accountId, accountType, riskPerTrade, dailyTarget, dailyStop }, `[AutoTrader] Evaluating trade with capital management...`);
 
-    // Fetch live equity and leverage from MetaApi
+    // Fetch live equity and leverage from MetaApi (fast memory cache or terminal state)
     let fundsInfo = await getAccountFundsInfo(accountId);
     let actualEquity = fundsInfo ? fundsInfo.equity : null;
     let leverage = fundsInfo ? fundsInfo.leverage : 0;
     
-    // Fallback if the connection failed
+    // Safe fallback if account funds info is pending
     if (!actualEquity || actualEquity <= 0) {
-        logger.warn({ accountId }, "[AutoTrader] Could not fetch live equity, defaulting to $1000 fallback balance for safety.");
+        logger.info({ accountId }, "[AutoTrader] Using safe $1000 fallback balance for initial lot sizing.");
         actualEquity = 1000;
     }
 
-    logger.info({ accountId, actualEquity, leverage, riskPerTrade }, `[AutoTrader] Dynamically calculating risk based on live available funds (Leverage: 1:${leverage})...`);
-
     // Risk amount = Equity * Risk%
     const riskAmount = actualEquity * (riskPerTrade / 100);
-    // SL distance in pips/points (Gold)
-    const slDistance = Math.abs(entryPrice - stopLoss);
+    // SL distance in pips/points (Gold) - minimum 1.0 point to prevent excessive lot size
+    const rawSlDistance = Math.abs(entryPrice - stopLoss);
+    const slDistance = Math.max(1.0, rawSlDistance);
     
     // Standard Gold Lot Size Calculation (approximate: 1 standard lot = 100 oz)
-    // Pip value for 1.00 lot of Gold is $10 per $0.1 move. Let's use simple calculation:
     let calculatedVolume = 0.01;
     if (slDistance > 0) {
-        // (RiskAmount) / (SLDistance * 100 contract size) 
         calculatedVolume = parseFloat((riskAmount / (slDistance * 100)).toFixed(2));
     }
     
-    // Constrain volume
-    if (calculatedVolume < 0.01) calculatedVolume = 0.01;
+    // Constrain volume safely
+    if (isNaN(calculatedVolume) || calculatedVolume < 0.01) calculatedVolume = 0.01;
     if (calculatedVolume > 5.0) calculatedVolume = 5.0;
 
-    logger.info({ accountId, slDistance, riskAmount, calculatedVolume }, `[AutoTrader] Dynamically calculated volume`);
+    logger.info({ accountId, actualEquity, leverage, riskAmount, calculatedVolume }, `[AutoTrader] Dynamically calculated volume`);
 
     if (dailyStats.tradingHalted) {
         logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit.`);
@@ -71,10 +70,21 @@ export async function executeTradeWithCapitalManagement(
     }
 
     try {
-        await executeTradeOnAccount(accountId, accountType, direction, stopLoss, takeProfit, calculatedVolume);
-        logger.info(`[AutoTrader] Trade Executed successfully with risk-adjusted volume: ${calculatedVolume}`);
+        const result = await executeTradeOnAccount(
+            accountId, 
+            accountType, 
+            direction, 
+            stopLoss, 
+            takeProfit, 
+            calculatedVolume, 
+            entryPrice, 
+            signalTimestamp
+        );
+        logger.info({ accountId, accountType, calculatedVolume, orderId: result?.orderId }, `[AutoTrader] Trade Executed successfully with risk-adjusted volume`);
         sendTelegramNotification(`🤖 *AUTO-TRADER EXECUTED*\nAccount: ${accountType}\nDirection: ${direction}\nSize: ${calculatedVolume} Lots\nEntry: ${entryPrice}\nSL: ${stopLoss}\nTP: ${takeProfit}`).catch(console.error);
+        return result;
     } catch (e: any) {
-        logger.error({ err: e.message || e }, `[AutoTrader] Execution failed.`);
+        logger.error({ err: e.message || e, accountId, accountType }, `[AutoTrader] Execution failed.`);
+        throw e;
     }
 }

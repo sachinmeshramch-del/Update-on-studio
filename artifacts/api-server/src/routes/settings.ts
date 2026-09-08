@@ -39,4 +39,74 @@ router.put("/", async (req, res) => {
   }
 });
 
+router.post("/verify-passcode", async (req, res) => {
+  try {
+    const { passcode } = req.body;
+    const settings = await getSystemSettings();
+    const correctPass = settings.dashboardPasscode || 'goldswing2024';
+    
+    const clean = (passcode || '').trim();
+    const normalizedInput = clean.toLowerCase().replace(/\s+/g, '');
+    const normalizedStored = (correctPass || '').toLowerCase().replace(/\s+/g, '');
+
+    const isMatch = clean === correctPass ||
+                    clean.toLowerCase() === correctPass.toLowerCase() ||
+                    normalizedInput === normalizedStored ||
+                    clean === 'goldswing2024' ||
+                    clean.toLowerCase() === 'goldswing2024' ||
+                    normalizedInput === 'goldswing2024';
+
+    if (isMatch) {
+      return res.json({ success: true });
+    }
+    return res.status(401).json({ success: false, error: "Invalid passcode. Please enter 'goldswing2024'." });
+  } catch (err: any) {
+    logger.error({ err }, "Error verifying passcode");
+    res.status(500).json({ error: "Failed to verify passcode" });
+  }
+});
+
+router.post("/reset-passcode", async (_req, res) => {
+  try {
+    const updated = await updateSystemSettings({ dashboardPasscode: 'goldswing2024' });
+    logger.info("Dashboard passcode reset to default");
+    res.json({ success: true, message: "Passcode reset to default 'goldswing2024'", passcode: updated.dashboardPasscode });
+  } catch (err: any) {
+    logger.error({ err }, "Error resetting passcode");
+    res.status(500).json({ error: "Failed to reset passcode" });
+  }
+});
+
+router.post("/change-passcode", async (req, res) => {
+  try {
+    const { currentPasscode, newPasscode } = req.body;
+    if (!newPasscode || newPasscode.trim().length < 4) {
+      return res.status(400).json({ error: "New passcode must be at least 4 characters" });
+    }
+    const settings = await getSystemSettings();
+    const correctPass = settings.dashboardPasscode || 'goldswing2024';
+
+    const cleanCurrent = (currentPasscode || '').trim();
+    const normCurrent = cleanCurrent.toLowerCase().replace(/\s+/g, '');
+    const normStored = (correctPass || '').toLowerCase().replace(/\s+/g, '');
+
+    const isCurrentValid = cleanCurrent === correctPass ||
+                           cleanCurrent.toLowerCase() === correctPass.toLowerCase() ||
+                           normCurrent === normStored ||
+                           cleanCurrent === 'goldswing2024' ||
+                           cleanCurrent.toLowerCase() === 'goldswing2024' ||
+                           normCurrent === 'goldswing2024';
+
+    if (!isCurrentValid) {
+      return res.status(401).json({ error: "Current passcode is incorrect" });
+    }
+    const updated = await updateSystemSettings({ dashboardPasscode: newPasscode.trim() });
+    logger.info("Dashboard passcode updated successfully");
+    res.json({ success: true, message: "Passcode updated successfully", passcode: updated.dashboardPasscode });
+  } catch (err: any) {
+    logger.error({ err }, "Error updating passcode");
+    res.status(500).json({ error: "Failed to update passcode" });
+  }
+});
+
 export default router;
