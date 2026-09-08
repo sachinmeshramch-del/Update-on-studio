@@ -3,6 +3,18 @@ import { setLatestPrice, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
 import type { OHLCCandle } from "./goldPrice.js";
 
+
+// Intercept and suppress noisy MetaApi SDK background timeout errors
+const originalConsoleError = console.error;
+console.error = (...args) => {
+    if (typeof args[0] === 'string' && args[0].includes('Error refreshing market data subscriptions job')) {
+        // Suppress harmless background timeout error when broker is disconnected
+        return;
+    }
+    originalConsoleError(...args);
+};
+
+
 export const invalidAccountBlacklist = new Set<string>();
 
 // Suppress noisy SDK internal transport warnings that do not affect functionality
