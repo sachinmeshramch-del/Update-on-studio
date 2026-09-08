@@ -7,11 +7,33 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const configPath = path.resolve(__dirname, '../../../firebase-applet-config.json');
+const candidateConfigPaths = [
+  path.resolve(process.cwd(), 'firebase-applet-config.json'),
+  path.resolve(__dirname, '../../../firebase-applet-config.json'),
+  path.resolve(__dirname, '../../firebase-applet-config.json'),
+  path.resolve(__dirname, '../firebase-applet-config.json'),
+  path.resolve(__dirname, './firebase-applet-config.json')
+];
 
 let config: any = {};
-if (fs.existsSync(configPath)) {
-  config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+if (process.env.FIREBASE_APPLET_CONFIG) {
+  try {
+    config = JSON.parse(process.env.FIREBASE_APPLET_CONFIG);
+  } catch (e) {
+    console.warn("Failed to parse FIREBASE_APPLET_CONFIG from env:", e);
+  }
+}
+
+if (!config.projectId) {
+  for (const p of candidateConfigPaths) {
+    if (fs.existsSync(p)) {
+      try {
+        config = JSON.parse(fs.readFileSync(p, 'utf8'));
+        break;
+      } catch {}
+    }
+  }
 }
 
 const app = initializeApp(config);

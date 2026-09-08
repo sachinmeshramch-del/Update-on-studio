@@ -30,15 +30,30 @@ import { initWebPush } from "./lib/pushNotifications.js";
 import { startSignalScheduler } from "./lib/signalScheduler.js";
 import { startTradeTracker } from "./lib/tradeTracker.js";
 
-const isAIStudioPreview = !!process.env.CONTROL_PLANE_PORT || !!process.env.DEFAULT_APP_PORT;
-const port = isAIStudioPreview ? 3000 : parseInt(process.env.PORT || "8080", 10);
+// Port selection:
+// 1. Google Cloud Run automatically defines K_SERVICE, K_REVISION, and PORT (default 8080).
+//    When running in Cloud Run, we MUST listen on process.env.PORT (8080).
+// 2. Google AI Studio preview environment defines CONTROL_PLANE_PORT (8000) and routes traffic to port 3000.
+const isCloudRun = !!process.env.K_SERVICE || !!process.env.K_REVISION;
+const isAIStudio = !isCloudRun && (!!process.env.CONTROL_PLANE_PORT || (!!process.env.DEFAULT_APP_PORT && !process.env.K_SERVICE));
 
-const server = app.listen(port, "0.0.0.0", (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-  logger.info({ port }, "Server listening");
+const port = isAIStudio ? 3000 : parseInt(process.env.PORT || "8080", 10);
+
+logger.info({
+  port,
+  isCloudRun,
+  isAIStudio,
+  envPort: process.env.PORT,
+  kService: process.env.K_SERVICE
+}, "Initializing HTTP server");
+
+const server = app.listen(port, "0.0.0.0", () => {
+  logger.info({ port, host: "0.0.0.0" }, "Server successfully started and listening");
+});
+
+server.on("error", (err: any) => {
+  logger.error({ err, port }, "Fatal server listen error");
+  process.exit(1);
 });
 
 // Attach WebSocket server for frontend real-time price feed
