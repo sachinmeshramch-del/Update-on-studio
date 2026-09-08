@@ -1098,7 +1098,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const structuralDist = anchorLow !== null
         ? (currentPrice - anchorLow) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 5.0), 16.0);
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.5), 8.0);
     } else if (calcDir === "SHORT") {
       const anchorHigh = (sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel)
         ? sweepRej.sweptLevel
@@ -1106,23 +1106,24 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const structuralDist = anchorHigh !== null
         ? (anchorHigh - currentPrice) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 5.0), 16.0);
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.5), 8.0);
     } else {
-      slDist = Math.min(Math.max(minAtrPadding, 5.0), 16.0);
+      slDist = Math.min(Math.max(minAtrPadding, 2.5), 8.0);
     }
 
     // Reward to Risk: 1.6:1 baseline, tightly restricted to 1.2:1 for counter-trend reversals, up to 2.5:1 when ADX > 25 indicates strong trend
     // Updated for $50-$100 day trading goal: minimum 1.5:1, baseline 2.0:1 R:R
-    const rrMultiplier = signalType === "REVERSAL" ? 1.5 : currentAdx > 25 ? 2.5 : 2.0;
+    // Dynamically scaled RR for scalping (much tighter targets to ensure high win rate)
+    const rrMultiplier = signalType === "REVERSAL" ? 1.0 : currentAdx > 25 ? 1.5 : 1.2;
     
     let tpDist = +(slDist * rrMultiplier).toFixed(2);
     
     // For RANGE trades, SL is placed tightly outside the box, and TP is placed near the opposite edge
     if (signalType === "RANGE") {
-      slDist = Math.min(Math.max(atr * 1.2, 3.0), 10.0);
+      slDist = Math.min(Math.max(atr * 1.0, 2.0), 6.0);
       const targetDist = calcDir === "LONG" 
-        ? Math.max((rangeInfo.resistance - currentPrice) * 0.9, 4.0) 
-        : Math.max((currentPrice - rangeInfo.support) * 0.9, 4.0);
+        ? Math.max((rangeInfo.resistance - currentPrice) * 0.8, 2.5) 
+        : Math.max((currentPrice - rangeInfo.support) * 0.8, 2.5);
       tpDist = +targetDist.toFixed(2);
     }
 

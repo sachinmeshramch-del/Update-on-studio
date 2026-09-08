@@ -111,8 +111,8 @@ async function runScheduledSignal(): Promise<void> {
         }
       }
       const running = await getRunningTrades();
-      if (running.some(r => r.signal === signal.signal)) {
-        logger.info({ signal: signal.signal }, "Scheduler: Suppressing signal (running trade already active)");
+      if (running.length > 0) {
+        logger.info({ runningCount: running.length, newSignal: signal.signal }, "Scheduler: Suppressing signal (a trade is already active)");
         return;
       }
     } catch (checkErr) {
