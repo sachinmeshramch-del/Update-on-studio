@@ -15,7 +15,8 @@ import { initWebPush } from "./lib/pushNotifications.js";
 import { startSignalScheduler } from "./lib/signalScheduler.js";
 import { startTradeTracker } from "./lib/tradeTracker.js";
 
-const port = 3000; // MUST BE 3000 per infrastructure constraints
+const isAIStudioPreview = !!process.env.APPLET_ID;
+const port = isAIStudioPreview ? 3000 : parseInt(process.env.PORT || "8080", 10);
 
 const server = app.listen(port, "0.0.0.0", (err) => {
   if (err) {
