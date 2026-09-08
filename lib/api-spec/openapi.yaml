@@ -81,7 +81,7 @@ paths:
                 required: [deleted]
                 properties:
                   deleted:
-                    type: integer
+                    type: number
   /history/{id}:
     delete:
       operationId: deleteSignal
@@ -382,7 +382,7 @@ components:
           type: string
         tradeStatus:
           type: string
-          enum: [RUNNING, TARGET_HIT, STOP_HIT, HOLD]
+          enum: [RUNNING, TARGET_HIT, STOP_HIT, HOLD, MANUALLY_CLOSED, CLOSED]
           description: Trade outcome status
         closedPrice:
           type: number

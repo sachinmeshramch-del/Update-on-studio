@@ -23,7 +23,7 @@ function toLocalTime(ts: string) {
   }
 }
 
-type TradeStatus  = "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD";
+type TradeStatus  = "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD" | "MANUALLY_CLOSED" | "CLOSED";
 type SignalFilter = "ALL" | "TREND_FOLLOW" | "REVERSAL";
 type OutcomeFilter = "ALL" | "WINNING" | "LOSING";
 const OUTCOME_LABELS: Record<OutcomeFilter, string> = {
@@ -77,6 +77,12 @@ function StatusBadge({ status }: { status: TradeStatus }) {
         ❌ STOP LOSS
       </span>
     );
+  if (status === "MANUALLY_CLOSED" || status === "CLOSED")
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/30 whitespace-nowrap">
+        🖐 MANUALLY CLOSED
+      </span>
+    );
   if (status === "RUNNING")
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 animate-pulse whitespace-nowrap">
@@ -104,7 +110,7 @@ function PnlCell({
   let pts: number;
   let isClosed = false;
 
-  if (status === "TARGET_HIT" || status === "STOP_HIT") {
+  if (status === "TARGET_HIT" || status === "STOP_HIT" || status === "MANUALLY_CLOSED" || status === "CLOSED") {
     pts = pnlPoints ?? 0;
     isClosed = true;
   } else {
