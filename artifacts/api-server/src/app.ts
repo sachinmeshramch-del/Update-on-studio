@@ -80,6 +80,7 @@ app.use(express.static(path.join(__dirname, "../../gold-swing-ai/dist/public")))
 app.get(/.*/, (req, res) => {
   if (req.path.startsWith('/assets/')) {
     res.status(404).send('Asset not found');
+    return;
   }
   const filePath = path.join(__dirname, "../../gold-swing-ai/dist/public/index.html");
   if (fs.existsSync(filePath)) {

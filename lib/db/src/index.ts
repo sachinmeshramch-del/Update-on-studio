@@ -16,6 +16,6 @@ if (fs.existsSync(configPath)) {
 
 const app = initializeApp(config);
 export const db = getFirestore(app, config.firestoreDatabaseId || '(default)');
-export * from './schema/index.js';
+export * from './schema/index';
 export * from './dao';
-export { updateTradeStopLoss } from './dao.js';
+export { updateTradeStopLoss } from './dao';

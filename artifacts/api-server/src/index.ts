@@ -1,3 +1,18 @@
+import fs from "node:fs";
+
+// Safely load local .env file if available without failing in Cloud Run
+try {
+  if (typeof process.loadEnvFile === "function") {
+    const candidatePaths = [".env", "../../.env", "../.env"];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        process.loadEnvFile(p);
+        break;
+      }
+    }
+  }
+} catch {}
+
 const originalConsoleError = console.error;
 console.error = (...args) => {
   if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('MetaApi websocket client closed')) {

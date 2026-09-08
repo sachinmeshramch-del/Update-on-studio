@@ -811,22 +811,264 @@ export async function executeTrade(direction: "LONG" | "SHORT", stopLoss: number
     return executeTradeOnAccount(activeAccountId, "DEMO", direction, stopLoss, takeProfit, volume);
 }
 
-export async function modifyOpenPositionsStopLoss(direction: "LONG" | "SHORT", newStopLoss: number) {
-    if (!connection) return;
+export interface BrokerPosition {
+    id: string;
+    accountId: string;
+    symbol: string;
+    type: "LONG" | "SHORT";
+    volume: number;
+    openPrice: number;
+    currentPrice: number;
+    stopLoss: number;
+    takeProfit: number;
+    profit: number;
+    time: string;
+}
+
+export interface BrokerClosedDeal {
+    id: string;
+    positionId: string;
+    accountId: string;
+    symbol: string;
+    type: "DEAL_TYPE_BUY" | "DEAL_TYPE_SELL";
+    price: number;
+    profit: number;
+    time: string;
+    reason: string;
+    comment: string;
+}
+
+async function getMetaApiInstance() {
+    if (!token) return null;
+    if (!metaApi) {
+        const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
+        metaApi = new MetaApi(token, { requestTimeout: 60, connectTimeout: 60 });
+    }
+    return metaApi;
+}
+
+export async function getOpenBrokerPositions(): Promise<BrokerPosition[]> {
+    const results: BrokerPosition[] = [];
+    if (!token) return results;
+
     try {
-        const positions = connection.terminalState?.positions || [];
+        const settings = await getSystemSettings().catch(() => ({} as any));
+        const candidates = [settings.realAccountId, settings.demoAccountId, activeAccountId];
+        const accountIds = Array.from(new Set(candidates.filter(id => Boolean(id && typeof id === 'string' && id.trim())).map(id => id!.trim())));
+
+        // 1. From active streaming connection
+        if (connection && connection.terminalState?.positions) {
+            const rawPositions = connection.terminalState.positions || [];
+            for (const pos of rawPositions) {
+                const sym = (pos.symbol || "").toUpperCase();
+                if (sym.includes("XAU") || sym.includes("GOLD")) {
+                    const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
+                    results.push({
+                        id: String(pos.id),
+                        accountId: activeAccountId || "",
+                        symbol: pos.symbol,
+                        type: isBuy ? "LONG" : "SHORT",
+                        volume: pos.volume || 0.01,
+                        openPrice: pos.openPrice || 0,
+                        currentPrice: pos.currentPrice || pos.openPrice || 0,
+                        stopLoss: pos.stopLoss || 0,
+                        takeProfit: pos.takeProfit || 0,
+                        profit: pos.profit || 0,
+                        time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
+                    });
+                }
+            }
+        }
+
+        // 2. From RPC for configured accounts not already queried
+        const instance = await getMetaApiInstance();
+        if (instance) {
+            for (const accId of accountIds) {
+                if (accId === activeAccountId && results.length > 0) continue;
+                try {
+                    const account = await instance.metatraderAccountApi.getAccount(accId);
+                    if (account.state === 'DEPLOYED') {
+                        const rpc = account.getRPCConnection();
+                        await rpc.connect();
+                        try {
+                            await rpc.waitSynchronized({ timeoutInSeconds: 4 });
+                        } catch {}
+                        const rpcPositions = await rpc.getPositions();
+                        for (const pos of (rpcPositions || [])) {
+                            const sym = (pos.symbol || "").toUpperCase();
+                            if (sym.includes("XAU") || sym.includes("GOLD")) {
+                                const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === 0;
+                                if (!results.some(r => r.id === String(pos.id))) {
+                                    results.push({
+                                        id: String(pos.id),
+                                        accountId: accId,
+                                        symbol: pos.symbol,
+                                        type: isBuy ? "LONG" : "SHORT",
+                                        volume: pos.volume || 0.01,
+                                        openPrice: pos.openPrice || 0,
+                                        currentPrice: pos.currentPrice || pos.openPrice || 0,
+                                        stopLoss: pos.stopLoss || 0,
+                                        takeProfit: pos.takeProfit || 0,
+                                        profit: pos.profit || 0,
+                                        time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
+                                    });
+                                }
+                            }
+                        }
+                        setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
+                    }
+                } catch {}
+            }
+        }
+    } catch (err: any) {
+        logger.debug({ err: err?.message || err }, "getOpenBrokerPositions error");
+    }
+
+    return results;
+}
+
+export async function getRecentlyClosedBrokerDeals(since: Date): Promise<BrokerClosedDeal[]> {
+    const results: BrokerClosedDeal[] = [];
+    if (!token) return results;
+
+    try {
+        const settings = await getSystemSettings().catch(() => ({} as any));
+        const candidates = [settings.realAccountId, settings.demoAccountId, activeAccountId];
+        const accountIds = Array.from(new Set(candidates.filter(id => Boolean(id && typeof id === 'string' && id.trim())).map(id => id!.trim())));
+
+        const instance = await getMetaApiInstance();
+        if (!instance) return results;
+
+        for (const accId of accountIds) {
+            try {
+                const account = await instance.metatraderAccountApi.getAccount(accId);
+                if (account.state === 'DEPLOYED') {
+                    const rpc = account.getRPCConnection();
+                    await rpc.connect();
+                    try {
+                        await rpc.waitSynchronized({ timeoutInSeconds: 4 });
+                    } catch {}
+                    const res = await rpc.getDealsByTimeRange(since, new Date());
+                    const deals = res.deals || res || [];
+                    for (const d of deals) {
+                        const sym = (d.symbol || "").toUpperCase();
+                        if ((sym.includes("XAU") || sym.includes("GOLD")) && d.entryType === "DEAL_ENTRY_OUT") {
+                            results.push({
+                                id: String(d.id),
+                                positionId: String(d.positionId),
+                                accountId: accId,
+                                symbol: d.symbol,
+                                type: d.type,
+                                price: d.price,
+                                profit: d.profit,
+                                time: d.time ? new Date(d.time).toISOString() : new Date().toISOString(),
+                                reason: d.reason || "",
+                                comment: d.comment || d.brokerComment || ""
+                            });
+                        }
+                    }
+                    setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
+                }
+            } catch {}
+        }
+    } catch (err: any) {
+        logger.debug({ err: err?.message || err }, "getRecentlyClosedBrokerDeals error");
+    }
+
+    return results;
+}
+
+export async function closeBrokerPosition(positionId: string, accountId?: string): Promise<boolean> {
+    if (!token || !positionId) return false;
+    try {
+        if (connection && typeof connection.closePosition === 'function') {
+            try {
+                await connection.closePosition(positionId);
+                logger.info({ positionId }, "[MetaApi Execution] Position closed on MT5 via streaming connection");
+                return true;
+            } catch (err: any) {
+                logger.debug({ positionId, err: err?.message }, "[MetaApi] Streaming closePosition failed, falling back to RPC...");
+            }
+        }
+
+        const settings = await getSystemSettings().catch(() => ({} as any));
+        const targetAccId = accountId || activeAccountId || settings.realAccountId || settings.demoAccountId;
+        if (!targetAccId) return false;
+
+        const instance = await getMetaApiInstance();
+        if (!instance) return false;
+
+        const account = await instance.metatraderAccountApi.getAccount(targetAccId.trim());
+        const rpc = account.getRPCConnection();
+        await rpc.connect();
+        await rpc.waitSynchronized({ timeoutInSeconds: 4 });
+        await rpc.closePosition(positionId);
+        logger.info({ positionId, accountId: targetAccId }, "[MetaApi Execution] Position closed on MT5 via RPC");
+        setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
+        return true;
+    } catch (err: any) {
+        logger.warn({ positionId, err: err?.message || String(err) }, "[MetaApi Execution] Failed to close position on broker");
+        return false;
+    }
+}
+
+export async function closeOpenBrokerPositionsForSignal(direction: "LONG" | "SHORT"): Promise<number> {
+    let closed = 0;
+    try {
+        const positions = await getOpenBrokerPositions();
         for (const pos of positions) {
-            const isMatch = (direction === "LONG" && (pos.type === "POSITION_TYPE_BUY" || pos.type === 0)) ||
-                            (direction === "SHORT" && (pos.type === "POSITION_TYPE_SELL" || pos.type === 1));
-            if (isMatch && (pos.symbol === SYMBOL || pos.symbol === "XAUUSD")) {
-                if (typeof connection.modifyPosition === "function") {
-                    await connection.modifyPosition(pos.id, newStopLoss, pos.takeProfit);
-                    logger.info({ positionId: pos.id, newStopLoss, symbol: pos.symbol }, "[MetaApi Execution] Updated open position trailing Stop Loss on MT5");
+            if (pos.type === direction) {
+                const ok = await closeBrokerPosition(pos.id, pos.accountId);
+                if (ok) closed++;
+            }
+        }
+    } catch (err: any) {
+        logger.warn({ err: err?.message || err }, "closeOpenBrokerPositionsForSignal failed");
+    }
+    return closed;
+}
+
+export async function modifyOpenPositionsStopLoss(direction: "LONG" | "SHORT", newStopLoss: number) {
+    if (!token) return;
+    try {
+        const positions = await getOpenBrokerPositions();
+        for (const pos of positions) {
+            if (pos.type === direction) {
+                if (pos.stopLoss > 0 && Math.abs(pos.stopLoss - newStopLoss) < 0.05) {
+                    continue;
+                }
+
+                let modified = false;
+                if (connection && activeAccountId === pos.accountId && typeof connection.modifyPosition === 'function') {
+                    try {
+                        await connection.modifyPosition(pos.id, newStopLoss, pos.takeProfit);
+                        modified = true;
+                        logger.info({ positionId: pos.id, newStopLoss, symbol: pos.symbol }, "[MetaApi Execution] Updated open position trailing Stop Loss on MT5 via streaming");
+                    } catch (streamErr: any) {
+                        logger.debug({ positionId: pos.id, err: streamErr?.message }, "[MetaApi] Streaming modifyPosition fallback to RPC");
+                    }
+                }
+
+                if (!modified) {
+                    try {
+                        const instance = await getMetaApiInstance();
+                        if (instance) {
+                            const account = await instance.metatraderAccountApi.getAccount(pos.accountId);
+                            const rpc = account.getRPCConnection();
+                            await rpc.connect();
+                            await rpc.waitSynchronized({ timeoutInSeconds: 4 });
+                            await rpc.modifyPosition(pos.id, newStopLoss, pos.takeProfit);
+                            logger.info({ positionId: pos.id, newStopLoss, symbol: pos.symbol, accountId: pos.accountId }, "[MetaApi Execution] Updated open position trailing Stop Loss on MT5 via RPC");
+                            setTimeout(() => { try { rpc.close(); } catch {} }, 4000);
+                        }
+                    } catch (rpcErr: any) {
+                        logger.warn({ positionId: pos.id, err: rpcErr?.message }, "[MetaApi Execution] Failed to modify position Stop Loss on MT5");
+                    }
                 }
             }
         }
     } catch (err: any) {
-        logger.warn({ err: err.message || String(err) }, "[MetaApi Execution] Failed to update position Stop Loss on MT5");
+        logger.warn({ err: err?.message || String(err) }, "[MetaApi Execution] Failed to update position Stop Loss on MT5");
     }
 }
 

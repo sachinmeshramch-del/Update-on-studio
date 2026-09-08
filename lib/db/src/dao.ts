@@ -1,5 +1,5 @@
 import { db } from './index';
-import { Signal, InsertSignal, PushSubscription } from './schema/index.js';
+import { Signal, InsertSignal, PushSubscription } from './schema/index';
 import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, deleteDoc, orderBy, limit, writeBatch } from 'firebase/firestore';
 
 export async function insertPushSubscription(endpoint: string, p256dh: string, auth: string): Promise<void> {

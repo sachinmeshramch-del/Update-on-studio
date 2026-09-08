@@ -5,7 +5,7 @@ import { startTradeTracker } from "../lib/tradeTracker.js";
 import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { getMetaApiStatus } from "../lib/metaApiFeed.js";
+import { getMetaApiStatus, closeOpenBrokerPositionsForSignal } from "../lib/metaApiFeed.js";
 import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
@@ -264,6 +264,13 @@ router.post("/signals/:id/close", async (req, res) => {
     const isLong = signal.signal === "LONG";
     const pnl = isLong ? currentPrice - signal.entryPrice : signal.entryPrice - currentPrice;
     
+    // Close corresponding open position on MT5 broker if any
+    try {
+      await closeOpenBrokerPositionsForSignal(signal.signal as "LONG" | "SHORT");
+    } catch (brokerErr) {
+      req.log.warn({ err: brokerErr }, "Failed to close open broker position on manual close");
+    }
+
     await updateTradeStatus(id, "MANUALLY_CLOSED", currentPrice, Number(pnl.toFixed(2)));
     
     res.json({ success: true, closedPrice: currentPrice, pnl: Number(pnl.toFixed(2)) });
