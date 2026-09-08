@@ -1,37 +1,21 @@
 {
-  "name": "workspace",
+  "name": "gold-swing-ai-monorepo",
   "version": "0.0.0",
-  "license": "MIT",
-  "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "start": "npm run start --workspace=@workspace/api-server",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present",
-    "dev": "concurrently \"npm run build:watch --workspace=@workspace/gold-swing-ai\" \"npm run dev --workspace=@workspace/api-server\""
-  },
   "private": true,
-  "devDependencies": {
-    "concurrently": "^10.0.5",
-    "prettier": "^3.8.1",
-    "typescript": "~5.9.2"
-  },
   "workspaces": [
     "artifacts/api-server",
     "artifacts/gold-swing-ai",
-    "lib/*",
-    "scripts"
+    "lib/api-client-react",
+    "lib/api-spec",
+    "lib/api-zod",
+    "lib/db"
   ],
+  "scripts": {
+    "dev": "concurrently \"npm run build:watch --workspace=@workspace/gold-swing-ai\" \"npm run dev --workspace=@workspace/api-server\"",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspace=@workspace/api-server"
+  },
   "dependencies": {
-    "@grpc/grpc-js": "^1.14.4",
-    "@grpc/proto-loader": "^0.8.1",
-    "firebase": "^12.18.0",
-    "puppeteer": "^25.9.0"
-  },
-  "description": "",
-  "main": "check.js",
-  "directories": {
-    "lib": "lib"
-  },
-  "keywords": [],
-  "author": ""
+    "concurrently": "^8.2.2"
+  }
 }
