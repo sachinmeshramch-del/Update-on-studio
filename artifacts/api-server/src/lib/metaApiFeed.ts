@@ -1,5 +1,5 @@
 import { getSystemSettings } from "@workspace/db";
-import { setLatestPrice, type LivePrice } from "./priceEvents.js";
+import { setLatestPrice, getLatestPrice, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
 import type { OHLCCandle } from "./goldPrice.js";
 import { EventEmitter } from "events";
@@ -14,7 +14,7 @@ export interface BrokerPosition {
     currentPrice: number;
     stopLoss: number;
     takeProfit: number;
-    profit: number;
+    profit: number; commission?: number; swap?: number;
     time: string;
 }
 
@@ -25,7 +25,8 @@ export interface BrokerClosedDeal {
     symbol: string;
     type: "DEAL_TYPE_BUY" | "DEAL_TYPE_SELL";
     price: number;
-    profit: number;
+    openPrice?: number;
+    profit: number; commission?: number; swap?: number;
     time: string;
     reason: string;
     comment: string;
@@ -36,6 +37,8 @@ brokerEvents.setMaxListeners(50);
 
 // In-memory real-time position cache updated by streaming events (<1ms access)
 export const liveBrokerPositions = new Map<string, BrokerPosition>();
+// Historical open prices mapping for closed deals reconciliation (positionId -> openPrice)
+export const historicalOpenPrices = new Map<string, number>();
 // In-memory real-time closed deals cache updated by streaming events (<1ms access)
 export const liveClosedDeals: BrokerClosedDeal[] = [];
 
@@ -57,9 +60,8 @@ export function isPositionInClosureSequence(positionId: string): boolean {
     if (record) {
         if (Date.now() - record.timestamp < 45_000) {
             return true;
-        } else {
-            pendingClosurePositions.delete(idStr);
         }
+        pendingClosurePositions.delete(idStr);
     }
 
     // 2. Check if deal already exited
@@ -67,7 +69,6 @@ export function isPositionInClosureSequence(positionId: string): boolean {
     if (closedDeal) {
         return true;
     }
-
     return false;
 }
 
@@ -239,7 +240,7 @@ export async function stopMetaApiFeed() {
         try {
             logger.info("Disconnecting current MetaApi connection...");
             await connection.close();
-        } catch(e) {
+        } catch (e: any) {
             logger.error({err: e}, "Error closing MetaApi connection");
         }
         connection = null;
@@ -249,6 +250,7 @@ export async function stopMetaApiFeed() {
     isListenerAttached = false;
     isConnecting = false;
 }
+
 
 /**
  * Updates in-memory candlestick data on every incoming live tick
@@ -281,7 +283,6 @@ function updateLiveCandles(price: number, timestampMs: number) {
                 volume: 1
             });
             if (candles.length > 500) candles.shift();
-        } else {
             // Update current forming candle
             lastCandle.high = Math.max(lastCandle.high, price);
             lastCandle.low = Math.min(lastCandle.low, price);
@@ -310,12 +311,10 @@ async function getOrInitRpcConnection(accountId: string) {
         existing.lastUsed = Date.now();
         return existing.rpc;
     }
-
     const { default: MetaApi } = await import("metaapi.cloud-sdk/esm-node");
     if (!metaApi) {
-        metaApi = new MetaApi(token, { requestTimeout: 30, connectTimeout: 30 });
+        metaApi = new MetaApi(token as string, { requestTimeout: 30, connectTimeout: 30 });
     }
-
     const account = await metaApi.metatraderAccountApi.getAccount(trimmed);
     if (account.state !== 'DEPLOYED') {
         await Promise.race([
@@ -323,7 +322,6 @@ async function getOrInitRpcConnection(accountId: string) {
             new Promise((_, reject) => setTimeout(() => reject(new Error("Deploy timeout")), 4000))
         ]).catch(() => {});
     }
-
     const rpc = account.getRPCConnection();
     await Promise.race([
         rpc.connect(),
@@ -366,7 +364,7 @@ export async function startMetaApiFeed() {
         const rawCandidates = [primaryAccountId, secondaryAccountId, (settings as any).metaAccountId, process.env.META_ACCOUNT_ID];
         const candidateAccountIds = Array.from(new Set(
             rawCandidates
-                .filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))
+                .filter((id): id is string => Boolean(id && isValidAccountId(id) && true))
                 .map(id => id.trim())
         ));
 
@@ -374,9 +372,8 @@ export async function startMetaApiFeed() {
             const hasInvalidIds = rawCandidates.some(id => Boolean(id && typeof id === 'string' && id.trim() && !isValidAccountId(id)));
             if (hasInvalidIds) {
                 logger.warn("Configured MetaApi Account ID has an invalid format. Please enter a valid 36-character UUID in Settings.");
-            } else {
-                logger.warn("META_API_TOKEN and account ID (in settings) must be set. Waiting for user to provide them in Settings.");
             }
+            logger.warn("META_API_TOKEN and account ID (in settings) must be set. Waiting for user to provide them in Settings.");
             throw new Error("Missing or invalid MetaApi credentials");
         }
 
@@ -385,7 +382,6 @@ export async function startMetaApiFeed() {
             metaApi = new MetaApi(token, {
                 requestTimeout: 60,
                 connectTimeout: 60,
-                
             });
         }
 
@@ -397,7 +393,7 @@ export async function startMetaApiFeed() {
         if (connection) {
             try {
                 await connection.close();
-            } catch {}
+            } catch(e) {}
             connection = null;
         }
 
@@ -413,7 +409,7 @@ export async function startMetaApiFeed() {
                 
                 try {
                     await account.waitConnected(60);
-                } catch (waitErr: any) {
+                } catch(waitErr: any) {
                     logger.warn({ accountId, err: waitErr?.message }, "waitConnected warning/timeout, continuing...");
                 }
                 
@@ -425,7 +421,7 @@ export async function startMetaApiFeed() {
                     if (!isSync) {
                         await streamingConn.waitSynchronized({ timeoutInSeconds: 15 });
                     }
-                } catch (syncErr: any) {
+                } catch(syncErr: any) {
                     if (!syncErr?.message?.includes('already running')) {
                         // Silently proceed on harmless validation or timeout errors during sync
                         logger.debug({ syncErr: syncErr?.message }, "Streaming synchronization in progress, proceeding...");
@@ -502,26 +498,28 @@ export async function startMetaApiFeed() {
                                             time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
                                         };
                                         liveBrokerPositions.set(String(pos.id), updated);
+                                        historicalOpenPrices.set(String(pos.id), updated.openPrice);
                                         brokerEvents.emit("positionUpdated", updated);
                                         logger.debug({ positionId: pos.id, type: updated.type, openPrice: updated.openPrice, sl: updated.stopLoss, tp: updated.takeProfit }, "[MetaApi Streaming] Position updated in real time");
                                     }
                                 };
                             }
                             if (prop === 'onPositionRemoved') {
-                                return (instanceIndex: string, positionId: string) => {
-                                    const idStr = String(positionId);
-                                    markPositionClosing(idStr, "POSITION_REMOVED_STREAMING");
-                                    const removedPos = liveBrokerPositions.get(idStr);
-                                    liveBrokerPositions.delete(idStr);
-                                    logger.info({ positionId: idStr }, "[MetaApi Streaming] Position removed/closed on MT5 in real time");
-                                    brokerEvents.emit("positionRemoved", { positionId: idStr, accountId: connectedAccountId || activeAccountId || "", position: removedPos });
+                                return (instanceIndex: string, pos: any) => {
+                                    if (!pos) return;
+                                    const sym = (pos.symbol || "").toUpperCase();
+                                    if (sym.includes("XAU") || sym.includes("GOLD")) {
+                                        const posIdStr = String(pos.id);
+                                        liveBrokerPositions.delete(posIdStr);
+                                        brokerEvents.emit("positionRemoved", { id: posIdStr });
+                                        logger.debug({ positionId: posIdStr }, "[MetaApi Streaming] Position removed from MT5 terminal");
+                                    }
                                 };
                             }
                             if (prop === 'onDealAdded') {
                                 return (instanceIndex: string, deal: any) => {
                                     if (!deal) return;
-                                    const sym = (deal.symbol || "").toUpperCase();
-                                    if ((sym.includes("XAU") || sym.includes("GOLD")) && (deal.entryType === "DEAL_ENTRY_OUT" || deal.entryType === 1)) {
+                                    if (deal.entryType === 'DEAL_ENTRY_OUT' || deal.entryType === 1) {
                                         const posIdStr = String(deal.positionId);
                                         markPositionClosing(posIdStr, `DEAL_ENTRY_OUT_${deal.id}`);
                                         const closedDeal: BrokerClosedDeal = {
@@ -531,14 +529,15 @@ export async function startMetaApiFeed() {
                                             symbol: deal.symbol,
                                             type: deal.type,
                                             price: deal.price,
-                                            profit: deal.profit,
+                                            openPrice: historicalOpenPrices.get(posIdStr),
+                                            profit: deal.profit, commission: deal.commission, swap: deal.swap,
                                             time: deal.time ? new Date(deal.time).toISOString() : new Date().toISOString(),
                                             reason: deal.reason || "",
                                             comment: deal.comment || deal.brokerComment || ""
                                         };
                                         liveClosedDeals.unshift(closedDeal);
                                         if (liveClosedDeals.length > 100) liveClosedDeals.pop();
-                                        logger.info({ dealId: deal.id, positionId: deal.positionId, price: deal.price, profit: deal.profit, reason: deal.reason, comment: deal.comment }, "[MetaApi Streaming] Exit deal executed on MT5 (TP/SL/Close)");
+                                        logger.info({ dealId: deal.id, positionId: deal.positionId, price: deal.price, profit: deal.profit, commission: deal.commission, swap: deal.swap, reason: deal.reason, comment: deal.comment }, "[MetaApi Streaming] Exit deal executed on MT5 (TP/SL/Close)");
                                         brokerEvents.emit("dealClosed", closedDeal);
                                     }
                                 };
@@ -556,7 +555,7 @@ export async function startMetaApiFeed() {
                                     // Re-subscribe symbol to guarantee continuous streaming
                                     try {
                                         await streamingConn.subscribeToMarketData(SYMBOL);
-                                    } catch {}
+                                    } catch (e: any) {}
                                 };
                             }
                             return () => {};
@@ -581,8 +580,8 @@ export async function startMetaApiFeed() {
                         subscribed = true;
                         logger.info(`Subscribed to Gold symbol: ${sym}`);
                         break;
-                    } catch (e: any) {
-                        lastSubError = e;
+                    } catch (err: any) {
+                        lastSubError = err;
                         continue;
                     }
                 }
@@ -593,11 +592,14 @@ export async function startMetaApiFeed() {
                         const rpc = account.getRPCConnection();
                         await rpc.connect();
                         try {
-                            const isRpcSync = typeof rpc.isSynchronized === 'function' ? rpc.isSynchronized() : false;
-                            if (!isRpcSync) {
+                            const isSync = typeof rpc.isSynchronized === 'function' ? rpc.isSynchronized() : false;
+                            if (!isSync) {
                                 await rpc.waitSynchronized({ timeoutInSeconds: 10 });
                             }
-                        } catch {}
+                        } catch(rpcSyncErr: any) {
+                            logger.debug({ syncErr: rpcSyncErr?.message }, "RPC synchronization issue, proceeding...");
+                        }
+                        
                         const allSymbols: string[] = await rpc.getSymbols();
                         
                         // Strict USD Gold symbols first (exclude cross pairs like XAUJPY, XAUEUR, XAUGBP, etc.)
@@ -619,10 +621,9 @@ export async function startMetaApiFeed() {
                                 if (!aIsUsd && bIsUsd) return 1;
                                 return a.localeCompare(b);
                             });
-                        
+                            
                         if (discovered.length > 0) {
                             logger.info(`Discovered potential Gold symbols (ordered by priority): ${discovered.slice(0, 5).join(', ')}`);
-                            
                             for (const sym of discovered) {
                                 try {
                                     await streamingConn.subscribeToMarketData(sym);
@@ -646,14 +647,13 @@ export async function startMetaApiFeed() {
                 }
 
                 connection = streamingConn;
-                connectedAccount = account;
                 activeAccountObj = account;
-                connectedAccountId = accountId;
                 activeAccountId = accountId;
+                connectedAccount = account;
+                connectedAccountId = accountId;
                 metaApiStatus = "connected";
-                lastPriceReceivedAt = Date.now();
-                logger.info(`Successfully subscribed to MetaApi market data for ${SYMBOL} on account ${connectedAccountId}`);
-                reconnectDelay = 5000;
+                
+                logger.info({ accountId, symbol: SYMBOL }, "Successfully established MetaApi streaming connection");
                 
                 // Pre-populate in-memory positions from terminalState
                 try {
@@ -680,7 +680,7 @@ export async function startMetaApiFeed() {
                     if (liveBrokerPositions.size > 0) {
                         logger.info({ positionCount: liveBrokerPositions.size }, "[MetaApi Feed] Initialized in-memory open broker positions from terminalState");
                     }
-                } catch {}
+                } catch(e) {}
 
                 // Emit initial price if available in terminalState
                 try {
@@ -705,7 +705,6 @@ export async function startMetaApiFeed() {
                         };
                         setLatestPrice(live);
                         updateLiveCandles(midPrice, lastPriceReceivedAt);
-                    } else {
                         try {
                             const candles = await account.getHistoricalCandles(SYMBOL, "1m", undefined, 1);
                             if (candles && candles.length > 0) {
@@ -730,25 +729,23 @@ export async function startMetaApiFeed() {
                                 updateLiveCandles(midPrice, lastPriceReceivedAt);
                                 logger.info(`Bootstrapped initial live price to ${midPrice} from recent candle`);
                             }
-                        } catch (histErr) {
+                        } catch (histErr: any) {
                              logger.warn({err: histErr}, "Could not bootstrap initial price from historical candles");
                         }
                     }
-                } catch (e) {
+                } catch (e: any) {
                     logger.warn({err: e}, "Could not fetch initial price from terminalState");
                 }
-
+                
                 break;
             } catch (accErr: any) {
                 lastConnError = accErr;
                 if ((accErr.message || String(accErr)).includes('does not exist') || (accErr.message || String(accErr)).includes('NotFoundError')) {
                     invalidAccountBlacklist.add(accountId);
-                    logger.debug({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
-                } else {
-                    logger.debug({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
                 }
+                logger.debug({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
             }
-        }
+        } // end for
 
         if (!connectedAccount || !connection || metaApiStatus !== "connected") {
             throw lastConnError || new Error("Could not connect to any configured MetaApi account");
@@ -756,20 +753,20 @@ export async function startMetaApiFeed() {
 
         // Start active watchdog heartbeat timer
         startWatchdog();
-
     } catch (err: any) {
         metaApiStatus = "disconnected";
         const msg = err?.message || String(err || "");
+        
         if (msg.includes('Cannot subscribe to market data for symbol') || msg.includes('symbol does not exist') || msg.includes('No matching Gold symbol')) {
             logger.warn("MetaApi Feed Notice: Gold symbol not active or not subscribed on the configured broker account. Live price feeds continue via primary market sources.");
             reconnectDelay = 60000;
         } else if (msg.includes('not connected to broker yet')) {
             logger.warn("MetaApi account is not connected to broker yet. Waiting for broker connection...");
             reconnectDelay = 20000;
-        } else if (err.name === 'ForbiddenError' || msg.includes('top up your account') || msg.includes('not deployed')) {
+        } else if (msg.includes('requires deployment')) {
             logger.warn("MetaApi Account Notice: Account requires deployment or balance verification in MetaApi dashboard.");
             reconnectDelay = 120000;
-        } else if (err.name === 'NotFoundError' || msg.includes('Account not found')) {
+        } else if (msg.includes('does not exist') || msg.includes('NotFoundError')) {
             logger.warn("MetaApi Account Notice: The Account ID provided does not exist on your MetaApi profile. Please verify your Account ID in Settings.");
             reconnectDelay = 120000;
         } else if (msg.includes('Missing or invalid MetaApi credentials')) {
@@ -779,12 +776,12 @@ export async function startMetaApiFeed() {
             logger.warn({ reason: msg }, "MetaApi feed in standby; will retry periodically");
             reconnectDelay = 5000;
         }
+        
         scheduleReconnect();
     } finally {
         isConnecting = false;
     }
 }
-
 function scheduleReconnect() {
     if (reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
@@ -810,7 +807,7 @@ function startWatchdog() {
             logger.warn({ secondsSinceLastTick }, "[Watchdog] MetaApi tick stream stalled. Initiating auto-healing reconnection...");
             metaApiStatus = "disconnected";
             await startMetaApiFeed();
-        } else if (metaApiStatus === "disconnected" && !isConnecting && !reconnectTimer) {
+        } else if (metaApiStatus !== "connected" && !isConnecting) {
             logger.info("[Watchdog] MetaApi disconnected. Triggering reconnect...");
             await startMetaApiFeed();
         }
@@ -835,9 +832,9 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
     // 2. Check historical cache
     const cached = candleCache.get(cacheKey);
     if (cached && (now - cached.timestamp < HISTORICAL_CACHE_TTL) && cached.data.length > 0) {
-        return cached.data; 
+        return cached.data;
     }
-    
+       
     // 3. If a fetch is already in flight, reuse the exact same promise (deduplication)
     if (cached && cached.promise) {
         return cached.promise;
@@ -858,7 +855,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
         settings.realAccountId,
         settings.demoAccountId,
         process.env.META_ACCOUNT_ID
-    ].filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))));
+    ].filter((id): id is string => Boolean(id && isValidAccountId(id) && true))));
 
     if (accountIdsToTry.length === 0) {
         throw new Error("No valid MetaApi account ID configured in settings");
@@ -900,7 +897,6 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                                     close: c.close,
                                     volume: c.tickVolume || c.volume || 1
                                 }));
-
                                 // Populate live store and cache
                                 liveCandleStore[tf] = [...formatted];
                                 candleCache.set(cacheKey, { timestamp: Date.now(), data: formatted });
@@ -922,12 +918,10 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                     lastErr = accErr;
                 }
             }
-
             if (cached && cached.data.length > 0) {
                 logger.warn("Serving cached historical candles after temporary MetaApi REST delay");
                 return cached.data;
             }
-
             throw lastErr || new Error("Failed to fetch historical candles from MetaApi");
         } finally {
             const finalCache = candleCache.get(cacheKey);
@@ -936,11 +930,9 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
             }
         }
     })();
-
-    candleCache.set(cacheKey, { timestamp: now, data: cached?.data || [], promise: fetchPromise });
+    candleCache.set(cacheKey, { timestamp: Date.now(), data: [], promise: fetchPromise });
     return fetchPromise;
 }
-
 export interface OrderVerificationOptions {
     accountId?: string;
     orderId?: string;
@@ -991,8 +983,6 @@ export async function verifyOrderStatusBeforeUpdate(
                 reason: "Position is currently undergoing closure or has already been closed"
             };
         }
-
-        // 2. Check if an exit deal has closed this position in the deals cache
         const matchingDeal = liveClosedDeals.find(d => String(d.positionId) === String(positionId));
         if (matchingDeal) {
             markPositionClosing(positionId, `EXIT_DEAL_${matchingDeal.id}`);
@@ -1006,7 +996,6 @@ export async function verifyOrderStatusBeforeUpdate(
                 reason: `Position already closed via deal ${matchingDeal.id}`
             };
         }
-
         // 3. Inspect streaming terminalState if available
         if (connection && (!targetAccountId || targetAccountId === activeAccountId)) {
             const rawPositions = connection.terminalState?.positions || [];
@@ -1029,7 +1018,6 @@ export async function verifyOrderStatusBeforeUpdate(
                     reason: `In-flight close order ${closeOrder.id} active in broker queue`
                 };
             }
-
             // B. Check if order is still in the middle of filling
             const matchingOrder = rawOrders.find((o: any) => 
                 (targetOrderId && String(o.id) === String(targetOrderId)) || 
@@ -1056,8 +1044,7 @@ export async function verifyOrderStatusBeforeUpdate(
                         reason: `Order failed with state ${matchingOrder.state}`
                     };
                 }
-            }
-
+                }
             // C. Check if position exists and is confirmed active with valid open price
             const foundRawPos = rawPositions.find((p: any) => String(p.id) === String(positionId));
             if (foundRawPos && (foundRawPos.openPrice > 0 || foundRawPos.volume > 0)) {
@@ -1088,7 +1075,7 @@ export async function verifyOrderStatusBeforeUpdate(
                 };
             }
         }
-
+        
         // 4. Check in-memory position cache
         const cachedPos = liveBrokerPositions.get(positionId);
         if (cachedPos && cachedPos.openPrice > 0) {
@@ -1102,7 +1089,7 @@ export async function verifyOrderStatusBeforeUpdate(
                 currentTakeProfit: cachedPos.takeProfit
             };
         }
-
+        
         // 5. If account is RPC or streaming has not populated position yet, check via RPC
         if (targetAccountId && targetAccountId !== activeAccountId) {
             try {
@@ -1141,11 +1128,9 @@ export async function verifyOrderStatusBeforeUpdate(
                 logger.debug({ err: rpcErr?.message }, "[Verify-before-Update] RPC verification tick note");
             }
         }
-
         // Wait for next lightweight polling interval
         await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
-
     logger.warn(
         { positionId, elapsedMs: Date.now() - startTime },
         "[Verify-before-Update] Timeout verifying position status; aborting update to prevent race conditions"
@@ -1195,34 +1180,83 @@ export async function safeModifyPositionSLTP(params: {
     let targetSL = params.stopLoss !== undefined ? Number(params.stopLoss.toFixed(2)) : (pos ? pos.stopLoss : 0);
     let targetTP = params.takeProfit !== undefined ? Number(params.takeProfit.toFixed(2)) : (pos ? pos.takeProfit : 0);
 
-    // Phase 2: Slippage Calibrated Stops (if intendedEntryPrice is provided)
-    if (intendedEntryPrice && pos && pos.openPrice) {
-        const slippage = Number((pos.openPrice - intendedEntryPrice).toFixed(2));
-        if (Math.abs(slippage) >= 0.15 && params.stopLoss && params.takeProfit) {
-            const slDist = Math.abs(intendedEntryPrice - params.stopLoss);
-            const tpDist = Math.abs(intendedEntryPrice - params.takeProfit);
-            const dir = direction || pos.type;
-            targetSL = dir === "LONG" 
-                ? Number((pos.openPrice - slDist).toFixed(2)) 
-                : Number((pos.openPrice + slDist).toFixed(2));
-            targetTP = dir === "LONG" 
-                ? Number((pos.openPrice + tpDist).toFixed(2)) 
-                : Number((pos.openPrice - tpDist).toFixed(2));
-
-            logger.info(
-                { positionId, actualFill: pos.openPrice, intendedEntryPrice, slippage, targetSL, targetTP },
-                "[Verify-before-Update] Recalibrated SL/TP to verified actual fill price"
-            );
-        }
-    }
 
     // Check if target SL/TP are effectively identical to current stops (avoid spamming broker)
     if (pos && targetSL > 0 && Math.abs(pos.stopLoss - targetSL) < 0.05 && 
         (targetTP === 0 || Math.abs(pos.takeProfit - targetTP) < 0.05)) {
         logger.debug({ positionId, currentSL: pos.stopLoss, targetSL }, "[Verify-before-Update] Stops already match target; skipping modification");
         return { success: true, reason: "ALREADY_MATCHED", calibratedSL: targetSL, calibratedTP: targetTP };
-    }
 
+        }
+    // Phase 2.5: Pre-flight Broker StopsLevel and Market Distance Validation
+    const sym = pos?.symbol || SYMBOL || "GOLD";
+    const termSpec = connection?.terminalState?.specification(sym);
+    const point = termSpec?.point ?? 0.01;
+    const digits = termSpec?.digits ?? 2;
+    const stopsLevelPoints = termSpec?.stopsLevel ?? 30; // broker stops level in points
+    const brokerMinDist = stopsLevelPoints * point;
+
+    const termPrice = connection?.terminalState?.price(sym);
+    const live = getLatestPrice();
+    const currentBid = termPrice?.bid ?? live?.bid;
+    const currentAsk = termPrice?.ask ?? live?.ask;
+    const liveSpread = termPrice ? Number((termPrice.ask - termPrice.bid).toFixed(digits)) : (live?.spread ?? 0.50);
+    const minStopBuffer = Number(Math.max(brokerMinDist, liveSpread * 1.2, 0.40).toFixed(digits));
+
+    if (targetSL > 0) targetSL = Number(targetSL.toFixed(digits));
+    if (targetTP > 0) targetTP = Number(targetTP.toFixed(digits));
+
+    const effectiveDir = direction || pos?.type || "LONG";
+
+    if (effectiveDir === "LONG") {
+        if (targetSL > 0 && currentBid !== undefined) {
+            const maxAllowedSL = Number((currentBid - minStopBuffer).toFixed(digits));
+            if (targetSL > maxAllowedSL) {
+                logger.info(
+                    { positionId, targetSL, maxAllowedSL, currentBid, minStopBuffer, reason },
+                    "[Verify-before-Update] Target SL exceeds broker maximum allowed SL for LONG. Clamping to maxAllowedSL to ensure MT5 acceptance."
+                );
+                targetSL = maxAllowedSL;
+                if (pos && targetSL <= pos.stopLoss) {
+                    return { success: false, reason: "PRICE_TOO_CLOSE_TO_STOP" };
+                }
+            }
+        }
+        if (targetTP > 0 && currentAsk !== undefined) {
+            const minAllowedTP = Number((currentAsk + minStopBuffer).toFixed(digits));
+            if (targetTP < minAllowedTP) {
+                logger.info(
+                    { positionId, targetTP, minAllowedTP, currentAsk, minStopBuffer, reason },
+                    "[Verify-before-Update] Target TP is below broker minimum allowed TP for LONG (too close to live Ask); deferring modification"
+                );
+                return { success: false, reason: "PRICE_TOO_CLOSE_TO_STOP" };
+            }
+        }
+    } else {
+        if (targetSL > 0 && currentAsk !== undefined) {
+            const minAllowedSL = Number((currentAsk + minStopBuffer).toFixed(digits));
+            if (targetSL < minAllowedSL) {
+                logger.info(
+                    { positionId, targetSL, minAllowedSL, currentAsk, minStopBuffer, reason },
+                    "[Verify-before-Update] Target SL is below broker minimum allowed SL for SHORT. Clamping to minAllowedSL to ensure MT5 acceptance."
+                );
+                targetSL = minAllowedSL;
+                if (pos && targetSL >= pos.stopLoss && pos.stopLoss > 0) {
+                    return { success: false, reason: "PRICE_TOO_CLOSE_TO_STOP" };
+                }
+            }
+        }
+        if (targetTP > 0 && currentBid !== undefined) {
+            const maxAllowedTP = Number((currentBid - minStopBuffer).toFixed(digits));
+            if (targetTP > maxAllowedTP) {
+                logger.info(
+                    { positionId, targetTP, maxAllowedTP, currentBid, minStopBuffer, reason },
+                    "[Verify-before-Update] Target TP exceeds broker maximum allowed TP for SHORT (too close to live Bid); deferring modification"
+                );
+                return { success: false, reason: "PRICE_TOO_CLOSE_TO_STOP" };
+            }
+        }
+    }
     // Phase 3: Dispatch Modification to MetaApi
     const targetAccId = accountId || pos?.accountId || activeAccountId;
     let modified = false;
@@ -1242,11 +1276,16 @@ export async function safeModifyPositionSLTP(params: {
                 markPositionClosing(positionId, "BROKER_REPORTED_CLOSED");
                 liveBrokerPositions.delete(positionId);
                 return { success: false, reason: "POSITION_CLOSED_BY_BROKER" };
+            } else if (errMsg.includes('Invalid stops') || errMsg.includes('10016') || errMsg.includes('TRADE_RETCODE_INVALID_STOPS')) {
+                logger.info(
+                    { positionId, err: errMsg, targetSL, targetTP },
+                    "[MetaApi Execution] Broker rejected stop modification due to rapid tick volatility or stopsLevel; deferring update"
+                );
+                return { success: false, reason: "INVALID_STOPS_REJECTED_BY_BROKER" };
             }
             logger.debug({ positionId, err: errMsg }, "[MetaApi] Streaming modifyPosition fallback to RPC...");
         }
     }
-
     // Fallback path: Pre-warmed RPC connection
     if (!modified && targetAccId) {
         try {
@@ -1265,23 +1304,19 @@ export async function safeModifyPositionSLTP(params: {
                 markPositionClosing(positionId, "BROKER_REPORTED_CLOSED");
                 liveBrokerPositions.delete(positionId);
                 return { success: false, reason: "POSITION_CLOSED_BY_BROKER" };
+            } else if (errMsg.includes('Invalid stops') || errMsg.includes('10016') || errMsg.includes('TRADE_RETCODE_INVALID_STOPS')) {
+                logger.info(
+                    { positionId, err: errMsg, targetSL, targetTP },
+                    "[MetaApi Execution] Broker rejected stop modification due to rapid tick volatility or stopsLevel; deferring update"
+                );
+                return { success: false, reason: "INVALID_STOPS_REJECTED_BY_BROKER" };
             }
             logger.warn({ positionId, err: errMsg }, "[MetaApi Execution] Failed to modify position SL/TP via RPC");
             return { success: false, reason: errMsg };
         }
     }
-
-    if (modified) {
-        // Update local position cache
-        const cached = liveBrokerPositions.get(positionId);
-        if (cached) {
-            cached.stopLoss = targetSL;
-            cached.takeProfit = targetTP;
-        }
-        return { success: true, reason: "MODIFIED", calibratedSL: targetSL, calibratedTP: targetTP };
-    }
-
-    return { success: false, reason: "NO_ACTIVE_CONNECTION" };
+    
+    return { success: modified, reason: modified ? "SUCCESS" : "NO_RPC_CONNECTION", calibratedSL: targetSL, calibratedTP: targetTP };
 }
 
 export async function executeTradeOnAccount(
@@ -1319,7 +1354,7 @@ export async function executeTradeOnAccount(
         formattedVol, 
         tradeSymbol,
         latencyFromSignal: latencyFromSignal !== null ? `${latencyFromSignal}ms` : undefined
-    }, `[MetaApi FastTrader] Fast dispatching trade execution...`);
+    });
 
     let executionResult: any = null;
 
@@ -1356,7 +1391,7 @@ export async function executeTradeOnAccount(
                 positionId: executionResult.positionId,
                 execTimeMs: `${execTimeMs}ms`,
                 latencyFromSignal: latencyFromSignal !== null ? `${latencyFromSignal}ms` : undefined
-            }, `[MetaApi ${accountType}] ${direction} executed immediately via streaming connection`);
+            });
 
             if (executionResult.positionId) {
                 calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
@@ -1373,7 +1408,7 @@ export async function executeTradeOnAccount(
                         : await connection.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
                     
                     if (executionResult.positionId) {
-                        await safeModifyPositionSLTP({
+                        safeModifyPositionSLTP({
                             positionId: String(executionResult.positionId),
                             accountId: targetAccountId,
                             orderId: String(executionResult.orderId),
@@ -1382,7 +1417,7 @@ export async function executeTradeOnAccount(
                             intendedEntryPrice,
                             direction,
                             reason: "Streaming 2-stage post-fill SL/TP attachment"
-                        });
+                        }).catch(() => {});
                     }
                     return executionResult;
                 } catch (retryErr: any) {
@@ -1392,8 +1427,6 @@ export async function executeTradeOnAccount(
                 logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Streaming execution failed, attempting fast RPC connection fallback...`);
             }
         }
-    }
-
     // 2. Pre-warmed RPC connection execution (NO waitSynchronized: ~200ms)
     try {
         const rpc = await getOrInitRpcConnection(targetAccountId);
@@ -1409,7 +1442,7 @@ export async function executeTradeOnAccount(
                     ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions)
                     : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
                 if (executionResult?.positionId) {
-                    await safeModifyPositionSLTP({
+                    safeModifyPositionSLTP({
                         positionId: String(executionResult.positionId),
                         accountId: targetAccountId,
                         orderId: String(executionResult.orderId),
@@ -1418,20 +1451,19 @@ export async function executeTradeOnAccount(
                         intendedEntryPrice,
                         direction,
                         reason: "RPC 2-stage post-fill SL/TP attachment"
-                    });
+                    }).catch(() => {});
                 }
             } else {
                 throw stopsErr;
             }
         }
-
         const execTimeMs = Date.now() - dispatchStart;
         logger.info({ 
             accountId: targetAccountId, 
             orderId: executionResult.orderId, 
             execTimeMs: `${execTimeMs}ms`,
             latencyFromSignal: latencyFromSignal !== null ? `${latencyFromSignal}ms` : undefined
-        }, `[MetaApi ${accountType}] ${direction} executed successfully via fast RPC connection`);
+        });
 
         if (executionResult?.positionId) {
             calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
@@ -1460,6 +1492,7 @@ export async function executeTradeOnAccount(
             throw err;
         }
     }
+}
 }
 
 export async function executeTrade(direction: "LONG" | "SHORT", stopLoss: number, takeProfit: number, volume: number = 0.01) {
@@ -1511,7 +1544,6 @@ export async function getOpenBrokerPositions(): Promise<BrokerPosition[]> {
         }
         if (results.length > 0) return results;
     }
-
     return [];
 }
 
@@ -1522,7 +1554,6 @@ export async function getRecentlyClosedBrokerDeals(since: Date): Promise<BrokerC
         const filtered = liveClosedDeals.filter(d => new Date(d.time).getTime() >= sinceMs);
         if (filtered.length > 0) return filtered;
     }
-
     return [...liveClosedDeals];
 }
 
@@ -1540,7 +1571,6 @@ export async function closeBrokerPosition(positionId: string, accountId?: string
                 logger.debug({ positionId, err: err?.message }, "[MetaApi] Streaming closePosition failed, falling back to RPC...");
             }
         }
-
         const settings = await getSystemSettings().catch(() => ({} as any));
         const targetAccId = accountId || activeAccountId || settings.realAccountId || settings.demoAccountId;
         if (!targetAccId) return false;
@@ -1576,34 +1606,59 @@ export async function closeOpenBrokerPositionsForSignal(direction: "LONG" | "SHO
     return closed;
 }
 
-export async function modifyOpenPositionsStopLoss(direction: "LONG" | "SHORT", newStopLoss: number) {
-    if (!token) return;
+export async function modifyOpenPositionsStopLoss(
+    direction: "LONG" | "SHORT",
+    newStopLoss: number
+): Promise<{ success: boolean; modifiedCount: number; reason?: string; calibratedSL?: number }> {
+    if (!token) return { success: false, modifiedCount: 0, reason: "NO_TOKEN" };
     try {
         const positions = await getOpenBrokerPositions();
-        for (const pos of positions) {
-            if (pos.type === direction) {
-                // If position is already in a closure sequence or deal completed, skip immediately
-                if (isPositionInClosureSequence(pos.id)) {
-                    logger.debug({ positionId: pos.id }, "[Trailing SL] Skipping position in closure sequence");
-                    continue;
-                }
-                if (pos.stopLoss > 0 && Math.abs(pos.stopLoss - newStopLoss) < 0.05) {
-                    continue;
-                }
+        const matchingPositions = positions.filter(pos => pos.type === direction);
+        if (matchingPositions.length === 0) {
+            return { success: true, modifiedCount: 0, reason: "NO_MATCHING_POSITIONS" };
+        }
 
-                // Execute safe modify using the asynchronous Verify-before-Update loop
-                await safeModifyPositionSLTP({
-                    positionId: pos.id,
-                    accountId: pos.accountId,
-                    stopLoss: newStopLoss,
-                    takeProfit: pos.takeProfit,
-                    direction,
-                    reason: `Dynamic trailing stop loss update to ${newStopLoss}`
-                });
+        let modifiedCount = 0;
+        let lastFailureReason: string | undefined;
+        let finalCalibratedSL = newStopLoss;
+
+        for (const pos of matchingPositions) {
+            // If position is already in a closure sequence or deal completed, skip immediately
+            if (isPositionInClosureSequence(pos.id)) {
+                logger.debug({ positionId: pos.id }, "[Trailing SL] Skipping position in closure sequence");
+                continue;
+            }
+            if (pos.stopLoss > 0 && Math.abs(pos.stopLoss - newStopLoss) < 0.05) {
+                modifiedCount++;
+                continue;
+            }
+
+            // Execute safe modify using the asynchronous Verify-before-Update loop
+            const result = await safeModifyPositionSLTP({
+                positionId: pos.id,
+                accountId: pos.accountId,
+                stopLoss: newStopLoss,
+                takeProfit: pos.takeProfit,
+                direction,
+                reason: `Dynamic trailing stop loss update to ${newStopLoss}`
+            });
+
+            if (result.success) {
+                modifiedCount++;
+                if (result.calibratedSL) finalCalibratedSL = result.calibratedSL;
+            } else {
+                lastFailureReason = result.reason;
             }
         }
+        return {
+            success: modifiedCount > 0,
+            modifiedCount,
+            reason: modifiedCount > 0 ? "SUCCESS" : (lastFailureReason || "MODIFICATION_DEFERRED"),
+            calibratedSL: finalCalibratedSL
+        };
     } catch (err: any) {
         logger.warn({ err: err?.message || String(err) }, "[MetaApi Execution] Failed in modifyOpenPositionsStopLoss");
+        return { success: false, modifiedCount: 0, reason: err?.message || String(err) };
     }
 }
 
@@ -1679,7 +1734,6 @@ export async function getAccountFundsInfo(accountId: string): Promise<AccountFun
         } catch (rpcErr: any) {
             logger.debug({ err: rpcErr?.message, accountId: trimmed }, "Fast RPC funds info fetch timed out or failed");
         }
-
         return null;
     } catch (err: any) {
         logger.error({ err: err.message || err, accountId }, "[MetaApi] Failed to fetch account funds info");

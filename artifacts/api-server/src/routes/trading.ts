@@ -139,6 +139,13 @@ router.get("/price", async (req, res) => {
 });
 
 // ── Connections status endpoint ──────────────────────────────────────────
+router.get("/debug", (req, res) => {
+    import("../lib/metaApiFeed.js").then(m => {
+        res.json({
+            blacklist: Array.from(m.invalidAccountBlacklist)
+        });
+    });
+});
 router.get("/connections", (req, res) => {
   res.json({
     metaapi: getMetaApiStatus(),

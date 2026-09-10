@@ -403,6 +403,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
         trend5m: "NEUTRAL", trend1m: "NEUTRAL",
       },
+      circuitBreakerActive: false,
+      circuitBreakerRemainingMinutes: 0,
+      consecutiveLosses: 0,
     };
   }
 
@@ -438,6 +441,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       session,
       spikeCooldownCandles: freshSpikeCooldownCandles,
       spikeCooldownRemaining: Math.max(0, Math.ceil((_spikeCdMs - _spikeElapsed) / 1000)),
+      circuitBreakerActive: false,
+      circuitBreakerRemainingMinutes: 0,
+      consecutiveLosses: 0,
     };
   }
 
@@ -991,7 +997,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     if (finalSignal !== "HOLD") {
       try {
         const running = await getRunningTrades();
-        if (running.some(r => r.signal === finalSignal)) {
+        if (running.some((r: any) => r.signal === finalSignal)) {
           logger.info({ direction: finalSignal }, "[SignalEngine] RUNNING trade already open — signal suppressed");
           finalSignal = "HOLD";
           suppressionReason = "RUNNING trade already open in same direction";
@@ -1111,6 +1117,18 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         logger.warn({ finalSignal, trend15m, ms15m: ms15m.structure }, "[MacroFilter] Suppressed by 15m macro bullish structure");
         finalSignal = "HOLD";
         suppressionReason = "Filtered by 15m macro bullish structure";
+      }
+    }
+
+    // ── Volatility Filter (Prevent "Death by a Thousand Cuts" in Choppy/Flat Markets) ──
+    if (finalSignal !== "HOLD") {
+      // For XAUUSD, an ATR on 5m below 0.60 generally means a flat, lifeless market.
+      // We will suppress entries to avoid being chopped up by the spread.
+      const VOLATILITY_THRESHOLD = 0.60;
+      if (atr < VOLATILITY_THRESHOLD) {
+        logger.warn({ finalSignal, atr, threshold: VOLATILITY_THRESHOLD }, "[VolatilityFilter] Suppressed due to extremely low market volatility (Flat Market)");
+        finalSignal = "HOLD";
+        suppressionReason = "Filtered by Low Volatility (Flat Market / Chop Zone)";
       }
     }
 

@@ -1,17 +1,67 @@
 const fs = require('fs');
-let code = fs.readFileSync('./artifacts/api-server/src/lib/signalEngine.ts', 'utf8');
+let code = fs.readFileSync('artifacts/api-server/src/lib/signalEngine.ts', 'utf8');
 
-// Replace isAgainstTrend evaluation
 code = code.replace(
-  /const isAgainstTrend =[\s\S]*?let signalType: "TREND_FOLLOW" \| "REVERSAL" = "TREND_FOLLOW";[\s\S]*?if \(finalSignal !== "HOLD" && isAgainstTrend\) \{/,
-  `const intendedSignal = direction !== "HOLD" ? direction : (longNorm >= shortNorm ? "LONG" : "SHORT");
-    const isAgainstTrend =
-      (intendedSignal === "LONG"  && effectiveTrend === "BEARISH") ||
-      (intendedSignal === "SHORT" && effectiveTrend === "BULLISH");
-
-    let signalType: "TREND_FOLLOW" | "REVERSAL" = isAgainstTrend ? "REVERSAL" : "TREND_FOLLOW";
-
-    if (finalSignal !== "HOLD" && isAgainstTrend) {`
+`      trend5m: "NEUTRAL", trend1m: "NEUTRAL",
+      },
+    };`,
+`      trend5m: "NEUTRAL", trend1m: "NEUTRAL",
+      },
+      circuitBreakerActive: false,
+      circuitBreakerRemainingMinutes: 0,
+      consecutiveLosses: 0,
+    };`
 );
 
-// We need to also ensure it doesn't break the original block. Let me be more precise.
+code = code.replace(
+`      spikeCooldownCandles: freshSpikeCooldownCandles,
+      spikeCooldownRemaining: Math.max(0, Math.ceil((_spikeCdMs - _spikeElapsed) / 1000)),
+    };`,
+`      spikeCooldownCandles: freshSpikeCooldownCandles,
+      spikeCooldownRemaining: Math.max(0, Math.ceil((_spikeCdMs - _spikeElapsed) / 1000)),
+      circuitBreakerActive: false,
+      circuitBreakerRemainingMinutes: 0,
+      consecutiveLosses: 0,
+    };`
+);
+
+code = code.replace(
+`      candlePattern:      null,
+      signalType:         "TREND_FOLLOW",
+      patternDetected:    null,
+      patternStrength:    0,
+      contextValid:       false,
+      confluenceMet:      false,
+      confirmationStatus: null,
+      indicators: {
+        rsi: 50, ema9: currentPrice, ema21: currentPrice,
+        macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
+        trend5m: "NEUTRAL", trend1m: "NEUTRAL",
+      },
+    };`,
+`      candlePattern:      null,
+      signalType:         "TREND_FOLLOW",
+      patternDetected:    null,
+      patternStrength:    0,
+      contextValid:       false,
+      confluenceMet:      false,
+      confirmationStatus: null,
+      indicators: {
+        rsi: 50, ema9: currentPrice, ema21: currentPrice,
+        macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
+        trend5m: "NEUTRAL", trend1m: "NEUTRAL",
+      },
+      circuitBreakerActive: false,
+      circuitBreakerRemainingMinutes: 0,
+      consecutiveLosses: 0,
+    };`
+);
+
+// fix parameter implicit 'any' types
+code = code.replace(
+`    const completed = recentSignals.filter(r => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");`,
+`    const completed = recentSignals.filter((r: any) => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");`
+);
+
+
+fs.writeFileSync('artifacts/api-server/src/lib/signalEngine.ts', code);

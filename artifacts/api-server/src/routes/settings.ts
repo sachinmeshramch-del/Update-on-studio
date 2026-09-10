@@ -8,10 +8,10 @@ const router = Router();
 router.get("/", async (req, res) => {
   try {
     const settings = await getSystemSettings();
-    res.json(settings);
+    return res.json(settings);
   } catch (err: any) {
     logger.error({ err }, "Error fetching settings");
-    res.status(500).json({ error: "Failed to fetch settings" });
+    return res.status(500).json({ error: "Failed to fetch settings" });
   }
 });
 
@@ -32,10 +32,10 @@ router.put("/", async (req, res) => {
         stopMetaApiFeed().then(() => startMetaApiFeed()).catch(e => logger.error({err: e}, "Failed to restart feed after setting change"));
     }
     
-    res.json(settings);
+    return res.json(settings);
   } catch (err: any) {
     logger.error({ err }, "Error updating settings");
-    res.status(500).json({ error: "Failed to update settings" });
+    return res.status(500).json({ error: "Failed to update settings" });
   }
 });
 
@@ -62,7 +62,7 @@ router.post("/verify-passcode", async (req, res) => {
     return res.status(401).json({ success: false, error: "Invalid passcode. Please enter 'goldswing2024'." });
   } catch (err: any) {
     logger.error({ err }, "Error verifying passcode");
-    res.status(500).json({ error: "Failed to verify passcode" });
+    return res.status(500).json({ error: "Failed to verify passcode" });
   }
 });
 
@@ -70,10 +70,10 @@ router.post("/reset-passcode", async (_req, res) => {
   try {
     const updated = await updateSystemSettings({ dashboardPasscode: 'goldswing2024' });
     logger.info("Dashboard passcode reset to default");
-    res.json({ success: true, message: "Passcode reset to default 'goldswing2024'", passcode: updated.dashboardPasscode });
+    return res.json({ success: true, message: "Passcode reset to default 'goldswing2024'", passcode: updated.dashboardPasscode });
   } catch (err: any) {
     logger.error({ err }, "Error resetting passcode");
-    res.status(500).json({ error: "Failed to reset passcode" });
+    return res.status(500).json({ error: "Failed to reset passcode" });
   }
 });
 
@@ -102,10 +102,10 @@ router.post("/change-passcode", async (req, res) => {
     }
     const updated = await updateSystemSettings({ dashboardPasscode: newPasscode.trim() });
     logger.info("Dashboard passcode updated successfully");
-    res.json({ success: true, message: "Passcode updated successfully", passcode: updated.dashboardPasscode });
+    return res.json({ success: true, message: "Passcode updated successfully", passcode: updated.dashboardPasscode });
   } catch (err: any) {
     logger.error({ err }, "Error updating passcode");
-    res.status(500).json({ error: "Failed to update passcode" });
+    return res.status(500).json({ error: "Failed to update passcode" });
   }
 });
 

@@ -8,7 +8,7 @@ import { getSystemSettings } from "@workspace/db";
 import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions } from "./metaApiFeed.js";
 import { executeTradeWithCapitalManagement } from "./autoTrader.js";
 
-const SCHEDULER_INTERVAL = 5_000 + Math.floor(Math.random() * 2000); // 5-7 seconds with jitter fallback
+const SCHEDULER_INTERVAL = 1_000; // 1 second polling for rapid signal generation
 let lastTickEvaluatedAt = 0;
 let lastTickPrice = 0;
 const MIN_TICK_EVALUATION_GAP = 1200; // 1.2s debounce to allow indicators to compute smoothly
@@ -195,7 +195,7 @@ async function runScheduledSignal(): Promise<void> {
       signalType:    signal.signalType,
       candlePattern: null,
       candleScore: null
-    }).catch(dbErr => {
+    }).catch((dbErr: any) => {
       logger.warn({ dbErr }, "Scheduler: failed to persist signal");
     });
 
