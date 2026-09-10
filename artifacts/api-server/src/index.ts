@@ -29,19 +29,17 @@ import { startMetaApiFeed } from "./lib/metaApiFeed.js";
 import { initWebPush } from "./lib/pushNotifications.js";
 import { startSignalScheduler } from "./lib/signalScheduler.js";
 import { startTradeTracker } from "./lib/tradeTracker.js";
+import { startDiagnosticMonitor } from "./lib/tradeMonitor.js";
 
 // Port selection:
-// 1. Google Cloud Run automatically defines K_SERVICE, K_REVISION, and PORT (default 8080).
-//    When running in Cloud Run, we MUST listen on process.env.PORT (8080).
-// 2. Google AI Studio preview environment defines CONTROL_PLANE_PORT (8000) and routes traffic to port 3000.
-const isCloudRun = !!process.env.K_SERVICE || !!process.env.K_REVISION;
-const isAIStudio = !isCloudRun && (!!process.env.CONTROL_PLANE_PORT || (!!process.env.DEFAULT_APP_PORT && !process.env.K_SERVICE));
-
+// 1. Google AI Studio preview environment defines CONTROL_PLANE_PORT (8000) or DEFAULT_APP_PORT (3000).
+//    The dev server MUST listen strictly on port 3000 (nginx forwards external traffic to 3000).
+// 2. Standalone Google Cloud Run container deployments set PORT (default 8080) without CONTROL_PLANE_PORT.
+const isAIStudio = !!process.env.CONTROL_PLANE_PORT || !!process.env.DEFAULT_APP_PORT;
 const port = isAIStudio ? 3000 : parseInt(process.env.PORT || "8080", 10);
 
 logger.info({
   port,
-  isCloudRun,
   isAIStudio,
   envPort: process.env.PORT,
   kService: process.env.K_SERVICE
@@ -69,3 +67,6 @@ startMetaApiFeed().catch(err => {
 initWebPush();
 startSignalScheduler();
 startTradeTracker();
+
+// Start backend diagnostic monitor
+startDiagnosticMonitor();

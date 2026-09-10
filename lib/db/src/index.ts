@@ -40,4 +40,4 @@ const app = initializeApp(config);
 export const db = getFirestore(app, config.firestoreDatabaseId || '(default)');
 export * from './schema/index';
 export * from './dao';
-export { updateTradeStopLoss } from './dao';
+export { updateTradeStopLoss, updateTradeStopLossAndTakeProfit } from './dao';

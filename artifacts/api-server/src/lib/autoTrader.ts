@@ -69,26 +69,43 @@ export async function executeTradeWithCapitalManagement(
         return;
     }
 
-    // Circuit Breaker Guard: Strictly block trade if in circuit breaker cooldown
+    // Circuit Breaker Guard: Strictly block trade if in circuit breaker or directional cooldown
     try {
-        const recentSignals = await getRecentSignals(10);
+        const recentSignals = await getRecentSignals(25);
         const completed = recentSignals.filter((r: any) => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");
         let consecutiveLosses = 0;
         let lastLossTime = 0;
+        let directionalLosses2h = 0;
+        let lastDirectionalLossTime = 0;
         const now = Date.now();
+        const twoHoursAgo = now - 120 * 60 * 1000;
+
         for (const r of completed) {
             const tradeTime = r.closedAt ? new Date(r.closedAt).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : 0);
             const pnl = r.pnlPoints ?? 0;
-            if (pnl < 0) {
+
+            if (tradeTime > twoHoursAgo && r.signal === direction && pnl < -0.1) {
+                directionalLosses2h++;
+                if (lastDirectionalLossTime === 0) lastDirectionalLossTime = tradeTime;
+            }
+
+            if (pnl < -0.1) {
                 if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
                 consecutiveLosses++;
-            } else if (pnl > 0 || r.tradeStatus === "TARGET_HIT") {
+            } else if (pnl >= 1.5 || r.tradeStatus === "TARGET_HIT") {
                 break;
             }
         }
-        if (consecutiveLosses >= 2 && lastLossTime > 0 && (now - lastLossTime < 30 * 60 * 1000)) {
-            const remainingMins = Math.max(1, Math.ceil((30 * 60 * 1000 - (now - lastLossTime)) / 60000));
+
+        if (consecutiveLosses >= 2 && lastLossTime > 0 && (now - lastLossTime < 45 * 60 * 1000)) {
+            const remainingMins = Math.max(1, Math.ceil((45 * 60 * 1000 - (now - lastLossTime)) / 60000));
             logger.warn({ consecutiveLosses, remainingMins }, `[AutoTrader] Execution BLOCKED: Circuit Breaker active (${remainingMins}m left after ${consecutiveLosses} consecutive losses)`);
+            return;
+        }
+
+        if (directionalLosses2h >= 2 && lastDirectionalLossTime > 0 && (now - lastDirectionalLossTime < 45 * 60 * 1000)) {
+            const remainingMins = Math.max(1, Math.ceil((45 * 60 * 1000 - (now - lastDirectionalLossTime)) / 60000));
+            logger.warn({ direction, directionalLosses2h, remainingMins }, `[AutoTrader] Execution BLOCKED: Directional Circuit Breaker active (${remainingMins}m left for ${direction})`);
             return;
         }
     } catch (cbErr) {

@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { LogOut, Activity, History, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server , RefreshCw } from "lucide-react";
+import { LogOut, Activity, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server , RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePriceStream } from "@/hooks/usePriceStream";
@@ -350,11 +350,6 @@ export function Header() {
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Refresh</span>
             </button>
-            <Link href="/backtest" className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600 dark:hover:text-amber-400 transition-all shrink-0">
-              <History className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Backtest</span>
-              <span className="sm:hidden">Test</span>
-            </Link>
             
             <button
               onClick={() => logout()}

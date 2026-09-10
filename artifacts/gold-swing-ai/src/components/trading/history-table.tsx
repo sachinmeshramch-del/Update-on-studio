@@ -65,18 +65,33 @@ function periodStart(period: Period): Date | null {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatusBadge({ status, pnlPoints }: { status: TradeStatus; pnlPoints?: number | null }) {
-  if (status === "TARGET_HIT")
+  const pts = pnlPoints ?? 0;
+  if (status === "TARGET_HIT") {
+    if (pts >= 6.0) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 whitespace-nowrap" title={`Expanded Asymmetric Runner Target Hit (+${pts.toFixed(2)} pts)`}>
+          🏆 RUNNER TARGET (+{pts.toFixed(1)}p)
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-success/15 text-success border border-success/30 whitespace-nowrap">
         ✅ FULL TP
       </span>
     );
+  }
   if (status === "STOP_HIT") {
-    const pts = pnlPoints ?? 0;
+    if (pts >= 4.0) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 whitespace-nowrap" title={`Asymmetric Runner Trailing SL (+${pts.toFixed(2)} pts banked)`}>
+          🚀 RUNNER SL (+{pts.toFixed(1)}p)
+        </span>
+      );
+    }
     if (pts > 0) {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap" title={`Trailing stop closed in profit (+${pts.toFixed(2)} pts)`}>
-          🎯 TRAILING SL (+PROFIT)
+          🎯 TRAILING SL (+{pts.toFixed(1)}p)
         </span>
       );
     }
@@ -89,7 +104,7 @@ function StatusBadge({ status, pnlPoints }: { status: TradeStatus; pnlPoints?: n
     }
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-destructive/15 text-destructive border border-destructive/30 whitespace-nowrap" title={`Initial protective stop loss hit (${pts.toFixed(2)} pts)`}>
-        ❌ STOP LOSS
+        ❌ SMALL LOSS
       </span>
     );
   }
@@ -276,6 +291,8 @@ function PnlSummary({ signals, currentPrice, period }: {
   const tradeable = signals.filter(s => s.signal !== "HOLD");
   const closed    = tradeable.filter(s => s.tradeStatus === "TARGET_HIT" || s.tradeStatus === "STOP_HIT");
   const wins      = closed.filter(s => s.tradeStatus === "TARGET_HIT" || (s.pnlPoints ?? 0) > 0).length;
+  const runners   = closed.filter(s => (s.pnlPoints ?? 0) >= 4.0).length;
+  const runnerPts = closed.filter(s => (s.pnlPoints ?? 0) >= 4.0).reduce((acc, s) => acc + (s.pnlPoints ?? 0), 0);
   const breakEven = closed.filter(s => s.tradeStatus === "STOP_HIT" && (s.pnlPoints ?? 0) === 0).length;
   const losses    = closed.filter(s => (s.pnlPoints ?? 0) < 0).length;
   const winRate   = closed.length > 0 ? Math.round((wins / closed.length) * 100) : null;
@@ -334,6 +351,19 @@ function PnlSummary({ signals, currentPrice, period }: {
           </span>
         )}
       </div>
+
+      {/* Runners highlight (Asymmetric Expectancy) */}
+      {runners > 0 && (
+        <>
+          <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
+          <div className="flex items-center gap-1.5" title={`Runners gained +${runnerPts.toFixed(1)} pts to pay for small losses`}>
+            <span className="text-emerald-400 font-bold flex items-center gap-1">
+              🚀 {runners} {runners === 1 ? "Runner" : "Runners"}
+            </span>
+            <span className="font-mono text-emerald-300 font-semibold">(+{runnerPts.toFixed(1)}p)</span>
+          </div>
+        </>
+      )}
 
       <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
 

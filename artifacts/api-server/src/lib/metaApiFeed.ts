@@ -1606,10 +1606,12 @@ export async function closeOpenBrokerPositionsForSignal(direction: "LONG" | "SHO
     return closed;
 }
 
-export async function modifyOpenPositionsStopLoss(
+export async function modifyOpenPositionsStopLossAndTakeProfit(
     direction: "LONG" | "SHORT",
-    newStopLoss: number
-): Promise<{ success: boolean; modifiedCount: number; reason?: string; calibratedSL?: number }> {
+    newStopLoss: number,
+    newTakeProfit?: number,
+    maxRetries = 3
+): Promise<{ success: boolean; modifiedCount: number; reason?: string; calibratedSL?: number; calibratedTP?: number }> {
     if (!token) return { success: false, modifiedCount: 0, reason: "NO_TOKEN" };
     try {
         const positions = await getOpenBrokerPositions();
@@ -1621,45 +1623,73 @@ export async function modifyOpenPositionsStopLoss(
         let modifiedCount = 0;
         let lastFailureReason: string | undefined;
         let finalCalibratedSL = newStopLoss;
+        let finalCalibratedTP = newTakeProfit;
 
         for (const pos of matchingPositions) {
-            // If position is already in a closure sequence or deal completed, skip immediately
             if (isPositionInClosureSequence(pos.id)) {
-                logger.debug({ positionId: pos.id }, "[Trailing SL] Skipping position in closure sequence");
+                logger.debug({ positionId: pos.id }, "[Trailing SL/TP] Skipping position in closure sequence");
                 continue;
             }
-            if (pos.stopLoss > 0 && Math.abs(pos.stopLoss - newStopLoss) < 0.05) {
+            const slMatch = pos.stopLoss > 0 && Math.abs(pos.stopLoss - newStopLoss) < 0.05;
+            const tpMatch = !newTakeProfit || (pos.takeProfit > 0 && Math.abs(pos.takeProfit - newTakeProfit) < 0.05);
+            if (slMatch && tpMatch) {
                 modifiedCount++;
                 continue;
             }
 
-            // Execute safe modify using the asynchronous Verify-before-Update loop
-            const result = await safeModifyPositionSLTP({
-                positionId: pos.id,
-                accountId: pos.accountId,
-                stopLoss: newStopLoss,
-                takeProfit: pos.takeProfit,
-                direction,
-                reason: `Dynamic trailing stop loss update to ${newStopLoss}`
-            });
+            let attempt = 1;
+            let success = false;
+            const targetTP = newTakeProfit ?? pos.takeProfit;
+            
+            while (attempt <= maxRetries && !success) {
+                const result = await safeModifyPositionSLTP({
+                    positionId: pos.id,
+                    accountId: pos.accountId,
+                    stopLoss: newStopLoss,
+                    takeProfit: targetTP,
+                    direction,
+                    reason: `Asymmetric Runner SL/TP update (SL: ${newStopLoss}, TP: ${targetTP}) (Attempt ${attempt}/${maxRetries})`
+                });
 
-            if (result.success) {
-                modifiedCount++;
-                if (result.calibratedSL) finalCalibratedSL = result.calibratedSL;
-            } else {
-                lastFailureReason = result.reason;
+                if (result.success) {
+                    success = true;
+                    modifiedCount++;
+                    if (result.calibratedSL) finalCalibratedSL = result.calibratedSL;
+                    if (result.calibratedTP) finalCalibratedTP = result.calibratedTP;
+                } else {
+                    lastFailureReason = result.reason;
+                    // Do not retry if the broker reported it's already closed or if the price is invalid
+                    if (result.reason === "POSITION_CLOSED_BY_BROKER" || result.reason === "ALREADY_MATCHED") {
+                        break;
+                    }
+                    
+                    if (attempt < maxRetries) {
+                        logger.warn({ positionId: pos.id, attempt, reason: result.reason }, `[Trailing SL/TP Retry] Update failed, retrying in ${attempt * 600}ms...`);
+                        await new Promise(r => setTimeout(r, attempt * 600));
+                    }
+                }
+                attempt++;
             }
         }
         return {
             success: modifiedCount > 0,
             modifiedCount,
             reason: modifiedCount > 0 ? "SUCCESS" : (lastFailureReason || "MODIFICATION_DEFERRED"),
-            calibratedSL: finalCalibratedSL
+            calibratedSL: finalCalibratedSL,
+            calibratedTP: finalCalibratedTP
         };
     } catch (err: any) {
-        logger.warn({ err: err?.message || String(err) }, "[MetaApi Execution] Failed in modifyOpenPositionsStopLoss");
+        logger.warn({ err: err?.message || String(err) }, "[MetaApi Execution] Failed in modifyOpenPositionsStopLossAndTakeProfit");
         return { success: false, modifiedCount: 0, reason: err?.message || String(err) };
     }
+}
+
+export async function modifyOpenPositionsStopLoss(
+    direction: "LONG" | "SHORT",
+    newStopLoss: number,
+    maxRetries = 3
+): Promise<{ success: boolean; modifiedCount: number; reason?: string; calibratedSL?: number }> {
+    return modifyOpenPositionsStopLossAndTakeProfit(direction, newStopLoss, undefined, maxRetries);
 }
 
 export async function closeAllPositions(accountId: string) {

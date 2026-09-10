@@ -75,6 +75,7 @@ export interface SignalResult {
     atr:           number;
     trend5m: "BULLISH" | "BEARISH" | "NEUTRAL";
     trend1m: "BULLISH" | "BEARISH" | "NEUTRAL";
+    trend1h?: "BULLISH" | "BEARISH" | "NEUTRAL";
   };
   circuitBreakerActive: boolean;
   circuitBreakerRemainingMinutes: number;
@@ -104,6 +105,7 @@ let cachedCandlesTime = 0;
 let cachedCandles5m: OHLCCandle[] = [];
 let cachedCandles1m: OHLCCandle[] = [];
 let cachedCandles15m: OHLCCandle[] = [];
+let cachedCandles1h: OHLCCandle[] = [];
 const CANDLE_CACHE_TTL = 4_000;
 
 // ── Two-candle confirmation state ─────────────────────────────────────────
@@ -220,17 +222,32 @@ export interface StopHistoryAnalysis {
   recentLossCount1h: number;
   inCircuitBreakerCooldown: boolean;
   cooldownRemainingMinutes: number;
+  longLosses2h: number;
+  shortLosses2h: number;
+  longNetPnl2h: number;
+  shortNetPnl2h: number;
+  longDirectionCooldown: boolean;
+  shortDirectionCooldown: boolean;
+  directionalCooldownRemainingMinutes: number;
 }
 
 async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
   try {
-    const rows = await getRecentSignals(10);
+    const rows = await getRecentSignals(25);
     let longStops = 0, shortStops = 0;
     let consecutiveLosses = 0;
     let lastLossTime = 0;
     let recentLossCount1h = 0;
+    let longLosses2h = 0;
+    let shortLosses2h = 0;
+    let longNetPnl2h = 0;
+    let shortNetPnl2h = 0;
+    let lastLongLossTime = 0;
+    let lastShortLossTime = 0;
+
     const now = Date.now();
     const oneHourAgo = now - 60 * 60 * 1000;
+    const twoHoursAgo = now - 120 * 60 * 1000;
 
     const completed = rows.filter((r: any) => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");
     
@@ -239,29 +256,47 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
       const tradeTime = r.closedAt ? new Date(r.closedAt).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : 0);
       const pnl = r.pnlPoints ?? 0;
 
-      // Real capital loss: ONLY when pnlPoints < 0 (initial protective SL hit)
+      // Track 2-hour directional metrics
+      if (tradeTime > twoHoursAgo) {
+        if (r.signal === "LONG") {
+          longNetPnl2h += pnl;
+          if (pnl < -0.1) {
+            longLosses2h++;
+            if (lastLongLossTime === 0) lastLongLossTime = tradeTime;
+          }
+        } else if (r.signal === "SHORT") {
+          shortNetPnl2h += pnl;
+          if (pnl < -0.1) {
+            shortLosses2h++;
+            if (lastShortLossTime === 0) lastShortLossTime = tradeTime;
+          }
+        }
+      }
+
+      // Real capital loss: ONLY when pnlPoints < -0.1 (initial protective SL hit)
       // If pnlPoints > 0, it was a profitable trailing stop exit (a WIN!)
       // If pnlPoints === 0, it was break-even (capital preserved)
-      if (pnl < 0) {
+      if (pnl < -0.1) {
         if (tradeTime > oneHourAgo) recentLossCount1h++;
         if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
         if (countingStreak) consecutiveLosses++;
-      } else if (pnl > 0 || r.tradeStatus === "TARGET_HIT") {
-        // Any profitable trade (TP or trailing stop in profit) breaks the loss streak!
+      } else if (pnl >= 1.5 || r.tradeStatus === "TARGET_HIT") {
+        // Only a substantial win (>= +1.5 pts or target hit) breaks the loss streak!
+        // Micro/scratch trailing stop exits (+0.2 to +0.5 pts) do NOT reset a loss streak.
         countingStreak = false;
       }
     }
 
-    for (const r of completed.slice(0, 5)) {
+    for (const r of completed.slice(0, 6)) {
       const pnl = r.pnlPoints ?? 0;
-      if (pnl < 0) {
+      if (pnl < -0.1) {
         if (r.signal === "LONG")  longStops++;
         if (r.signal === "SHORT") shortStops++;
       }
     }
 
-    // Circuit breaker: 2+ consecutive REAL losses OR 2+ REAL losses in past hour -> 30-min protection cooldown
-    const CIRCUIT_BREAKER_WINDOW_MS = 30 * 60 * 1000;
+    // Global Circuit breaker: 2+ consecutive REAL losses OR 2+ REAL losses in past hour -> 45-min protection cooldown
+    const CIRCUIT_BREAKER_WINDOW_MS = 45 * 60 * 1000;
     const inCircuitBreakerCooldown =
       (consecutiveLosses >= 2 || recentLossCount1h >= 2) &&
       lastLossTime > 0 &&
@@ -271,6 +306,23 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
       ? Math.max(1, Math.ceil((CIRCUIT_BREAKER_WINDOW_MS - (now - lastLossTime)) / 60000))
       : 0;
 
+    // Directional circuit breaker: 2+ losses in 2 hours OR net directional PnL <= -5.0 pts
+    const DIRECTIONAL_WINDOW_MS = 45 * 60 * 1000;
+    const longDirectionCooldown =
+      (longLosses2h >= 2 || longNetPnl2h <= -5.0) &&
+      lastLongLossTime > 0 &&
+      now - lastLongLossTime < DIRECTIONAL_WINDOW_MS;
+
+    const shortDirectionCooldown =
+      (shortLosses2h >= 2 || shortNetPnl2h <= -5.0) &&
+      lastShortLossTime > 0 &&
+      now - lastShortLossTime < DIRECTIONAL_WINDOW_MS;
+
+    const directionalCooldownRemainingMinutes = Math.max(
+      longDirectionCooldown ? Math.max(1, Math.ceil((DIRECTIONAL_WINDOW_MS - (now - lastLongLossTime)) / 60000)) : 0,
+      shortDirectionCooldown ? Math.max(1, Math.ceil((DIRECTIONAL_WINDOW_MS - (now - lastShortLossTime)) / 60000)) : 0
+    );
+
     return {
       longStops,
       shortStops,
@@ -279,6 +331,13 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
       recentLossCount1h,
       inCircuitBreakerCooldown,
       cooldownRemainingMinutes,
+      longLosses2h,
+      shortLosses2h,
+      longNetPnl2h,
+      shortNetPnl2h,
+      longDirectionCooldown,
+      shortDirectionCooldown,
+      directionalCooldownRemainingMinutes,
     };
   } catch {
     return {
@@ -289,6 +348,13 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
       recentLossCount1h: 0,
       inCircuitBreakerCooldown: false,
       cooldownRemainingMinutes: 0,
+      longLosses2h: 0,
+      shortLosses2h: 0,
+      longNetPnl2h: 0,
+      shortNetPnl2h: 0,
+      longDirectionCooldown: false,
+      shortDirectionCooldown: false,
+      directionalCooldownRemainingMinutes: 0,
     };
   }
 }
@@ -468,6 +534,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     let candles5m: OHLCCandle[];
     let candles1m: OHLCCandle[];
     let candles15m: OHLCCandle[];
+    let candles1h: OHLCCandle[];
 
     try {
       if (Date.now() - cachedCandlesTime < CANDLE_CACHE_TTL && cachedCandles5m.length > 0) {
@@ -475,6 +542,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         candles5m = cachedCandles5m.map(c => ({ ...c }));
         candles1m = cachedCandles1m.map(c => ({ ...c }));
         candles15m = cachedCandles15m.map(c => ({ ...c }));
+        candles1h = cachedCandles1h.map(c => ({ ...c }));
       } else {
         candles5m = await fetchWithFallback("5m", 300);
         candles1m = await fetchWithFallback("1m", 300);
@@ -496,9 +564,28 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
             });
           }
         }
+        try {
+          candles1h = await fetchWithFallback("1h", 100);
+        } catch {
+          // Synthesize 1h candles from 5m candles if direct 1h fetch is delayed
+          candles1h = [];
+          for (let i = 0; i < candles5m.length; i += 12) {
+            const chunk = candles5m.slice(i, i + 12);
+            if (chunk.length === 0) continue;
+            candles1h.push({
+              time: chunk[0].time,
+              open: chunk[0].open,
+              high: Math.max(...chunk.map(c => c.high)),
+              low: Math.min(...chunk.map(c => c.low)),
+              close: chunk[chunk.length - 1].close,
+              volume: chunk.reduce((sum, c) => sum + (c.volume || 1), 0),
+            });
+          }
+        }
         cachedCandles5m = candles5m.map(c => ({ ...c }));
         cachedCandles1m = candles1m.map(c => ({ ...c }));
         cachedCandles15m = candles15m.map(c => ({ ...c }));
+        cachedCandles1h = candles1h.map(c => ({ ...c }));
         cachedCandlesTime = Date.now();
       }
     } catch (candleFetchErr) {
@@ -507,6 +594,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         candles5m = cachedCandles5m.map(c => ({ ...c }));
         candles1m = cachedCandles1m.map(c => ({ ...c }));
         candles15m = cachedCandles15m.map(c => ({ ...c }));
+        candles1h = cachedCandles1h.map(c => ({ ...c }));
       } else {
         throw candleFetchErr;
       }
@@ -527,6 +615,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     updateLiveCandle(candles5m);
     updateLiveCandle(candles1m);
     updateLiveCandle(candles15m);
+    updateLiveCandle(candles1h);
 
     const closes5m = candles5m.map(c => c.close);
     const closes1m = candles1m.map(c => c.close);
@@ -535,6 +624,15 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const ema9_15m = calcEMA(closes15m, 9);
     const ema21_15m = calcEMA(closes15m, 21);
     const trend15m = detectTrend(ema9_15m, ema21_15m);
+
+    // ── 1-Hour Macro Trend & EMAs ─────────────────────────────────────────
+    const closes1h = candles1h.map(c => c.close);
+    const ema20_1h = calcEMA(closes1h, 20);
+    const ema50_1h = calcEMA(closes1h, 50);
+    const trend1h = detectTrend(ema20_1h, ema50_1h);
+    const lastEma20_1h = ema20_1h[ema20_1h.length - 1] ?? currentPrice;
+    const lastEma50_1h = ema50_1h[ema50_1h.length - 1] ?? currentPrice;
+    const ms1h = detectMarketStructure(candles1h);
 
     // ── EMAs on 5m ────────────────────────────────────────────────────────
     const ema9_5m  = calcEMA(closes5m, 9);
@@ -978,7 +1076,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       suppressionReason = "Spike cooldown active";
     }
 
-    // ── Global Circuit Breaker Protection (30-min window after 2+ losses) ──
+    // ── Global Circuit Breaker Protection (45-min window after 2+ losses) ──
     // Uncompromising capital preservation: Absolutely ZERO signals allowed during circuit breaker cooldown
     if (recentStops.inCircuitBreakerCooldown) {
       if (finalSignal !== "HOLD") {
@@ -991,6 +1089,27 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       confidence = 0;
       signalStrength = null;
       suppressionReason = `Circuit Breaker active (${recentStops.cooldownRemainingMinutes}m left)`;
+    }
+
+    // ── Directional Circuit Breaker Protection (Halt buying in dumps or selling in rallies) ──
+    if (finalSignal === "LONG" && recentStops.longDirectionCooldown) {
+      logger.warn(
+        { longLosses2h: recentStops.longLosses2h, longNetPnl2h: recentStops.longNetPnl2h, cooldownMins: recentStops.directionalCooldownRemainingMinutes },
+        "[CircuitBreaker] Directional Halt: LONG entries suppressed due to repetitive LONG losses"
+      );
+      finalSignal = "HOLD";
+      confidence = 0;
+      signalStrength = null;
+      suppressionReason = `Directional Circuit Breaker: LONG entries halted (${recentStops.directionalCooldownRemainingMinutes}m left after losses)`;
+    } else if (finalSignal === "SHORT" && recentStops.shortDirectionCooldown) {
+      logger.warn(
+        { shortLosses2h: recentStops.shortLosses2h, shortNetPnl2h: recentStops.shortNetPnl2h, cooldownMins: recentStops.directionalCooldownRemainingMinutes },
+        "[CircuitBreaker] Directional Halt: SHORT entries suppressed due to repetitive SHORT losses"
+      );
+      finalSignal = "HOLD";
+      confidence = 0;
+      signalStrength = null;
+      suppressionReason = `Directional Circuit Breaker: SHORT entries halted (${recentStops.directionalCooldownRemainingMinutes}m left after losses)`;
     }
 
     // ── DB Deduplication Guard (Prevents redundant signals if trade is already running) ──
@@ -1105,18 +1224,115 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       logger.info({ rangeInfo, finalSignal }, "[RangeFilter] Range trade validated and allowed.");
     }
 
-    // ── Macro Trend Filter (15m Structure & Trend) ────────────────────────
-    // If it's a normal trend-following trade, ensure alignment with the 15m macro structure.
-    // Confirmed SMC REVERSAL trades (Sweeps / CHoCH) are explicitly exempt because they capture the bottom/top turn before 15m lags behind.
-    if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
-      if (finalSignal === "LONG" && (trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) {
-        logger.warn({ finalSignal, trend15m, ms15m: ms15m.structure }, "[MacroFilter] Suppressed by 15m bearish structure");
+    // ── 1-HOUR & 15-MINUTE MULTI-TIMEFRAME MACRO TREND GATE (Drawdown Killer) ──
+    // Determine macro regime using confirmed alignment between price & 1H EMAs.
+    let macro1hState: "BULLISH" | "BEARISH" | "NEUTRAL" = "NEUTRAL";
+    const emaAlignedBullish1h = (lastEma20_1h > lastEma50_1h && currentPrice >= lastEma50_1h) || (trend1h === "BULLISH" && currentPrice > lastEma20_1h);
+    const emaAlignedBearish1h = (lastEma20_1h < lastEma50_1h && currentPrice <= lastEma50_1h) || (trend1h === "BEARISH" && currentPrice < lastEma20_1h);
+
+    if (emaAlignedBullish1h && !emaAlignedBearish1h && ms1h.structure !== "DOWNTREND") {
+      macro1hState = "BULLISH";
+    } else if (emaAlignedBearish1h && !emaAlignedBullish1h && ms1h.structure !== "UPTREND") {
+      macro1hState = "BEARISH";
+    } else {
+      // Conflicting signals or transitional phase -> Market is in 1H transition/consolidation
+      macro1hState = "NEUTRAL";
+    }
+
+    if (finalSignal !== "HOLD") {
+      // 1. Strict Multi-Timeframe Cascade Blocker (Major Drawdown Killer):
+      // When 1H and 15m are both aligned bearish or in a downtrend, ALL LONG trades (TREND_FOLLOW, RANGE, REVERSAL) are strictly FORBIDDEN!
+      const isMultiTimeframeBearish = (macro1hState === "BEARISH" || trend1h === "BEARISH" || ms1h.structure === "DOWNTREND") &&
+                                      (trend15m === "BEARISH" || ms15m.structure === "DOWNTREND");
+      const isMultiTimeframeBullish = (macro1hState === "BULLISH" || trend1h === "BULLISH" || ms1h.structure === "UPTREND") &&
+                                      (trend15m === "BULLISH" || ms15m.structure === "UPTREND");
+
+      if (finalSignal === "LONG" && isMultiTimeframeBearish) {
+        logger.warn(
+          { finalSignal, signalType, macro1hState, trend1h, trend15m, ms15m: ms15m.structure, currentPrice },
+          "[Macro Cascade Gate] Suppressed LONG: 1H & 15m are aligned BEARISH (No counter-trend buying in waterfalls!)"
+        );
         finalSignal = "HOLD";
-        suppressionReason = "Filtered by 15m macro bearish structure";
-      } else if (finalSignal === "SHORT" && (trend15m === "BULLISH" || ms15m.structure === "UPTREND")) {
-        logger.warn({ finalSignal, trend15m, ms15m: ms15m.structure }, "[MacroFilter] Suppressed by 15m macro bullish structure");
+        suppressionReason = "Strict Multi-Timeframe Cascade Gate: Cannot BUY when 1H & 15m are in confirmed downtrend";
+      } else if (finalSignal === "SHORT" && isMultiTimeframeBullish) {
+        logger.warn(
+          { finalSignal, signalType, macro1hState, trend1h, trend15m, ms15m: ms15m.structure, currentPrice },
+          "[Macro Cascade Gate] Suppressed SHORT: 1H & 15m are aligned BULLISH (No counter-trend selling in rallies!)"
+        );
         finalSignal = "HOLD";
-        suppressionReason = "Filtered by 15m macro bullish structure";
+        suppressionReason = "Strict Multi-Timeframe Cascade Gate: Cannot SELL when 1H & 15m are in confirmed uptrend";
+      }
+
+      // 2. Severe EMA Distance / Falling Knife Protection:
+      // When price is plummeting >3.0 points below 1H EMA20 in a downtrend, buying into support is high-risk knife catching
+      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > 3.0) {
+        logger.warn(
+          { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(lastEma20_1h - currentPrice).toFixed(2) },
+          "[Macro Gate] Suppressed LONG: Falling knife protection — price is >3.0 pts below 1H EMA20 in a downtrend"
+        );
+        finalSignal = "HOLD";
+        suppressionReason = "Falling Knife Protection: Price severely below 1H EMA20 in downtrend";
+      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH") && (currentPrice - lastEma20_1h) > 3.0) {
+        logger.warn(
+          { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(currentPrice - lastEma20_1h).toFixed(2) },
+          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is >3.0 pts above 1H EMA20 in an uptrend"
+        );
+        finalSignal = "HOLD";
+        suppressionReason = "Rocket Rally Protection: Price severely above 1H EMA20 in uptrend";
+      }
+
+      // 3. Strict blocking for Trend-Following Trades: Never trend-follow against 1H macro or 15m structure
+      if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
+        if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) {
+          logger.warn(
+            { finalSignal, macro1hState, trend1h, trend15m, ms15m: ms15m.structure },
+            "[Macro Gate] Suppressed LONG trend-follow: Higher timeframe structure is BEARISH"
+          );
+          finalSignal = "HOLD";
+          suppressionReason = "Strict Macro Gate: Cannot BUY trend-follow in a bearish higher timeframe structure";
+        } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend15m === "BULLISH" || ms15m.structure === "UPTREND")) {
+          logger.warn(
+            { finalSignal, macro1hState, trend1h, trend15m, ms15m: ms15m.structure },
+            "[Macro Gate] Suppressed SHORT trend-follow: Higher timeframe structure is BULLISH"
+          );
+          finalSignal = "HOLD";
+          suppressionReason = "Strict Macro Gate: Cannot SELL trend-follow in a bullish higher timeframe structure";
+        }
+      }
+
+      // 4. High-Confluence Requirement for Counter-Macro Range & Reversal Trades (when 15m is NOT in cascade)
+      // If 1H is trending strongly (ADX > 25), range mean-reversion trades are forbidden!
+      if (finalSignal !== "HOLD" && (signalType === "RANGE" || signalType === "REVERSAL")) {
+        const isCounterTo1h = (finalSignal === "LONG" && macro1hState === "BEARISH") ||
+                              (finalSignal === "SHORT" && macro1hState === "BULLISH");
+        
+        if (isCounterTo1h) {
+          if (currentAdx > 25) {
+            logger.warn(
+              { finalSignal, signalType, currentAdx, macro1hState },
+              "[1H Macro Gate] Counter-macro trade suppressed: ADX > 25 indicates strong trending market (mean reversion blocked)"
+            );
+            finalSignal = "HOLD";
+            suppressionReason = `Counter-Macro trade blocked: ADX (${currentAdx.toFixed(1)}) indicates strong trending market`;
+          } else {
+            const hasSweepConfirmation = sweepRej.detected || sweepScore > 0 || isFalseBreakout;
+            const minCounterConf = 78;
+
+            if (confidence < minCounterConf || !hasSweepConfirmation) {
+              logger.warn(
+                { finalSignal, signalType, confidence, minCounterConf, macro1hState, hasSweepConfirmation },
+                "[1H Macro Gate] Counter-macro range/reversal suppressed due to insufficient confidence or lack of sweep"
+              );
+              finalSignal = "HOLD";
+              suppressionReason = `Counter-Macro trade requires confirmed sweep rejection and ≥${minCounterConf}% confidence (got ${confidence}%)`;
+            } else {
+              logger.info(
+                { finalSignal, signalType, confidence, macro1hState, hasSweepConfirmation },
+                "[1H Macro Gate] Counter-macro setup validated with high confluence"
+              );
+            }
+          }
+        }
       }
     }
 
@@ -1146,7 +1362,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const structuralDist = anchorLow !== null
         ? (currentPrice - anchorLow) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.5), 8.0);
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.0), 3.5); // Tightened initial risk cap
     } else if (calcDir === "SHORT") {
       const anchorHigh = (sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel)
         ? sweepRej.sweptLevel
@@ -1154,7 +1370,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const structuralDist = anchorHigh !== null
         ? (anchorHigh - currentPrice) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.5), 8.0);
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.0), 3.5); // Tightened initial risk cap
     } else {
       slDist = Math.min(Math.max(minAtrPadding, 2.5), 8.0);
     }
@@ -1279,6 +1495,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         atr:           +atr.toFixed(2),
         trend5m,
         trend1m,
+        trend1h:       macro1hState,
       },
       circuitBreakerActive:            recentStops.inCircuitBreakerCooldown,
       circuitBreakerRemainingMinutes:  recentStops.cooldownRemainingMinutes,

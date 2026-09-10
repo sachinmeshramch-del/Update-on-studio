@@ -494,6 +494,15 @@ export function SignalPanel() {
           </div>
         </div>
 
+        {/* ── Asymmetric Trailing Stop Badge ─────────────────────────────────── */}
+        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-400">
+          <div className="flex items-center gap-1.5 font-medium">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Asymmetric Engine: Fast BE protection (+1.2p) &amp; Dynamic Runner Expansion (+25p)</span>
+          </div>
+          <span className="text-[10px] font-mono text-emerald-300/80 uppercase hidden sm:inline">Runners Pay For Losses</span>
+        </div>
+
         {/* ── Current Indicators Quick-View ─────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-3 text-center">
           {[

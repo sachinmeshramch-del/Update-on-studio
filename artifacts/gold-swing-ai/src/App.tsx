@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
-import Backtest from "@/pages/backtest";
 import SettingsPage from "@/pages/settings";
 import LoginScreen from "@/pages/login";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -34,7 +33,6 @@ function Router() {
     <AuthGuard>
       <Switch>
         <Route path="/" component={Dashboard} />
-        <Route path="/backtest" component={Backtest} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>

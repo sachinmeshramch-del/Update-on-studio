@@ -98,6 +98,13 @@ export async function updateTradeStopLoss(id: string, stopLoss: number): Promise
   });
 }
 
+export async function updateTradeStopLossAndTakeProfit(id: string, stopLoss: number, takeProfit: number): Promise<void> {
+  await updateDoc(doc(db, 'signals', id), {
+    stopLoss,
+    takeProfit
+  });
+}
+
 import { SystemSettings } from './schema/index';
 import { setDoc } from 'firebase/firestore';
 
