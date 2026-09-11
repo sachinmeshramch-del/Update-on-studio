@@ -1263,8 +1263,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         suppressionReason = "Strict Multi-Timeframe Cascade Gate: Cannot SELL when 1H & 15m are in confirmed uptrend";
       }
 
-      // 2. Severe EMA Distance / Falling Knife Protection:
-      // When price is plummeting >3.0 points below 1H EMA20 in a downtrend, buying into support is high-risk knife catching
+      // 2. Severe EMA Distance / Overextension Protection (Falling Knife & Late Chaser Guard):
       if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > 3.0) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(lastEma20_1h - currentPrice).toFixed(2) },
@@ -1279,6 +1278,23 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         );
         finalSignal = "HOLD";
         suppressionReason = "Rocket Rally Protection: Price severely above 1H EMA20 in uptrend";
+      } else if (signalType === "TREND_FOLLOW") {
+        // Prevent "late to the party" chasing (selling the bottom or buying the top)
+        if (finalSignal === "SHORT" && (lastEma20_1h - currentPrice) > 2.5) {
+            logger.warn(
+                { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2) },
+                "[Macro Gate] Suppressed SHORT Trend Follow: Price is overextended downside (>2.5 pts below 1H EMA20). Wait for pullback."
+            );
+            finalSignal = "HOLD";
+            suppressionReason = "Overextended downside: Price too far below 1H EMA20 to short safely.";
+        } else if (finalSignal === "LONG" && (currentPrice - lastEma20_1h) > 2.5) {
+            logger.warn(
+                { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2) },
+                "[Macro Gate] Suppressed LONG Trend Follow: Price is overextended upside (>2.5 pts above 1H EMA20). Wait for pullback."
+            );
+            finalSignal = "HOLD";
+            suppressionReason = "Overextended upside: Price too far above 1H EMA20 to long safely.";
+        }
       }
 
       // 3. Strict blocking for Trend-Following Trades: Never trend-follow against 1H macro or 15m structure
@@ -1301,16 +1317,17 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       }
 
       // 4. High-Confluence Requirement for Counter-Macro Range & Reversal Trades (when 15m is NOT in cascade)
-      // If 1H is trending strongly (ADX > 25), range mean-reversion trades are forbidden!
+      // If higher timeframes are trending strongly (ADX > 25), range mean-reversion trades are forbidden!
       if (finalSignal !== "HOLD" && (signalType === "RANGE" || signalType === "REVERSAL")) {
-        const isCounterTo1h = (finalSignal === "LONG" && macro1hState === "BEARISH") ||
-                              (finalSignal === "SHORT" && macro1hState === "BULLISH");
+        const isCounterTo1hOr15m = 
+            (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) ||
+            (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend15m === "BULLISH" || ms15m.structure === "UPTREND"));
         
-        if (isCounterTo1h) {
+        if (isCounterTo1hOr15m) {
           if (currentAdx > 25) {
             logger.warn(
-              { finalSignal, signalType, currentAdx, macro1hState },
-              "[1H Macro Gate] Counter-macro trade suppressed: ADX > 25 indicates strong trending market (mean reversion blocked)"
+              { finalSignal, signalType, currentAdx, macro1hState, trend15m },
+              "[Macro Gate] Counter-macro trade suppressed: ADX > 25 indicates strong trending market (mean reversion blocked)"
             );
             finalSignal = "HOLD";
             suppressionReason = `Counter-Macro trade blocked: ADX (${currentAdx.toFixed(1)}) indicates strong trending market`;
@@ -1320,15 +1337,15 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
             if (confidence < minCounterConf || !hasSweepConfirmation) {
               logger.warn(
-                { finalSignal, signalType, confidence, minCounterConf, macro1hState, hasSweepConfirmation },
-                "[1H Macro Gate] Counter-macro range/reversal suppressed due to insufficient confidence or lack of sweep"
+                { finalSignal, signalType, confidence, minCounterConf, macro1hState, trend15m, hasSweepConfirmation },
+                "[Macro Gate] Counter-macro range/reversal suppressed due to insufficient confidence or lack of sweep"
               );
               finalSignal = "HOLD";
               suppressionReason = `Counter-Macro trade requires confirmed sweep rejection and ≥${minCounterConf}% confidence (got ${confidence}%)`;
             } else {
               logger.info(
-                { finalSignal, signalType, confidence, macro1hState, hasSweepConfirmation },
-                "[1H Macro Gate] Counter-macro setup validated with high confluence"
+                { finalSignal, signalType, confidence, macro1hState, trend15m, hasSweepConfirmation },
+                "[Macro Gate] Counter-macro setup validated with high confluence"
               );
             }
           }
