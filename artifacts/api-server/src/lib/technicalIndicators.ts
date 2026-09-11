@@ -80,13 +80,14 @@ export function calcATR(candles: OHLCCandle[], period = 14): number[] {
   return atrs;
 }
 
-export function detectTrend(ema50: number[], ema200: number[]): "BULLISH" | "BEARISH" | "NEUTRAL" {
-  if (ema50.length === 0 || ema200.length === 0) return "NEUTRAL";
-  const last50 = ema50[ema50.length - 1];
-  const last200 = ema200[ema200.length - 1];
-  const diff = (last50 - last200) / last200;
-  if (diff > 0.001) return "BULLISH";
-  if (diff < -0.001) return "BEARISH";
+export function detectTrend(emaFast: number[], emaSlow: number[], minSpreadPercent = 0.00015): "BULLISH" | "BEARISH" | "NEUTRAL" {
+  if (emaFast.length === 0 || emaSlow.length === 0) return "NEUTRAL";
+  const lastFast = emaFast[emaFast.length - 1];
+  const lastSlow = emaSlow[emaSlow.length - 1];
+  const diff = lastFast - lastSlow;
+  const threshold = Math.max(0.30, lastSlow * minSpreadPercent);
+  if (diff > threshold) return "BULLISH";
+  if (diff < -threshold) return "BEARISH";
   return "NEUTRAL";
 }
 
@@ -865,8 +866,23 @@ export function analyzeMarketRange(
     position = "RESISTANCE_ZONE";
   }
 
+  // A genuine range requires:
+  // 1. Minimum trading space (rangeSpan >= 1.0x ATR or at least 3.0 pts)
+  // 2. Bounded span (not an outsized runaway trend expansion where rangeSpan > 4.5x ATR)
+  // 3. Price oscillation rather than one-directional trend displacement across the lookback window
+  const windowCandles = candles.slice(-lookback);
+  let netDisplacement = 0;
+  if (windowCandles.length >= 2) {
+    const startPrice = windowCandles[0].open;
+    const endPrice = windowCandles[windowCandles.length - 1].close;
+    netDisplacement = Math.abs(endPrice - startPrice);
+  }
+  const isOneWayTrend = rangeSpan > 0 && (netDisplacement / rangeSpan) > 0.60;
+  const isBounded = rangeSpan >= Math.max(atr * 1.0, 3.0) && rangeSpan <= Math.max(atr * 4.5, 25.0);
+  const isRanging = isBounded && !isOneWayTrend;
+
   return {
-    isRanging: rangeSpan >= atr * 2.0,
+    isRanging,
     support,
     resistance,
     rangeSpan,

@@ -175,11 +175,18 @@ export function Header() {
             <span className="text-muted-foreground uppercase">Auto Real:</span>
             <button
               type="button"
-              disabled
-              title="Real Auto-Trading is strictly disabled for safety"
-              className="font-bold uppercase px-1.5 py-0.5 rounded text-[10px] cursor-not-allowed transition-all opacity-50 bg-muted text-red-500/50 border border-border"
+              onClick={() => {
+                toggleMutation.mutate({ autoTradingRealEnabled: !settings?.autoTradingRealEnabled });
+              }}
+              title="Click to toggle Real Auto-Trading"
+              className={cn(
+                "font-bold uppercase px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all hover:opacity-80 active:scale-95",
+                settings?.autoTradingRealEnabled
+                  ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 shadow-xs"
+                  : "bg-muted text-muted-foreground/70 border border-border"
+              )}
             >
-              OFF
+              {settings?.autoTradingRealEnabled ? "ON" : "OFF"}
             </button>
           </div>
 

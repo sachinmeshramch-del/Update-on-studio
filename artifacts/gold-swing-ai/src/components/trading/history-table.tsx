@@ -1,12 +1,21 @@
 import { toast } from "sonner";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useGetHistory, useDeleteSignal, useClearHistory } from "@workspace/api-client-react";
 import { usePriceStream } from "@/hooks/usePriceStream";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   History, TrendingUp, TrendingDown, Clock, Trash2,
   RotateCcw, Repeat, Repeat2, ChevronDown, Check,
+  ChevronLeft, ChevronRight, Calendar, Eye, Copy, CheckCheck,
+  Activity, ExternalLink, Filter,
 } from "lucide-react";
 import { formatDistanceStrict } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -424,6 +433,339 @@ function OutcomeDropdown({ value, onChange }: { value: OutcomeFilter; onChange: 
   );
 }
 
+// ── Today's Full Trades Log Modal ─────────────────────────────────────────────
+
+interface TodayTradesModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  trades: any[];
+  currentPrice: number;
+  onDelete: (id: string) => void;
+  onRefetch: () => void;
+}
+
+function TodayTradesModal({
+  open,
+  onOpenChange,
+  trades,
+  currentPrice,
+  onDelete,
+  onRefetch,
+}: TodayTradesModalProps) {
+  const [filter, setFilter] = useState<"ALL" | "LONG" | "SHORT" | "WINNERS" | "LOSERS" | "RUNNING">("ALL");
+  const [copied, setCopied] = useState(false);
+
+  const todayDateStr = useMemo(() => {
+    try {
+      return formatInTimeZone(new Date(), LOCAL_TZ, "EEEE, dd MMMM yyyy");
+    } catch {
+      return "Today";
+    }
+  }, []);
+
+  // Compute Today's statistics
+  const closed = trades.filter(t => t.tradeStatus === "TARGET_HIT" || t.tradeStatus === "STOP_HIT");
+  const wins = closed.filter(t => t.tradeStatus === "TARGET_HIT" || (t.pnlPoints ?? 0) > 0).length;
+  const losses = closed.filter(t => t.tradeStatus === "STOP_HIT" && (t.pnlPoints ?? 0) < 0).length;
+  const breakEven = closed.filter(t => t.tradeStatus === "STOP_HIT" && (t.pnlPoints ?? 0) === 0).length;
+  const running = trades.filter(t => t.tradeStatus === "RUNNING").length;
+  const runners = closed.filter(t => (t.pnlPoints ?? 0) >= 4.0).length;
+  const runnerPts = closed.filter(t => (t.pnlPoints ?? 0) >= 4.0).reduce((acc, t) => acc + (t.pnlPoints ?? 0), 0);
+  const winRate = closed.length > 0 ? Math.round((wins / closed.length) * 100) : null;
+
+  let totalPnl = 0;
+  for (const t of trades) {
+    if (t.tradeStatus === "TARGET_HIT" || t.tradeStatus === "STOP_HIT") {
+      totalPnl += t.pnlPoints ?? 0;
+    } else if (t.tradeStatus === "RUNNING" && currentPrice > 0) {
+      totalPnl += t.signal === "LONG" ? currentPrice - t.entryPrice : t.entryPrice - currentPrice;
+    }
+  }
+  const pnlPositive = totalPnl >= 0;
+
+  const longCount = trades.filter(t => t.signal === "LONG").length;
+  const shortCount = trades.filter(t => t.signal === "SHORT").length;
+
+  // Filtered trade list
+  const filteredTrades = useMemo(() => {
+    return trades.filter(t => {
+      if (filter === "LONG") return t.signal === "LONG";
+      if (filter === "SHORT") return t.signal === "SHORT";
+      if (filter === "RUNNING") return t.tradeStatus === "RUNNING";
+      if (filter === "WINNERS") {
+        const pts = (t.tradeStatus === "TARGET_HIT" || t.tradeStatus === "STOP_HIT")
+          ? (t.pnlPoints ?? 0)
+          : (t.signal === "LONG" ? currentPrice - t.entryPrice : t.entryPrice - currentPrice);
+        return pts > 0;
+      }
+      if (filter === "LOSERS") {
+        const pts = (t.tradeStatus === "TARGET_HIT" || t.tradeStatus === "STOP_HIT")
+          ? (t.pnlPoints ?? 0)
+          : (t.signal === "LONG" ? currentPrice - t.entryPrice : t.entryPrice - currentPrice);
+        return pts < 0;
+      }
+      return true;
+    });
+  }, [trades, filter, currentPrice]);
+
+  function handleCopySummary() {
+    const lines = [
+      `📊 XAUUSD Gold Scalp – Today's Trading Activity (${todayDateStr})`,
+      `Total Trades Triggered: ${trades.length} (${longCount} Long / ${shortCount} Short)`,
+      `Performance: ${wins}W / ${losses}L / ${breakEven}BE ${winRate !== null ? `(${winRate}% Win Rate)` : ""}`,
+      `Net Realized / Live P&L: ${pnlPositive ? "+" : ""}${totalPnl.toFixed(2)} pts`,
+      runners > 0 ? `Runners Banked: ${runners} trade(s) (+${runnerPts.toFixed(1)} pts)` : "",
+      `------------------------------------------------------------`,
+      ...trades.map((t, idx) => {
+        const time = toLocalTime(t.timestamp);
+        let pts = t.pnlPoints ?? 0;
+        if (t.tradeStatus === "RUNNING" && currentPrice > 0) {
+          pts = t.signal === "LONG" ? currentPrice - t.entryPrice : t.entryPrice - currentPrice;
+        }
+        const ptsStr = pts >= 0 ? `+${pts.toFixed(2)}` : pts.toFixed(2);
+        return `#${idx + 1} [${time}] ${t.signal} (${t.signalType ?? "TREND"}) | Entry: ${formatPrice(t.entryPrice)} | SL: ${formatPrice(t.stopLoss)} | TP: ${formatPrice(t.takeProfit)} | PnL: ${ptsStr} pts | Status: ${t.tradeStatus ?? "RUNNING"}`;
+      }),
+    ].filter(Boolean);
+
+    navigator.clipboard.writeText(lines.join("\n"));
+    setCopied(true);
+    toast.success("Today's trades summary copied to clipboard!");
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[88vh] flex flex-col p-0 gap-0 bg-background border-border overflow-hidden">
+        {/* Header */}
+        <DialogHeader className="p-4 sm:p-5 border-b border-border bg-black/20 flex-shrink-0">
+          <div className="flex items-start justify-between gap-4 pr-6">
+            <div>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-amber-500" />
+                <DialogTitle className="text-lg font-bold text-foreground">
+                  Today&apos;s Trade Activity Log
+                </DialogTitle>
+                <Badge variant="outline" className="text-[11px] font-mono border-amber-500/40 text-amber-400 bg-amber-500/10">
+                  {trades.length} {trades.length === 1 ? "Trade" : "Trades"}
+                </Badge>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground mt-1">
+                {todayDateStr} · All signals executed and monitored today in IST
+              </DialogDescription>
+            </div>
+
+            {trades.length > 0 && (
+              <button
+                onClick={handleCopySummary}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 text-foreground transition-all"
+                title="Copy formatted summary to clipboard"
+              >
+                {copied ? <CheckCheck className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
+                {copied ? "Copied" : "Copy Summary"}
+              </button>
+            )}
+          </div>
+
+          {/* Quick Metrics Bar */}
+          {trades.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+              <div className="bg-black/30 border border-border rounded-lg p-2.5">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Today&apos;s P&amp;L</span>
+                <span className={`text-base font-bold font-mono flex items-center gap-1 mt-0.5 ${pnlPositive ? "text-success" : "text-destructive"}`}>
+                  {pnlPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                  {pnlPositive ? "+" : ""}{totalPnl.toFixed(2)} pts
+                </span>
+              </div>
+
+              <div className="bg-black/30 border border-border rounded-lg p-2.5">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Win Rate</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-base font-bold font-mono text-foreground">
+                    {winRate !== null ? `${winRate}%` : "—"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    ({wins}W / {losses}L{breakEven > 0 ? ` / ${breakEven}BE` : ""})
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-black/30 border border-border rounded-lg p-2.5">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Volume &amp; Bias</span>
+                <div className="flex items-center gap-2 mt-0.5 text-xs font-semibold">
+                  <span className="text-emerald-400 font-mono">{longCount} Long</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-rose-400 font-mono">{shortCount} Short</span>
+                </div>
+              </div>
+
+              <div className="bg-black/30 border border-border rounded-lg p-2.5">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">Active Positions</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-base font-bold font-mono ${running > 0 ? "text-amber-400 animate-pulse" : "text-muted-foreground"}`}>
+                    {running}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {running > 0 ? "Running live" : "All completed"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filter Chips inside Modal */}
+          {trades.length > 0 && (
+            <div className="flex items-center gap-1.5 mt-3 overflow-x-auto pb-1 text-xs">
+              <span className="text-[11px] text-muted-foreground/70 font-semibold mr-1 flex items-center gap-1">
+                <Filter className="w-3 h-3" /> Filter:
+              </span>
+              {(
+                [
+                  { id: "ALL", label: `All (${trades.length})` },
+                  { id: "LONG", label: `Longs (${longCount})` },
+                  { id: "SHORT", label: `Shorts (${shortCount})` },
+                  { id: "WINNERS", label: `Winners (${wins})` },
+                  { id: "LOSERS", label: `Losses (${losses})` },
+                  { id: "RUNNING", label: `Running (${running})` },
+                ] as const
+              ).map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setFilter(item.id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap ${
+                    filter === item.id
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                      : "bg-black/10 dark:bg-white/5 text-muted-foreground hover:text-foreground border border-border"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogHeader>
+
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+          {trades.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <Calendar className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <h4 className="text-sm font-semibold text-foreground">No Trades Triggered Today Yet</h4>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1">
+                The algorithmic scanner is actively monitoring the London and New York sessions for 5-minute confluence setups.
+              </p>
+            </div>
+          ) : filteredTrades.length === 0 ? (
+            <div className="text-center py-10">
+              <p className="text-xs text-muted-foreground">No trades match the selected filter &ldquo;{filter}&rdquo;.</p>
+            </div>
+          ) : (
+            filteredTrades.map((row, idx) => {
+              const status = (row.tradeStatus ?? "RUNNING") as TradeStatus;
+              let pts: number;
+              if (status === "TARGET_HIT" || status === "STOP_HIT" || status === "MANUALLY_CLOSED" || status === "CLOSED") {
+                pts = row.pnlPoints ?? 0;
+              } else {
+                pts = row.signal === "LONG" ? currentPrice - row.entryPrice : row.entryPrice - currentPrice;
+              }
+              const isProfit = pts >= 0;
+
+              return (
+                <div
+                  key={row.id || idx}
+                  className="p-3.5 rounded-xl border border-border bg-black/20 hover:bg-black/30 transition-all flex flex-col gap-2.5 group"
+                >
+                  {/* Top line: Time, Signal, Type, Status, PnL */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono font-semibold text-foreground">
+                        {toLocalTime(row.timestamp)}
+                      </span>
+                      <Badge variant={
+                        row.signal === "LONG" ? "success" :
+                        row.signal === "SHORT" ? "destructive" : "warning"
+                      }>
+                        {row.signal}
+                      </Badge>
+                      <TypeBadge type={(row as any).signalType} />
+                      <StatusBadge status={status} pnlPoints={row.pnlPoints} />
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span className={`font-mono font-bold text-sm flex items-center gap-1 ${isProfit ? "text-success" : "text-destructive"}`}>
+                          {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                          {isProfit ? "+" : ""}{pts.toFixed(2)} pts
+                        </span>
+                      </div>
+                      <DeleteButton id={row.id} onDelete={onDelete} />
+                    </div>
+                  </div>
+
+                  {/* Pricing and parameters mini-grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-black/30 p-2.5 rounded-lg border border-white/5 text-xs font-mono">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase font-sans block">Entry Price</span>
+                      <span className="font-semibold text-foreground">{formatPrice(row.entryPrice)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-destructive uppercase font-sans block">Stop Loss</span>
+                      <span className="font-semibold text-destructive/90">{formatPrice(row.stopLoss)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-success uppercase font-sans block">Take Profit</span>
+                      <span className="font-semibold text-success/90">{formatPrice(row.takeProfit)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase font-sans block">Duration / Conf.</span>
+                      <div className="flex items-center gap-1.5 text-slate-200">
+                        <DurationCell timestamp={row.timestamp} closedAt={row.closedAt} />
+                        <span className="text-muted-foreground">·</span>
+                        <span>{row.confidence}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reason & Action note if applicable */}
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    {row.reason ? (
+                      <p className="text-[11px] text-muted-foreground italic line-clamp-1 flex-1">
+                        💡 {row.reason}
+                      </p>
+                    ) : (
+                      <div />
+                    )}
+
+                    {status === "RUNNING" && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm("Are you sure you want to forcefully close this trade at market price?")) return;
+                          try {
+                            const res = await fetch(`/api/signals/${row.id}/close`, { method: "POST" });
+                            if (!res.ok) throw new Error("Failed to close");
+                            toast.success("Trade manually closed successfully!");
+                            onRefetch();
+                          } catch (e) {
+                            toast.error("Failed to close trade.");
+                          }
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase text-white bg-red-600/80 hover:bg-red-500 rounded-md transition-colors shadow-sm flex-shrink-0"
+                      >
+                        Close Trade
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main History Table Component ──────────────────────────────────────────────
+
 export function HistoryTable() {
   const { data, isLoading, isError, refetch } = useGetHistory({
     query: { refetchInterval: 10000 } as any,
@@ -437,6 +779,16 @@ export function HistoryTable() {
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
   const [period, setPeriod]             = useState<Period>("TODAY");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
+
+  // Compact pagination state (Default 5 trades at a time)
+  const [pageSize, setPageSize]       = useState<number>(5);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isTodayModalOpen, setIsTodayModalOpen] = useState<boolean>(false);
+
+  // Reset page to 1 when filters or page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [typeFilter, period, outcomeFilter, pageSize]);
 
   function handleDelete(id: string) {
     deleteSignal(
@@ -456,7 +808,13 @@ export function HistoryTable() {
 
   const allSignals = data?.signals ?? [];
 
-  // Period filter
+  // Filter today's trades specifically for the dedicated whole-day viewer
+  const todayCutoff = periodStart("TODAY");
+  const todayTrades = todayCutoff
+    ? allSignals.filter(s => s.timestamp && new Date(s.timestamp) >= todayCutoff && s.signal !== "HOLD")
+    : [];
+
+  // Period filter for the table
   const cutoff = periodStart(period);
   const periodSignals = cutoff
     ? allSignals.filter(s => s.timestamp && new Date(s.timestamp) >= cutoff)
@@ -482,210 +840,312 @@ export function HistoryTable() {
     });
   }
 
-  return (
-    <Card className="border-border bg-card/50 overflow-hidden">
-      <CardHeader className="pb-4 border-b border-border bg-black/20">
-        <CardTitle className="text-lg flex items-center gap-2 flex-wrap gap-y-2">
-          <History className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-          Signal History
-          <span className="text-xs font-normal text-muted-foreground/60 font-mono">(IST · latest first)</span>
+  // ── Pagination Calculation ──────────────────────────────────────────────────
+  const totalTrades   = signals.length;
+  const totalPages    = Math.max(1, Math.ceil(totalTrades / pageSize));
+  const activePage    = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex    = (activePage - 1) * pageSize;
+  const endIndex      = Math.min(startIndex + pageSize, totalTrades);
+  const displayedRows = signals.slice(startIndex, endIndex);
 
-          {/* Type filter tabs */}
-          <div className="flex items-center gap-1 ml-1">
-            {(["ALL", "TREND_FOLLOW", "REVERSAL"] as SignalFilter[]).map(f => (
-              <button
-                key={f}
-                onClick={() => setTypeFilter(f)}
-                className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
-                  typeFilter === f
-                    ? f === "REVERSAL"
-                      ? "bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40"
-                      : f === "TREND_FOLLOW"
-                      ? "bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/40"
-                      : "bg-black/10 dark:bg-white/10 text-foreground border border-border"
-                    : "text-muted-foreground border border-transparent hover:border-border hover:bg-black/5 dark:hover:bg-white/5"
-                }`}
-              >
-                {f === "TREND_FOLLOW" ? "Trend" : f === "REVERSAL" ? "⟳ Reversal" : "All"}
-                {f !== "ALL" && (
-                  <span className="ml-1 opacity-60">
-                    ({periodSignals.filter(s => (s as any).signalType === f).length})
-                  </span>
+  return (
+    <>
+      {/* Dedicated Today's Trades Activity Modal */}
+      <TodayTradesModal
+        open={isTodayModalOpen}
+        onOpenChange={setIsTodayModalOpen}
+        trades={todayTrades}
+        currentPrice={currentPrice}
+        onDelete={handleDelete}
+        onRefetch={refetch}
+      />
+
+      <Card className="border-border bg-card/50 overflow-hidden shadow-sm">
+        <CardHeader className="py-3 px-3 sm:px-5 border-b border-border bg-black/20">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2 flex-wrap gap-y-2">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
+              <span>Signal History</span>
+              <span className="text-[11px] font-normal text-muted-foreground/60 font-mono">(IST · latest first)</span>
+            </div>
+
+            {/* Quick Button: View All Today's Trades */}
+            <button
+              onClick={() => setIsTodayModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-all shadow-sm active:scale-95 ml-1"
+              title="Open full-day breakdown of all trades triggered today"
+            >
+              <Calendar className="w-3.5 h-3.5 text-amber-400" />
+              <span>Today&apos;s Trades</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 font-mono text-[10px] font-bold">
+                {todayTrades.length}
+              </span>
+            </button>
+
+            {/* Type filter tabs */}
+            <div className="flex items-center gap-1 ml-0 sm:ml-1">
+              {(["ALL", "TREND_FOLLOW", "REVERSAL"] as SignalFilter[]).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setTypeFilter(f)}
+                  className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                    typeFilter === f
+                      ? f === "REVERSAL"
+                        ? "bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40"
+                        : f === "TREND_FOLLOW"
+                        ? "bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/40"
+                        : "bg-black/10 dark:bg-white/10 text-foreground border border-border"
+                      : "text-muted-foreground border border-transparent hover:border-border hover:bg-black/5 dark:hover:bg-white/5"
+                  }`}
+                >
+                  {f === "TREND_FOLLOW" ? "Trend" : f === "REVERSAL" ? "⟳ Reversal" : "All"}
+                  {f !== "ALL" && (
+                    <span className="ml-1 opacity-60">
+                      ({periodSignals.filter(s => (s as any).signalType === f).length})
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="ml-auto flex items-center gap-2 sm:gap-3 flex-wrap">
+              {/* Outcome picker */}
+              <OutcomeDropdown value={outcomeFilter} onChange={setOutcomeFilter} />
+              {/* Period picker */}
+              <PeriodDropdown value={period} onChange={setPeriod} />
+
+              {currentPrice > 0 && (
+                <span className="hidden sm:inline-block text-xs font-mono font-normal text-muted-foreground">
+                  Live: <span className="text-foreground">{formatPrice(currentPrice)}</span>
+                </span>
+              )}
+
+              {/* Clear All button */}
+              {signals.length > 0 && (
+                confirmClear ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Clear all {allSignals.length}?</span>
+                    <button
+                      onClick={handleClearAll}
+                      disabled={isClearing}
+                      className="px-2.5 py-1 rounded-md text-xs font-semibold bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors disabled:opacity-50"
+                    >
+                      {isClearing ? "Clearing…" : "Yes, Clear"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmClear(false)}
+                      className="px-2 py-1 rounded-md text-xs font-semibold bg-black/5 dark:bg-white/5 text-muted-foreground border border-border hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmClear(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-muted-foreground border border-border hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all duration-150"
+                    title="Clear history records"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Clear</span>
+                  </button>
+                )
+              )}
+            </div>
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {/* ── PnL Summary bar ── */}
+          {!isLoading && periodSignals.length > 0 && (
+            <PnlSummary
+              signals={periodSignals as SigRow[]}
+              currentPrice={currentPrice}
+              period={period}
+            />
+          )}
+
+          {/* Compact Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm text-left">
+              <thead className="text-[11px] text-muted-foreground uppercase bg-black/40 border-b border-border">
+                <tr>
+                  <th className="px-3 py-2 font-semibold tracking-wider whitespace-nowrap">Date &amp; Time (IST)</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider">Signal</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider">Type</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider">Status</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider whitespace-nowrap">Entry</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider whitespace-nowrap">Stop Loss</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider whitespace-nowrap">Take Profit</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider whitespace-nowrap">P&amp;L (pts)</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider whitespace-nowrap">Duration</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider">Conf.</th>
+                  <th className="px-3 py-2 font-semibold tracking-wider text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 font-mono">
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      {Array.from({ length: 11 }).map((_, j) => (
+                        <td key={j} className="px-3 py-2.5">
+                          <Skeleton className="h-4 w-16 bg-black/5 dark:bg-white/5" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  displayedRows.map((row) => {
+                    const status = (row.tradeStatus ?? "RUNNING") as TradeStatus;
+                    return (
+                      <tr key={row.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors group">
+                        <td className="px-3 py-2.5 text-slate-200 text-xs whitespace-nowrap font-mono">
+                          {toLocalTime(row.timestamp)}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <Badge variant={
+                            row.signal === "LONG" ? "success" :
+                            row.signal === "SHORT" ? "destructive" : "warning"
+                          }>
+                            {row.signal}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <TypeBadge type={(row as any).signalType} />
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={status} pnlPoints={row.pnlPoints} />
+                            {status === "RUNNING" && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm("Are you sure you want to forcefully close this trade at the current market price?")) return;
+                                  try {
+                                    const res = await fetch(`/api/signals/${row.id}/close`, { method: "POST" });
+                                    if (!res.ok) throw new Error("Failed to close");
+                                    toast.success("Trade manually closed successfully!");
+                                    refetch();
+                                  } catch (e) {
+                                    toast.error("Failed to close trade.");
+                                  }
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-white bg-red-600/80 hover:bg-red-500 rounded-md transition-colors shadow-sm"
+                              >
+                                Close
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-foreground font-semibold">
+                          {formatPrice(row.entryPrice)}
+                        </td>
+                        <td className="px-3 py-2.5 text-destructive/80">
+                          {formatPrice(row.stopLoss)}
+                        </td>
+                        <td className="px-3 py-2.5 text-success/80">
+                          {formatPrice(row.takeProfit)}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <PnlCell
+                            signal={row.signal}
+                            status={status}
+                            pnlPoints={row.pnlPoints}
+                            entryPrice={row.entryPrice}
+                            currentPrice={currentPrice}
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-muted-foreground" />
+                            <DurationCell timestamp={row.timestamp} closedAt={row.closedAt} />
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-200">
+                          {row.confidence}%
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <DeleteButton id={row.id} onDelete={handleDelete} />
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
-              </button>
-            ))}
+              </tbody>
+            </table>
+
+            {signals.length === 0 && !isLoading && (
+              <div className="p-8 text-center text-muted-foreground text-xs">
+                {period !== "ALL"
+                  ? `No signals for ${PERIOD_LABELS[period].toLowerCase()}. Try "All History" to see everything.`
+                  : "No signal history yet. Signals will appear here once generated."}
+              </div>
+            )}
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
-            {/* Outcome picker */}
-            <OutcomeDropdown value={outcomeFilter} onChange={setOutcomeFilter} />
-            {/* Period picker */}
-            <PeriodDropdown value={period} onChange={setPeriod} />
+          {/* ── User-Friendly Compact Pagination & Today's Link Footer ── */}
+          {signals.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-black/30 border-t border-border text-xs">
+              {/* Left: Count summary & page size toggle */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-muted-foreground">
+                  Showing <span className="font-semibold text-foreground font-mono">{totalTrades > 0 ? startIndex + 1 : 0}–{endIndex}</span> of <span className="font-semibold text-foreground font-mono">{totalTrades}</span> trades
+                </span>
 
-            {currentPrice > 0 && (
-              <span className="text-xs font-mono font-normal text-muted-foreground">
-                Live: <span className="text-foreground">{formatPrice(currentPrice)}</span>
-              </span>
-            )}
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span>Show:</span>
+                  {[5, 10, 25].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setPageSize(n)}
+                      className={`px-2 py-0.5 rounded font-mono font-semibold transition-colors ${
+                        pageSize === n
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                          : "bg-black/10 dark:bg-white/5 text-muted-foreground hover:text-foreground border border-border"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            {/* Clear All button */}
-            {signals.length > 0 && (
-              confirmClear ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Clear all {allSignals.length} records?</span>
+              {/* Right: Page navigation buttons + Quick Today trigger */}
+              <div className="flex items-center gap-2 flex-wrap ml-auto">
+                <button
+                  onClick={() => setIsTodayModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 hover:underline transition-all mr-2"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  View All Today ({todayTrades.length})
+                </button>
+
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={handleClearAll}
-                    disabled={isClearing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors disabled:opacity-50"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={activePage <= 1}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   >
-                    {isClearing ? "Clearing…" : "Yes, Clear All"}
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
                   </button>
+
+                  <span className="px-2.5 py-1 text-xs font-mono text-muted-foreground">
+                    Page <span className="font-bold text-foreground">{activePage}</span> of <span className="font-bold text-foreground">{totalPages}</span>
+                  </span>
+
                   <button
-                    onClick={() => setConfirmClear(false)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 text-muted-foreground border border-border hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={activePage >= totalPages}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   >
-                    Cancel
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmClear(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground border border-border hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all duration-150"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Clear History
-                </button>
-              )
-            )}
-          </div>
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent className="p-0">
-        {/* ── PnL Summary bar ── */}
-        {!isLoading && periodSignals.length > 0 && (
-          <PnlSummary
-            signals={periodSignals as SigRow[]}
-            currentPrice={currentPrice}
-            period={period}
-          />
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase bg-black/40 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Date &amp; Time (IST)</th>
-                <th className="px-4 py-3 font-semibold tracking-wider">Signal</th>
-                <th className="px-4 py-3 font-semibold tracking-wider">Type</th>
-                <th className="px-4 py-3 font-semibold tracking-wider">Status</th>
-                <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Entry</th>
-                <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Stop Loss</th>
-                <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Take Profit</th>
-                <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">P&amp;L (pts)</th>
-                <th className="px-4 py-3 font-semibold tracking-wider whitespace-nowrap">Duration</th>
-                <th className="px-4 py-3 font-semibold tracking-wider">Conf.</th>
-                <th className="px-4 py-3 font-semibold tracking-wider text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 font-mono">
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    {Array.from({ length: 11 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <Skeleton className="h-4 w-16 bg-black/5 dark:bg-white/5" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
-                signals.map((row) => {
-                  const status = (row.tradeStatus ?? "RUNNING") as TradeStatus;
-                  return (
-                    <tr key={row.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors group">
-                      <td className="px-4 py-3 text-slate-200 text-xs whitespace-nowrap font-mono">
-                        {toLocalTime(row.timestamp)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={
-                          row.signal === "LONG" ? "success" :
-                          row.signal === "SHORT" ? "destructive" : "warning"
-                        }>
-                          {row.signal}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <TypeBadge type={(row as any).signalType} />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <StatusBadge status={status} pnlPoints={row.pnlPoints} />
-                          {status === "RUNNING" && (
-                            <button
-                              onClick={async () => {
-                                if (!confirm("Are you sure you want to forcefully close this trade at the current market price?")) return;
-                                try {
-                                  const res = await fetch(`/api/signals/${row.id}/close`, { method: "POST" });
-                                  if (!res.ok) throw new Error("Failed to close");
-                                  toast.success("Trade manually closed successfully!");
-                                } catch (e) {
-                                  toast.error("Failed to close trade.");
-                                }
-                              }}
-                              className="px-2 py-1 text-[10px] font-bold tracking-wider uppercase text-white bg-red-600/80 hover:bg-red-500 rounded-md transition-colors shadow-sm"
-                            >
-                              Close
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-foreground font-semibold">
-                        {formatPrice(row.entryPrice)}
-                      </td>
-                      <td className="px-4 py-3 text-destructive/80">
-                        {formatPrice(row.stopLoss)}
-                      </td>
-                      <td className="px-4 py-3 text-success/80">
-                        {formatPrice(row.takeProfit)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <PnlCell
-                          signal={row.signal}
-                          status={status}
-                          pnlPoints={row.pnlPoints}
-                          entryPrice={row.entryPrice}
-                          currentPrice={currentPrice}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-muted-foreground" />
-                          <DurationCell timestamp={row.timestamp} closedAt={row.closedAt} />
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-200">
-                        {row.confidence}%
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <DeleteButton id={row.id} onDelete={handleDelete} />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          {signals.length === 0 && !isLoading && (
-            <div className="p-8 text-center text-muted-foreground">
-              {period !== "ALL"
-                ? `No signals for ${PERIOD_LABELS[period].toLowerCase()}. Try "All History" to see everything.`
-                : "No signal history yet. Signals will appear here once generated."}
+              </div>
             </div>
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </>
   );
 }

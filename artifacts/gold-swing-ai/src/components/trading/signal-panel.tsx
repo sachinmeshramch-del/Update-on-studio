@@ -9,6 +9,7 @@ import {
   AlertCircle, Target, ShieldX, ArrowRightCircle,
   TrendingUp, TrendingDown, Minus, Zap,
   Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX, ShieldAlert,
+  ShieldCheck, CheckCircle2, Clock,
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
 import { motion } from "framer-motion";
@@ -203,6 +204,11 @@ export function SignalPanel() {
     indicators,
   } = signalData;
 
+  const postTradeCooldownRemaining = (signalData as any).postTradeCooldownRemaining as number ?? 0;
+  const rawScoreTotal = (signalData as any).rawScoreTotal as number ?? null;
+  const maxPossibleScore = (signalData as any).maxPossibleScore as number ?? 180;
+  const hasInstitutionalConfluence = Boolean((signalData as any).hasInstitutionalConfluence);
+
   // Pattern intelligence (new fields — may be undefined on old cached responses)
   const patternStrength    = (signalData as any).patternStrength    as number  ?? 0;
   const contextValid       = (signalData as any).contextValid       as boolean ?? false;
@@ -230,9 +236,9 @@ export function SignalPanel() {
   const trendColor = trend === "BULLISH" ? "text-success" : trend === "BEARISH" ? "text-destructive" : "text-muted-foreground";
 
   const confBarColor =
-    confidence >= 80 ? "bg-amber-400" :
-    confidence >= 65 ? "bg-emerald-500" :
-    confidence >= 50 ? "bg-blue-500" :
+    confidence >= 82 ? "bg-amber-400" :
+    confidence >= 72 ? "bg-emerald-500" :
+    confidence >= 55 ? "bg-blue-500" :
     "bg-zinc-500";
 
   const slDist = signal === "LONG"
@@ -305,6 +311,15 @@ export function SignalPanel() {
                     <CooldownTimer initialSeconds={spikeCooldownRemaining} variant="raw" />
                   </div>
                 )}
+                {(postTradeCooldownRemaining ?? 0) > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30">
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="text-xs font-bold text-indigo-400 tracking-wide">
+                      POST-TRADE REST
+                    </span>
+                    <CooldownTimer initialSeconds={postTradeCooldownRemaining} variant="raw" />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -314,10 +329,10 @@ export function SignalPanel() {
             <div className="flex justify-between w-full md:w-52 gap-2">
               <span className="text-xs text-muted-foreground">Confidence</span>
               <span className={`text-xs font-bold font-mono ${
-                confidence >= 80 ? "text-amber-600 dark:text-amber-400" :
-                confidence >= 65 ? "text-emerald-600 dark:text-emerald-400" :
-                confidence >= 50 ? "text-blue-600 dark:text-blue-400" :
-                "text-zinc-600 dark:text-zinc-400"
+                confidence >= 82 ? "text-amber-500 dark:text-amber-400" :
+                confidence >= 72 ? "text-emerald-500 dark:text-emerald-400" :
+                confidence >= 55 ? "text-blue-500 dark:text-blue-400" :
+                "text-zinc-500 dark:text-zinc-400"
               }`}>
                 {confidence}%
               </span>
@@ -432,10 +447,21 @@ export function SignalPanel() {
             </div>
           )}
           <div className="flex justify-between items-center pt-1 border-t border-border mt-0.5">
-            <span className="text-[10px] text-muted-foreground">Raw score</span>
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+              <span>Raw score</span>
+              {hasInstitutionalConfluence ? (
+                <span className="text-emerald-500 dark:text-emerald-400 text-[9px] font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  ✓ SMC Valid
+                </span>
+              ) : (
+                <span className="text-amber-500 dark:text-amber-400 text-[9px] font-semibold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                  Awaiting SMC
+                </span>
+              )}
+            </span>
             <span className="text-sm font-bold font-mono text-foreground">
-              {Math.round((confidence / 100) * 125)}
-              <span className="text-muted-foreground font-normal">/125</span>
+              {rawScoreTotal !== null ? rawScoreTotal : Math.round((confidence / 100) * maxPossibleScore)}
+              <span className="text-muted-foreground font-normal">/{maxPossibleScore}</span>
               <span className="text-muted-foreground font-normal text-[11px] ml-2">
                 = {confidence}%
               </span>

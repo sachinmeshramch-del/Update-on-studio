@@ -212,6 +212,10 @@ export function getMetaApiStatus() {
     return metaApiStatus;
 }
 
+export function getActiveAccountId() {
+    return activeAccountId;
+}
+
 export function getLastPriceTime() {
     return lastPriceReceivedAt;
 }
@@ -740,10 +744,11 @@ export async function startMetaApiFeed() {
                 break;
             } catch (accErr: any) {
                 lastConnError = accErr;
-                if ((accErr.message || String(accErr)).includes('does not exist') || (accErr.message || String(accErr)).includes('NotFoundError')) {
+                const errStr = accErr.message || String(accErr);
+                if (errStr.toLowerCase().includes('account') && (errStr.includes('does not exist') || errStr.includes('NotFoundError') || errStr.includes('not found'))) {
                     invalidAccountBlacklist.add(accountId);
                 }
-                logger.debug({ accountId, err: accErr.message || String(accErr) }, "Failed connecting to candidate account, trying fallback...");
+                logger.debug({ accountId, err: errStr }, "Failed connecting to candidate account, trying fallback...");
             }
         } // end for
 
@@ -909,7 +914,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                     }
                 } catch (accErr: any) {
                     const errMsg = accErr.message || String(accErr);
-                    if (errMsg.includes('does not exist') || errMsg.includes('NotFoundError') || errMsg.includes('not found')) {
+                    if (errMsg.toLowerCase().includes('account') && (errMsg.includes('does not exist') || errMsg.includes('NotFoundError') || errMsg.includes('not found'))) {
                         invalidAccountBlacklist.add(accId);
                         logger.debug({ accId }, "Quietly blacklisted invalid MetaApi account ID");
                     } else {

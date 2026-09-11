@@ -1,6 +1,7 @@
 import { getRunningTrades, updateTradeStatus, updateTradeStopLoss, updateTradeStopLossAndTakeProfit } from "@workspace/db";
 import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
+import { recordTradeClose } from "./signalEngine.js";
 import {
   modifyOpenPositionsStopLoss,
   modifyOpenPositionsStopLossAndTakeProfit,
@@ -70,9 +71,10 @@ async function handleBrokerDealClosed(deal: BrokerClosedDeal): Promise<void> {
       // If we know the exact position ID, use it. Otherwise rely on time and the known deal openPrice
       const hasIdMatch = trade.brokerPositionId && deal.positionId === trade.brokerPositionId;
       const comparePrice = deal.openPrice || entryPrice;
-      const pricePlausible = Math.abs(comparePrice - entryPrice) <= 15.0; // Tolerate up to 15 pts (150 pips) slippage
+      const pricePlausible = Math.abs(comparePrice - entryPrice) <= 3.0; // Realistic broker execution tolerance
+      const timePlausible = tradeTimestamp > 0 && Math.abs(dealTime - tradeTimestamp) <= 3600_000;
 
-      if (hasIdMatch || (isExitType && pricePlausible)) {
+      if (hasIdMatch || (isExitType && pricePlausible && timePlausible)) {
         const isTp = deal.reason === "DEAL_REASON_TP" ||
                      (deal.comment && deal.comment.toLowerCase().includes("tp")) ||
                      (signal === "LONG" && deal.price >= takeProfit - 0.6) ||
@@ -90,6 +92,7 @@ async function handleBrokerDealClosed(deal: BrokerClosedDeal): Promise<void> {
         cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
 
         await updateTradeStatus(id as string, finalStatus, finalClosedPrice, finalPnl);
+        recordTradeClose(finalStatus === "TARGET_HIT" ? "WIN" : "LOSS");
         logger.info(
           { id, signal, finalStatus, finalClosedPrice, finalPnl, dealId: deal.id, reason: deal.reason, comment: deal.comment },
           "[Event-Driven Broker Sync] Instantly matched and closed running trade on MT5 deal event!"
@@ -149,13 +152,13 @@ export async function checkRunningTrades(): Promise<void> {
       const tradeTimestamp = createdAt ? new Date(createdAt).getTime() : 0;
 
       // ── 1. Match against open broker positions ─────────────────────────────
-      // Match by direction and time/price proximity (tolerate up to 15 points spread/slippage)
+      // Match by direction and tight time/price proximity to prevent cross-matching
       const matchingOpenPos = brokerPositions.find(p => {
         if (trade.brokerPositionId && trade.brokerPositionId === p.id) return true;
         const pTime = new Date(p.time).getTime();
-        const timeMatch = tradeTimestamp > 0 && pTime >= tradeTimestamp - 30_000 && pTime <= tradeTimestamp + 180_000;
-        const priceMatch = Math.abs(p.openPrice - entryPrice) <= 15.0;
-        return p.type === signal && (timeMatch || priceMatch);
+        const timeMatch = tradeTimestamp > 0 && Math.abs(pTime - tradeTimestamp) <= 120_000;
+        const priceMatch = Math.abs(p.openPrice - entryPrice) <= 3.0;
+        return p.type === signal && timeMatch && priceMatch;
       });
       
       if (matchingOpenPos) {
@@ -180,12 +183,12 @@ export async function checkRunningTrades(): Promise<void> {
         const matchingDeal = recentClosedDeals.find(d => {
           if (trade.brokerPositionId && d.positionId === trade.brokerPositionId) return true;
           const dealTime = new Date(d.time).getTime();
-          if (tradeTimestamp > 0 && dealTime < tradeTimestamp - 30_000) return false;
+          const timeMatch = tradeTimestamp > 0 && dealTime >= tradeTimestamp - 30_000 && dealTime <= tradeTimestamp + 3600_000;
           const isExitType = (signal === "LONG" && d.type === "DEAL_TYPE_SELL") ||
                              (signal === "SHORT" && d.type === "DEAL_TYPE_BUY");
           const comparePrice = d.openPrice || entryPrice;
-          const pricePlausible = Math.abs(comparePrice - entryPrice) <= 15.0;
-          return isExitType && pricePlausible;
+          const pricePlausible = Math.abs(comparePrice - entryPrice) <= 3.0;
+          return isExitType && timeMatch && pricePlausible;
         });
 
         if (matchingDeal) {
@@ -204,6 +207,7 @@ export async function checkRunningTrades(): Promise<void> {
           activeTradeStates.delete(id as string);
           cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
           await updateTradeStatus(id as string, finalStatus, finalClosedPrice, finalPnl);
+          recordTradeClose(finalStatus === "TARGET_HIT" ? "WIN" : "LOSS");
           logger.info(
             { id, signal, finalStatus, finalClosedPrice, finalPnl, dealId: matchingDeal.id, comment: matchingDeal.comment },
             "[Broker Sync] Synced trade outcome with real MetaTrader/XM deal execution!"
@@ -262,7 +266,9 @@ export async function checkRunningTrades(): Promise<void> {
         // ── EXIT EVALUATION FOR PAPER TRADES (Real trades exit via MT5 native SL/TP) ──
         if (!matchingOpenPos && currentBid <= stopLoss) {
           newStatus   = "STOP_HIT";
-          closedPrice = currentBid;
+          // Realistic broker SL execution: cap slippage to at most 0.20 points even if price jumped or server reconnected late
+          const slippage = Math.min(Math.max(stopLoss - currentBid, 0), 0.20);
+          closedPrice = +(stopLoss - slippage).toFixed(2);
           pnlPoints   = +(closedPrice - actualEntry).toFixed(2);
           activeTradeStates.delete(id as string);
         } else if (!matchingOpenPos && currentBid >= trade.takeProfit) {
@@ -285,8 +291,8 @@ export async function checkRunningTrades(): Promise<void> {
           const breakEvenPrice = +(actualEntry + currentSpread + 0.20).toFixed(2);
 
           // Step A: Capital Protection / Break-Even
-          // Trigger when profit reaches >= 2.20 pts (or 40% of target distance)
-          const beTriggerProfit = Math.max(2.20, +(distanceToInitialTarget * 0.40).toFixed(2));
+          // Trigger when profit reaches >= 0.65x of target distance (or at least 4.5 pts) to give gold swings breathing room
+          const beTriggerProfit = Math.max(4.50, +(distanceToInitialTarget * 0.65).toFixed(2));
           if (currentProfit >= beTriggerProfit) {
             // Require current bid to be safely above BE price (+0.60 pts room)
             if (currentBid >= breakEvenPrice + minStopBuffer + 0.60) {
@@ -297,32 +303,32 @@ export async function checkRunningTrades(): Promise<void> {
 
           // Step B: Asymmetric Trailing Logic
           if (trackerState.runnerActivated) {
-            // Floor guaranteed profit: lock at least +2.00 or 50% of initial target
-            const minLockedProfit = Math.max(2.00, +(distanceToInitialTarget * 0.50).toFixed(2));
+            // Floor guaranteed profit: lock at least +2.50 or 50% of initial target
+            const minLockedProfit = Math.max(2.50, +(distanceToInitialTarget * 0.50).toFixed(2));
             const floorProfitPrice = +(actualEntry + minLockedProfit).toFixed(2);
             targetSl = Math.max(targetSl, floorProfitPrice);
 
             // Progressive Asymmetric Tiers (with ample breathing space for Gold swings)
-            if (peakProfit >= 4.0 && peakProfit < 7.0) {
-              // Tier 1 Runner (+4 to +7 pts): Trail 2.4 pts behind peak price
-              const tier1Sl = +(trackerState.peakFavorablePrice - 2.40).toFixed(2);
+            if (peakProfit >= 5.0 && peakProfit < 9.0) {
+              // Tier 1 Runner (+5 to +9 pts): Trail 3.5 pts behind peak price
+              const tier1Sl = +(trackerState.peakFavorablePrice - 3.50).toFixed(2);
               targetSl = Math.max(targetSl, tier1Sl);
               trackerState.trailStage = "RUNNER_STAGE_1";
-            } else if (peakProfit >= 7.0 && peakProfit < 12.0) {
-              // Tier 2 Strong Runner (+7 to +12 pts): Trail 2.8 pts behind peak price
-              const tier2Sl = +(trackerState.peakFavorablePrice - 2.80).toFixed(2);
+            } else if (peakProfit >= 9.0 && peakProfit < 15.0) {
+              // Tier 2 Strong Runner (+9 to +15 pts): Trail 4.5 pts behind peak price
+              const tier2Sl = +(trackerState.peakFavorablePrice - 4.50).toFixed(2);
               targetSl = Math.max(targetSl, tier2Sl);
               trackerState.trailStage = "RUNNER_STAGE_2";
-            } else if (peakProfit >= 12.0) {
-              // Tier 3 Mega Runner (> +12 pts): Trail 3.5 pts behind peak price
-              const tier3Sl = +(trackerState.peakFavorablePrice - 3.50).toFixed(2);
+            } else if (peakProfit >= 15.0) {
+              // Tier 3 Mega Runner (> +15 pts): Trail 5.5 pts behind peak price
+              const tier3Sl = +(trackerState.peakFavorablePrice - 5.50).toFixed(2);
               targetSl = Math.max(targetSl, tier3Sl);
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
           } else {
-            // Pre-runner progressive locking (activates once >= 55% of target)
-            if (currentProfit >= distanceToInitialTarget * 0.55 && currentProfit < distanceToInitialTarget * 0.85) {
-              const p2Target = +(actualEntry + (distanceToInitialTarget * 0.30)).toFixed(2);
+            // Pre-runner progressive locking (activates once >= 70% of target)
+            if (currentProfit >= distanceToInitialTarget * 0.70 && currentProfit < distanceToInitialTarget * 0.85) {
+              const p2Target = +(actualEntry + (distanceToInitialTarget * 0.35)).toFixed(2);
               if (currentBid >= p2Target + minStopBuffer + 0.80) {
                 targetSl = Math.max(targetSl, p2Target);
               } else if (currentBid >= breakEvenPrice + minStopBuffer + 0.60) {
@@ -415,7 +421,9 @@ export async function checkRunningTrades(): Promise<void> {
         // ── EXIT EVALUATION FOR PAPER TRADES ──
         if (!matchingOpenPos && currentAsk >= stopLoss) {
           newStatus   = "STOP_HIT";
-          closedPrice = currentAsk;
+          // Realistic broker SL execution: cap slippage to at most 0.20 points even if price jumped or server reconnected late
+          const slippage = Math.min(Math.max(currentAsk - stopLoss, 0), 0.20);
+          closedPrice = +(stopLoss + slippage).toFixed(2);
           pnlPoints   = +(actualEntry - closedPrice).toFixed(2);
           activeTradeStates.delete(id as string);
         } else if (!matchingOpenPos && currentAsk <= trade.takeProfit) {
@@ -438,8 +446,8 @@ export async function checkRunningTrades(): Promise<void> {
           const breakEvenPrice = +(actualEntry - currentSpread - 0.20).toFixed(2);
 
           // Step A: Capital Protection / Break-Even
-          // Trigger when profit reaches >= 2.20 pts (or 40% of target distance)
-          const beTriggerProfit = Math.max(2.20, +(distanceToInitialTarget * 0.40).toFixed(2));
+          // Trigger when profit reaches >= 0.65x of target distance (or at least 4.5 pts) to give gold swings breathing room
+          const beTriggerProfit = Math.max(4.50, +(distanceToInitialTarget * 0.65).toFixed(2));
           if (currentProfit >= beTriggerProfit) {
             // Require current ask to be safely below BE price (+0.60 pts room)
             if (currentAsk <= breakEvenPrice - minStopBuffer - 0.60) {
@@ -450,32 +458,32 @@ export async function checkRunningTrades(): Promise<void> {
 
           // Step B: Asymmetric Trailing Logic
           if (trackerState.runnerActivated) {
-            // Floor guaranteed profit: lock at least +2.00 or 50% of initial target
-            const minLockedProfit = Math.max(2.00, +(distanceToInitialTarget * 0.50).toFixed(2));
+            // Floor guaranteed profit: lock at least +2.50 or 50% of initial target
+            const minLockedProfit = Math.max(2.50, +(distanceToInitialTarget * 0.50).toFixed(2));
             const floorProfitPrice = +(actualEntry - minLockedProfit).toFixed(2);
             targetSl = Math.min(targetSl, floorProfitPrice);
 
             // Progressive Asymmetric Tiers (with ample breathing space for Gold swings)
-            if (peakProfit >= 4.0 && peakProfit < 7.0) {
-              // Tier 1 Runner (+4 to +7 pts): Trail 2.4 pts behind peak price
-              const tier1Sl = +(trackerState.peakFavorablePrice + 2.40).toFixed(2);
+            if (peakProfit >= 5.0 && peakProfit < 9.0) {
+              // Tier 1 Runner (+5 to +9 pts): Trail 3.5 pts behind peak price
+              const tier1Sl = +(trackerState.peakFavorablePrice + 3.50).toFixed(2);
               targetSl = Math.min(targetSl, tier1Sl);
               trackerState.trailStage = "RUNNER_STAGE_1";
-            } else if (peakProfit >= 7.0 && peakProfit < 12.0) {
-              // Tier 2 Strong Runner (+7 to +12 pts): Trail 2.8 pts behind peak price
-              const tier2Sl = +(trackerState.peakFavorablePrice + 2.80).toFixed(2);
+            } else if (peakProfit >= 9.0 && peakProfit < 15.0) {
+              // Tier 2 Strong Runner (+9 to +15 pts): Trail 4.5 pts behind peak price
+              const tier2Sl = +(trackerState.peakFavorablePrice + 4.50).toFixed(2);
               targetSl = Math.min(targetSl, tier2Sl);
               trackerState.trailStage = "RUNNER_STAGE_2";
-            } else if (peakProfit >= 12.0) {
-              // Tier 3 Mega Runner (> +12 pts): Trail 3.5 pts behind peak price
-              const tier3Sl = +(trackerState.peakFavorablePrice + 3.50).toFixed(2);
+            } else if (peakProfit >= 15.0) {
+              // Tier 3 Mega Runner (> +15 pts): Trail 5.5 pts behind peak price
+              const tier3Sl = +(trackerState.peakFavorablePrice + 5.50).toFixed(2);
               targetSl = Math.min(targetSl, tier3Sl);
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
           } else {
-            // Pre-runner progressive locking (activates once >= 55% of target)
-            if (currentProfit >= distanceToInitialTarget * 0.55 && currentProfit < distanceToInitialTarget * 0.85) {
-              const p2Target = +(actualEntry - (distanceToInitialTarget * 0.30)).toFixed(2);
+            // Pre-runner progressive locking (activates once >= 70% of target)
+            if (currentProfit >= distanceToInitialTarget * 0.70 && currentProfit < distanceToInitialTarget * 0.85) {
+              const p2Target = +(actualEntry - (distanceToInitialTarget * 0.35)).toFixed(2);
               if (currentAsk <= p2Target - minStopBuffer - 0.80) {
                 targetSl = Math.min(targetSl, p2Target);
               } else if (currentAsk <= breakEvenPrice - minStopBuffer - 0.60) {
@@ -548,6 +556,7 @@ export async function checkRunningTrades(): Promise<void> {
         activeTradeStates.delete(id as string);
         cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
         await updateTradeStatus(id as string, newStatus, closedPrice, pnlPoints);
+        recordTradeClose(newStatus === "TARGET_HIT" ? "WIN" : "LOSS");
         logger.info({ id, signal, newStatus, closedPrice, pnlPoints }, "[Trade Tracker] Trade outcome updated");
       }
     }

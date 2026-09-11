@@ -97,9 +97,14 @@ export async function executeTradeWithCapitalManagement(
             }
         }
 
-        if (consecutiveLosses >= 2 && lastLossTime > 0 && (now - lastLossTime < 45 * 60 * 1000)) {
-            const remainingMins = Math.max(1, Math.ceil((45 * 60 * 1000 - (now - lastLossTime)) / 60000));
-            logger.warn({ consecutiveLosses, remainingMins }, `[AutoTrader] Execution BLOCKED: Circuit Breaker active (${remainingMins}m left after ${consecutiveLosses} consecutive losses)`);
+        let circuitBreakerMins = 0;
+        if (consecutiveLosses >= 4) circuitBreakerMins = 720; // 12 hours (done for the day)
+        else if (consecutiveLosses >= 3) circuitBreakerMins = 120; // 2 hours
+        else if (consecutiveLosses >= 2) circuitBreakerMins = 45;
+
+        if (circuitBreakerMins > 0 && lastLossTime > 0 && (now - lastLossTime < circuitBreakerMins * 60 * 1000)) {
+            const remainingMins = Math.max(1, Math.ceil((circuitBreakerMins * 60 * 1000 - (now - lastLossTime)) / 60000));
+            logger.warn({ consecutiveLosses, remainingMins }, `[AutoTrader] Execution BLOCKED: Progressive Circuit Breaker active (${remainingMins}m left after ${consecutiveLosses} consecutive losses)`);
             return;
         }
 

@@ -1,4 +1,4 @@
-import { generateSignal } from "./signalEngine.js";
+import { generateSignal, recordTradeClose } from "./signalEngine.js";
 import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { insertSignal, getLatestSignal, getRunningTrades, updateTradeStatus } from "@workspace/db";
 import { sendPushToAll } from "./pushNotifications.js";
@@ -60,6 +60,7 @@ async function checkDailyRolloverAndClose(): Promise<void> {
                 for (const trade of running) {
                     if (trade.id) {
                         await updateTradeStatus(trade.id, "CLOSED", currentPrice, 0);
+                        recordTradeClose("WIN");
                         logger.info({ tradeId: trade.id }, "Marked trade as CLOSED due to rollover");
                     }
                 }
@@ -117,8 +118,8 @@ async function runScheduledSignal(): Promise<void> {
       const latest = await getLatestSignal();
       if (latest && latest.signal === signal.signal) {
         const msSince = Date.now() - latest.createdAt.getTime();
-        if (msSince < 5 * 60 * 1000) {
-          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate signal (fired within 5 min)");
+        if (msSince < 20 * 60 * 1000) {
+          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate signal (fired within 20 min)");
           return;
         }
       }
@@ -139,7 +140,8 @@ async function runScheduledSignal(): Promise<void> {
       const settings = await getSystemSettings();
 
       // 1. Real Account Execution (Concurrent)
-      if (settings.autoTradingRealEnabled) {
+      const isRealAuto = Boolean(settings.autoTradingRealEnabled || (settings.autoTradingEnabled && settings.tradingMode === "REAL"));
+      if (isRealAuto) {
         const realId = settings.realAccountId?.trim();
         if (realId) {
           logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Dispatching trade to REAL MT5 account immediately...");
@@ -153,7 +155,8 @@ async function runScheduledSignal(): Promise<void> {
       }
 
       // 2. Demo Account Execution (Concurrent)
-      if (settings.autoTradingDemoEnabled) {
+      const isDemoAuto = Boolean(settings.autoTradingDemoEnabled || (settings.autoTradingEnabled && settings.tradingMode === "DEMO"));
+      if (isDemoAuto) {
         const demoId = settings.demoAccountId?.trim();
         if (demoId) {
           logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Dispatching trade to DEMO MT5 account concurrently...");
