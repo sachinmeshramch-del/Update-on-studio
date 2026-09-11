@@ -1,7 +1,6 @@
 import { getRunningTrades, updateTradeStatus, updateTradeStopLoss, updateTradeStopLossAndTakeProfit } from "@workspace/db";
 import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
-import { recordTradeClose } from "./signalEngine.js";
 import {
   modifyOpenPositionsStopLoss,
   modifyOpenPositionsStopLossAndTakeProfit,
@@ -92,7 +91,6 @@ async function handleBrokerDealClosed(deal: BrokerClosedDeal): Promise<void> {
         cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
 
         await updateTradeStatus(id as string, finalStatus, finalClosedPrice, finalPnl);
-        recordTradeClose(finalStatus === "TARGET_HIT" ? "WIN" : "LOSS");
         logger.info(
           { id, signal, finalStatus, finalClosedPrice, finalPnl, dealId: deal.id, reason: deal.reason, comment: deal.comment },
           "[Event-Driven Broker Sync] Instantly matched and closed running trade on MT5 deal event!"
@@ -207,7 +205,6 @@ export async function checkRunningTrades(): Promise<void> {
           activeTradeStates.delete(id as string);
           cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
           await updateTradeStatus(id as string, finalStatus, finalClosedPrice, finalPnl);
-          recordTradeClose(finalStatus === "TARGET_HIT" ? "WIN" : "LOSS");
           logger.info(
             { id, signal, finalStatus, finalClosedPrice, finalPnl, dealId: matchingDeal.id, comment: matchingDeal.comment },
             "[Broker Sync] Synced trade outcome with real MetaTrader/XM deal execution!"
@@ -556,7 +553,6 @@ export async function checkRunningTrades(): Promise<void> {
         activeTradeStates.delete(id as string);
         cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
         await updateTradeStatus(id as string, newStatus, closedPrice, pnlPoints);
-        recordTradeClose(newStatus === "TARGET_HIT" ? "WIN" : "LOSS");
         logger.info({ id, signal, newStatus, closedPrice, pnlPoints }, "[Trade Tracker] Trade outcome updated");
       }
     }

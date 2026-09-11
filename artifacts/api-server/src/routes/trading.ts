@@ -1,6 +1,6 @@
 import { sendPushToAll } from "../lib/pushNotifications.js";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { generateSignal, initSignalCooldown, recordTradeClose } from "../lib/signalEngine.js";
+import { generateSignal, initSignalCooldown } from "../lib/signalEngine.js";
 import { startTradeTracker } from "../lib/tradeTracker.js";
 import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
@@ -280,7 +280,6 @@ router.post("/signals/:id/close", async (req, res) => {
     }
 
     await updateTradeStatus(id, "MANUALLY_CLOSED", currentPrice, Number(pnl.toFixed(2)));
-    recordTradeClose(pnl >= 0 ? "WIN" : "LOSS");
     
     res.json({ success: true, closedPrice: currentPrice, pnl: Number(pnl.toFixed(2)) });
   } catch (err: any) {

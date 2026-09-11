@@ -5,6 +5,7 @@ import { useTheme } from "@/components/theme-provider";
 import { LiveTickChart } from "./live-tick-chart";
 import { useGetSignal } from "@workspace/api-client-react";
 import { X } from "lucide-react";
+import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 
 type Tab = "ticks" | "ohlc";
 
@@ -16,36 +17,10 @@ const TIMEFRAMES = [
   { label: "1D",  value: "D" },
 ];
 
-function buildChartUrl(interval: string, isDark: boolean): string {
-  const params = new URLSearchParams({
-    symbol:            "OANDA:XAUUSD",
-    interval,
-    timezone:          "Etc/UTC",
-    theme:             isDark ? "dark" : "light",
-    style:             "1",
-    locale:            "en",
-    toolbar_bg:        isDark ? "131722" : "ffffff",
-    backgroundColor:   isDark ? "rgba(19,23,34,1)" : "rgba(255,255,255,1)",
-    gridColor:         isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
-    enable_publishing: "false",
-    hide_top_toolbar:  "false",
-    hide_legend:       "false",
-    save_image:        "false",
-    allow_symbol_change: "false",
-    withdateranges:    "true",
-    hide_volume:       "false",
-    no_referral_id:    "true",
-    calendar:          "false",
-    hide_market_status: "false",
-  });
-  return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-}
-
 export function ChartWidget() {
-  // Default to OHLC at 1H for intraday trading
+  // Default to OHLC for intraday trading
   const [tab, setTab]           = useState<Tab>("ohlc");
   const [interval, setInterval] = useState("15");
-  const [iframeKey, setIframeKey] = useState(0);
   const [dismissed, setDismissed] = useState(false);
 
   const { data: signalData } = useGetSignal({ query: { refetchInterval: 30_000 } as any });
@@ -59,7 +34,6 @@ export function ChartWidget() {
 
   const handleTimeframe = useCallback((val: string) => {
     setInterval(val);
-    setIframeKey(k => k + 1);
   }, []);
 
   const isBullish = (candleScore ?? 0) >= 0;
@@ -133,15 +107,22 @@ export function ChartWidget() {
 
         {/* TradingView OHLC — always mounted, hidden when on TICKS tab */}
         <div className={cn("absolute inset-0", tab === "ohlc" ? "block" : "hidden")}>
-          <iframe
-            key={iframeKey}
-            src={buildChartUrl(interval, isDark)}
-            className="w-full h-full border-0"
-            title="XAUUSD OHLC Chart"
-            allowFullScreen
-            loading="eager"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
+          {tab === "ohlc" && (
+            <AdvancedRealTimeChart
+              symbol="OANDA:XAUUSD"
+              interval={interval as any}
+              theme={isDark ? "dark" : "light"}
+              timezone="Etc/UTC"
+              style="1"
+              locale="en"
+              toolbar_bg={isDark ? "#131722" : "#ffffff"}
+              enable_publishing={false}
+              hide_top_toolbar={false}
+              hide_legend={false}
+              save_image={false}
+              autosize
+            />
+          )}
         </div>
 
         {/* ── Candlestick Pattern Overlay Badge ─────────────────────────────

@@ -1,4 +1,4 @@
-import { generateSignal, recordTradeClose } from "./signalEngine.js";
+import { generateSignal } from "./signalEngine.js";
 import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { insertSignal, getLatestSignal, getRunningTrades, updateTradeStatus } from "@workspace/db";
 import { sendPushToAll } from "./pushNotifications.js";
@@ -60,7 +60,6 @@ async function checkDailyRolloverAndClose(): Promise<void> {
                 for (const trade of running) {
                     if (trade.id) {
                         await updateTradeStatus(trade.id, "CLOSED", currentPrice, 0);
-                        recordTradeClose("WIN");
                         logger.info({ tradeId: trade.id }, "Marked trade as CLOSED due to rollover");
                     }
                 }
