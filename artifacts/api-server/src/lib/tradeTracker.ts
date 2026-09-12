@@ -1,4 +1,4 @@
-import { getRunningTrades, updateTradeStatus, updateTradeStopLoss, updateTradeStopLossAndTakeProfit } from "@workspace/db";
+import { getRunningTrades, updateTradeStatus, updateTradeStopLoss, updateTradeStopLossAndTakeProfit, updateTradeEntryPrice } from "@workspace/db";
 import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { logger } from "./logger.js";
 import {
@@ -161,17 +161,45 @@ export async function checkRunningTrades(): Promise<void> {
       
       if (matchingOpenPos) {
         trade.brokerPositionId = matchingOpenPos.id;
+
+        // ── ZERO-LATENCY ALIGNMENT: Sync Exact Entry Price (Slippage) from Broker to DB ──
+        if (matchingOpenPos.openPrice > 0 && Math.abs(matchingOpenPos.openPrice - trade.entryPrice) > 0.01) {
+          logger.info(
+            { id, dbEntry: trade.entryPrice, brokerEntry: matchingOpenPos.openPrice },
+            "[Sync] Updating DB entry price to exact broker execution price (Slippage correction)"
+          );
+          trade.entryPrice = matchingOpenPos.openPrice;
+          updateTradeEntryPrice(id as string, matchingOpenPos.openPrice).catch(e =>
+            logger.error({err: e}, "Failed to sync exact broker entry price to DB")
+          );
+        }
         
-        // ── ZERO-LATENCY ALIGNMENT: Sync Stop Loss from Broker to DB ──
+        // ── ZERO-LATENCY ALIGNMENT: Sync Stop Loss and Take Profit from Broker to DB ──
+        let slChanged = false;
+        let tpChanged = false;
+
         if (matchingOpenPos.stopLoss > 0 && Math.abs(matchingOpenPos.stopLoss - stopLoss) > 0.05) {
           logger.warn(
             { id, dbSL: stopLoss, brokerSL: matchingOpenPos.stopLoss },
             "[Sync] Broker stop loss differs from DB. Syncing DB to match broker truth."
           );
           trade.stopLoss = matchingOpenPos.stopLoss;
+          slChanged = true;
+        }
+
+        if (matchingOpenPos.takeProfit > 0 && Math.abs(matchingOpenPos.takeProfit - takeProfit) > 0.05) {
+          logger.warn(
+            { id, dbTP: takeProfit, brokerTP: matchingOpenPos.takeProfit },
+            "[Sync] Broker take profit differs from DB. Syncing DB to match broker truth."
+          );
+          trade.takeProfit = matchingOpenPos.takeProfit;
+          tpChanged = true;
+        }
+
+        if (slChanged || tpChanged) {
           // Update DB (fire and forget to not block loop)
-          updateTradeStopLoss(id as string, matchingOpenPos.stopLoss).catch(e => 
-            logger.error({err: e}, "Failed to sync broker SL to DB")
+          updateTradeStopLossAndTakeProfit(id as string, trade.stopLoss, trade.takeProfit).catch(e => 
+            logger.error({err: e}, "Failed to sync broker SL/TP to DB")
           );
         }
       }
@@ -211,6 +239,22 @@ export async function checkRunningTrades(): Promise<void> {
           );
           continue;
         }
+      }
+
+      // ── 2.5 Check for Orphaned Real Trades (Missing from MT5 entirely) ──
+      if (trade.brokerPositionId && !matchingOpenPos) {
+        logger.warn(
+          { id, signal, brokerPositionId: trade.brokerPositionId },
+          "[Broker Sync] Trade is marked as real but is missing from MT5 open positions. Forcing closure to sync with broker."
+        );
+        const finalStatus = "MANUAL_CLOSE";
+        const finalClosedPrice = currentPrice;
+        const pnl = Number((signal === "LONG" ? (currentPrice - entryPrice) : (entryPrice - currentPrice)).toFixed(2));
+        
+        activeTradeStates.delete(id as string);
+        cachedRunningTrades = cachedRunningTrades.filter(t => t.id !== id);
+        await updateTradeStatus(id as string, finalStatus, finalClosedPrice, pnl);
+        continue;
       }
 
       // ── 3. Active Position & Asymmetric Runner Trailing Stop Tracking ──────
@@ -263,9 +307,18 @@ export async function checkRunningTrades(): Promise<void> {
         // ── EXIT EVALUATION FOR PAPER TRADES (Real trades exit via MT5 native SL/TP) ──
         if (!matchingOpenPos && currentBid <= stopLoss) {
           newStatus   = "STOP_HIT";
-          // Realistic broker SL execution: cap slippage to at most 0.20 points even if price jumped or server reconnected late
-          const slippage = Math.min(Math.max(stopLoss - currentBid, 0), 0.20);
-          closedPrice = +(stopLoss - slippage).toFixed(2);
+          // Weekend gap protection: If price gapped violently through the stop loss (e.g. over weekend),
+          // real brokers will execute at the current market price (first available tick), NOT the requested SL price.
+          // Therefore, if currentBid is significantly worse than stopLoss, use currentBid as the closed price.
+          // If it's just normal slippage, we cap it at 0.20 points to avoid weird ghost ticks.
+          const gapSize = stopLoss - currentBid;
+          if (gapSize > 1.0) { // Large gap detected
+            closedPrice = currentBid;
+            logger.warn({ id, signal, stopLoss, currentBid, gapSize }, "⚠️ Weekend gap or high slippage detected on SL hit! Using actual market opening price.");
+          } else {
+            const slippage = Math.max(gapSize, 0); // Normal slippage
+            closedPrice = +(stopLoss - slippage).toFixed(2);
+          }
           pnlPoints   = +(closedPrice - actualEntry).toFixed(2);
           activeTradeStates.delete(id as string);
         } else if (!matchingOpenPos && currentBid >= trade.takeProfit) {
@@ -418,9 +471,17 @@ export async function checkRunningTrades(): Promise<void> {
         // ── EXIT EVALUATION FOR PAPER TRADES ──
         if (!matchingOpenPos && currentAsk >= stopLoss) {
           newStatus   = "STOP_HIT";
-          // Realistic broker SL execution: cap slippage to at most 0.20 points even if price jumped or server reconnected late
-          const slippage = Math.min(Math.max(currentAsk - stopLoss, 0), 0.20);
-          closedPrice = +(stopLoss + slippage).toFixed(2);
+          // Weekend gap protection: If price gapped violently through the stop loss (e.g. over weekend),
+          // real brokers will execute at the current market price (first available tick), NOT the requested SL price.
+          // Therefore, if currentAsk is significantly worse than stopLoss, use currentAsk as the closed price.
+          const gapSize = currentAsk - stopLoss;
+          if (gapSize > 1.0) { // Large gap detected
+            closedPrice = currentAsk;
+            logger.warn({ id, signal, stopLoss, currentAsk, gapSize }, "⚠️ Weekend gap or high slippage detected on SL hit! Using actual market opening price.");
+          } else {
+            const slippage = Math.max(gapSize, 0); // Normal slippage
+            closedPrice = +(stopLoss + slippage).toFixed(2);
+          }
           pnlPoints   = +(actualEntry - closedPrice).toFixed(2);
           activeTradeStates.delete(id as string);
         } else if (!matchingOpenPos && currentAsk <= trade.takeProfit) {
@@ -611,3 +672,5 @@ export function startTradeTracker() {
   const intervalId = setInterval(checkRunningTrades, AUDIT_INTERVAL);
   if (typeof intervalId === "object" && "unref" in intervalId) (intervalId as any).unref();
 }
+
+// ── Check For Weekend Gap Over Stop Loss ──

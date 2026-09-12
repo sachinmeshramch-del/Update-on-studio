@@ -1,5 +1,5 @@
 import { getSystemSettings, getRecentSignals } from "@workspace/db";
-import { executeTradeOnAccount, getAccountFundsInfo } from "./metaApiFeed.js";
+import { executeTradeOnAccount, getAccountFundsInfo, getSymbolSpec, getConfiguredSymbol } from "./metaApiFeed.js";
 import { logger } from "./logger.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { getLatestPrice } from "./priceEvents.js";
@@ -40,6 +40,10 @@ export async function executeTradeWithCapitalManagement(
     let actualEquity = fundsInfo ? fundsInfo.equity : null;
     let leverage = fundsInfo ? fundsInfo.leverage : 0;
     
+    // Fetch precise symbol specifications to calculate exact pip values for ANY asset (Gold, Crypto, Indices)
+    const sym = getConfiguredSymbol();
+    let symbolSpec = await getSymbolSpec(accountId, sym);
+    
     // Safe fallback if account funds info is pending
     if (!actualEquity || actualEquity <= 0) {
         logger.info({ accountId }, "[AutoTrader] Using safe $1000 fallback balance for initial lot sizing.");
@@ -48,21 +52,59 @@ export async function executeTradeWithCapitalManagement(
 
     // Risk amount = Equity * Risk%
     const riskAmount = actualEquity * (riskPerTrade / 100);
-    // SL distance in pips/points (Gold) - minimum 1.0 point to prevent excessive lot size
+    // SL distance in pips/points - minimum distance fallback to prevent excessive lot size
     const rawSlDistance = Math.abs(entryPrice - stopLoss);
-    const slDistance = Math.max(1.0, rawSlDistance);
     
-    // Standard Gold Lot Size Calculation (approximate: 1 standard lot = 100 oz)
     let calculatedVolume = 0.01;
-    if (slDistance > 0) {
-        calculatedVolume = parseFloat((riskAmount / (slDistance * 100)).toFixed(2));
+    let lotStep = 0.01;
+    let minVolume = 0.01;
+    
+    if (symbolSpec && rawSlDistance > 0) {
+        // MetaTrader 5 Formula: 
+        // Profit = (Close - Open) * ContractSize * Volume
+        // So RiskAmount = SL_Distance * ContractSize * Volume
+        // Volume = RiskAmount / (SL_Distance * ContractSize)
+        // Note: For forex, there's also exchange rate, but for USD pairs/metals it's 1.
+        
+        // Sometimes brokers define tickValue and tickSize.
+        // RiskAmount = (SL_Distance / tickSize) * tickValue * Volume
+        const tickSize = symbolSpec.tickSize || symbolSpec.point || 0.01;
+        const tickValue = symbolSpec.tickValue; // e.g. 1.0 for USD accounts
+        const contractSize = symbolSpec.contractSize || 100;
+        
+        lotStep = symbolSpec.volumeStep || 0.01;
+        minVolume = symbolSpec.volumeMin || 0.01;
+        
+        let riskPerLot = 0;
+        if (tickValue && tickSize) {
+            riskPerLot = (rawSlDistance / tickSize) * tickValue;
+        } else {
+            riskPerLot = rawSlDistance * contractSize;
+        }
+        
+        if (riskPerLot > 0) {
+            let exactVol = riskAmount / riskPerLot;
+            // Round down to the nearest lotStep to ensure we don't exceed risk
+            calculatedVolume = Math.floor(exactVol / lotStep) * lotStep;
+        }
+    } else {
+        // Fallback to standard Gold logic (1 lot = 100 oz) if spec fails
+        const slDistanceFallback = Math.max(1.0, rawSlDistance);
+        if (slDistanceFallback > 0) {
+            calculatedVolume = parseFloat((riskAmount / (slDistanceFallback * 100)).toFixed(2));
+        }
     }
     
-    // Constrain volume safely
-    if (isNaN(calculatedVolume) || calculatedVolume < 0.01) calculatedVolume = 0.01;
+    // Constrain volume safely based on symbol spec
+    if (isNaN(calculatedVolume) || calculatedVolume < minVolume) calculatedVolume = minVolume;
+    // Cap at reasonable maximum (e.g. 5.0 lots) to prevent catastrophic errors
     if (calculatedVolume > 5.0) calculatedVolume = 5.0;
+    
+    // Format to avoid floating point precision issues (e.g. 0.01000000000001)
+    const stepDecimals = (lotStep.toString().split('.')[1] || '').length || 2;
+    calculatedVolume = parseFloat(calculatedVolume.toFixed(stepDecimals));
 
-    logger.info({ accountId, actualEquity, leverage, riskAmount, calculatedVolume }, `[AutoTrader] Dynamically calculated volume`);
+    logger.info({ accountId, actualEquity, leverage, riskAmount, calculatedVolume, symbol: sym }, `[AutoTrader] Dynamically calculated volume using broker specifications`);
 
     if (dailyStats.tradingHalted) {
         logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit.`);

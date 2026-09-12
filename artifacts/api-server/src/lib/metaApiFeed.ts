@@ -1700,25 +1700,28 @@ export async function modifyOpenPositionsStopLoss(
 export async function closeAllPositions(accountId: string) {
     if (!accountId) return;
     try {
-        const account = await metaApi.metatraderAccountApi.getAccount(accountId.trim());
-        const rpc = account.getRPCConnection();
-        await rpc.connect();
-        await rpc.waitSynchronized();
+        const trimmedId = accountId.trim();
+        const rpc = await getOrInitRpcConnection(trimmedId);
         
+        if (!rpc) {
+             logger.warn({ accountId: trimmedId }, "[MetaApi Execution] Failed to auto-close positions for rollover: rpc connection could not be established");
+             return;
+        }
+
         const positions = await rpc.getPositions();
         let closedCount = 0;
         for (const pos of positions) {
-            if (pos.symbol === SYMBOL || pos.symbol === "XAUUSD") {
+            // Check for the configured symbol or common gold symbols
+            if (pos.symbol === SYMBOL || pos.symbol === "XAUUSD" || pos.symbol.includes("XAUUSD") || pos.symbol.includes("GOLD")) {
                 markPositionClosing(pos.id, "ROLLOVER_AUTO_CLOSE");
                 await rpc.closePosition(pos.id);
-                logger.info({ accountId, positionId: pos.id, symbol: pos.symbol }, "[MetaApi Execution] Auto-closed position before rollover.");
+                logger.info({ accountId: trimmedId, positionId: pos.id, symbol: pos.symbol }, "[MetaApi Execution] Auto-closed position before rollover.");
                 closedCount++;
             }
         }
         if (closedCount > 0) {
-            logger.info({ accountId, closedCount }, "[MetaApi] Successfully closed positions before daily rollover.");
+            logger.info({ accountId: trimmedId, closedCount }, "[MetaApi] Successfully closed positions before daily rollover.");
         }
-        try { rpc.close(); } catch(e) {}
     } catch (err: any) {
         logger.warn({ err: err.message || String(err), accountId }, "[MetaApi Execution] Failed to auto-close positions for rollover");
     }
@@ -1774,4 +1777,30 @@ export async function getAccountFundsInfo(accountId: string): Promise<AccountFun
         logger.error({ err: err.message || err, accountId }, "[MetaApi] Failed to fetch account funds info");
         return null;
     }
+}
+
+export async function getSymbolSpec(accountId: string, symbol: string): Promise<any> {
+    try {
+        if (!token || !accountId || !symbol) return null;
+        const trimmed = accountId.trim();
+
+        if (connection && activeAccountId === trimmed && connection.terminalState) {
+            const spec = connection.terminalState.specification(symbol);
+            if (spec) return spec;
+        }
+
+        const rpc = await getOrInitRpcConnection(trimmed);
+        const spec = await Promise.race([
+            rpc.getSymbolSpecification(symbol),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("RPC spec timeout")), 2000))
+        ]) as any;
+        return spec;
+    } catch (err: any) {
+        logger.debug({ err: err.message || err, accountId, symbol }, "[MetaApi] Failed to fetch symbol specification");
+        return null;
+    }
+}
+
+export function getConfiguredSymbol(): string {
+    return SYMBOL || "XAUUSD";
 }
