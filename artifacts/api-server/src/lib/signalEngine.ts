@@ -962,15 +962,16 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     let shortNorm = Math.min(100, Math.round((shortRaw / MAX_RAW_SCORE) * 100));
 
     // ── High-Precision Accuracy Guards (Prevent buying tops / selling bottoms) ──
-    // If RSI is extremely overbought (> 78), zero out LONG score to prevent buying exhaustion tops
-    if (rsi > 78) {
+    // If RSI is extremely overbought (> 75) or ADX is high in an uptrend, zero out LONG score to prevent buying exhaustion tops
+    if (rsi > 75) {
       longNorm = 0;
-      logger.info({ rsi }, "[AccuracyGuard] Extreme overbought RSI (>78) — LONG signals suppressed");
+      logger.info({ rsi }, "[AccuracyGuard] Extreme overbought RSI (>75) — LONG signals suppressed");
     }
-    // If RSI is extremely oversold (< 22), zero out SHORT score to prevent selling panic bottoms
-    if (rsi < 22) {
+    // If RSI is oversold/near oversold (< 42), zero out SHORT score to prevent selling panic bottoms,
+    // especially since 40-50 often acts as support in uptrends or ranges.
+    if (rsi < 42) {
       shortNorm = 0;
-      logger.info({ rsi }, "[AccuracyGuard] Extreme oversold RSI (<22) — SHORT signals suppressed");
+      logger.info({ rsi }, "[AccuracyGuard] Oversold RSI (<42) — SHORT signals suppressed to prevent whipsaws");
     }
 
     // MACD momentum expansion check: require momentum confirmation
@@ -990,6 +991,16 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     // In ranging/chop conditions (ADX < 22 or NEUTRAL/RANGING structure), require higher base confidence (70% vs 53%)
     const baseMinConf = isMarketConsolidating ? MIN_CONF_RANGE : MIN_CONF_NORMAL;
     const dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
+
+    // HTF Alignment Guard: Never short if the 15m structural trend is BULLISH
+    if (shortNorm >= dynamicMinConf && ms15m.structure === "BULLISH") {
+        shortNorm = Math.max(0, shortNorm - 25);
+        logger.info("[AccuracyGuard] HTF (15m) structure is BULLISH — penalizing SHORT score");
+    }
+    if (longNorm >= dynamicMinConf && ms15m.structure === "BEARISH") {
+        longNorm = Math.max(0, longNorm - 25);
+        logger.info("[AccuracyGuard] HTF (15m) structure is BEARISH — penalizing LONG score");
+    }
 
     // ── Per-direction minimum confidence (consecutive-stop circuit breaker) ──
     // After ≥2 stops in the same direction from recent trades, require an extra 15% confidence
