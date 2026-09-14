@@ -962,16 +962,27 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     let shortNorm = Math.min(100, Math.round((shortRaw / MAX_RAW_SCORE) * 100));
 
     // ── High-Precision Accuracy Guards (Prevent buying tops / selling bottoms) ──
-    // If RSI is extremely overbought (> 75) or ADX is high in an uptrend, zero out LONG score to prevent buying exhaustion tops
-    if (rsi > 75) {
+    // ── Market Structure & Range Analysis (Move these UP so we can use them in the guards) ──
+    const ms5m = detectMarketStructure(candles5m);
+    const ms15m = detectMarketStructure(candles15m);
+    const rangeInfo = analyzeMarketRange(candles5m, currentPrice, atr, 30);
+    const isMarketConsolidating = ms5m.structure === "RANGING" || trend5m === "NEUTRAL" || currentAdx < 18;
+
+    // RSI Guard for LONGs:
+    // If macro is Bearish/Ranging, don't buy if RSI > 65. If Bullish, allow up to 75.
+    const maxLongRSI = ((ms15m.structure === "UPTREND" || trend15m === "BULLISH") && trend5m === "BULLISH") ? 75 : 65;
+    if (rsi > maxLongRSI) {
       longNorm = 0;
-      logger.info({ rsi }, "[AccuracyGuard] Extreme overbought RSI (>75) — LONG signals suppressed");
+      logger.info({ rsi, maxLongRSI }, `[AccuracyGuard] Overbought RSI (>${maxLongRSI}) — LONG signals suppressed`);
     }
-    // If RSI is oversold/near oversold (< 42), zero out SHORT score to prevent selling panic bottoms,
-    // especially since 40-50 often acts as support in uptrends or ranges.
-    if (rsi < 42) {
+
+    // RSI Guard for SHORTs:
+    // If macro is Bullish/Ranging, don't short if RSI < 42 (prevent selling dips). 
+    // If Bearish, allow shorting until RSI drops below 28 (extreme oversold).
+    const minShortRSI = ((ms15m.structure === "DOWNTREND" || trend15m === "BEARISH") && trend5m === "BEARISH") ? 28 : 42;
+    if (rsi < minShortRSI) {
       shortNorm = 0;
-      logger.info({ rsi }, "[AccuracyGuard] Oversold RSI (<42) — SHORT signals suppressed to prevent whipsaws");
+      logger.info({ rsi, minShortRSI }, `[AccuracyGuard] Oversold RSI (<${minShortRSI}) — SHORT signals suppressed to prevent whipsaws`);
     }
 
     // MACD momentum expansion check: require momentum confirmation
@@ -982,24 +993,18 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       shortNorm = Math.max(0, shortNorm - 15);
     }
 
-    // ── Market Structure & Range Analysis ──────────────────────────────────
-    const ms5m = detectMarketStructure(candles5m);
-    const ms15m = detectMarketStructure(candles15m);
-    const rangeInfo = analyzeMarketRange(candles5m, currentPrice, atr, 30);
-    const isMarketConsolidating = ms5m.structure === "RANGING" || trend5m === "NEUTRAL" || currentAdx < 18;
-
     // In ranging/chop conditions (ADX < 22 or NEUTRAL/RANGING structure), require higher base confidence (70% vs 53%)
     const baseMinConf = isMarketConsolidating ? MIN_CONF_RANGE : MIN_CONF_NORMAL;
     const dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
 
     // HTF Alignment Guard: Never short if the 15m structural trend is BULLISH
-    if (shortNorm >= dynamicMinConf && ms15m.structure === "BULLISH") {
+    if (shortNorm >= dynamicMinConf && (ms15m.structure === "UPTREND" || trend15m === "BULLISH")) {
         shortNorm = Math.max(0, shortNorm - 25);
-        logger.info("[AccuracyGuard] HTF (15m) structure is BULLISH — penalizing SHORT score");
+        logger.info("[AccuracyGuard] HTF (15m) structure is UPTREND — penalizing SHORT score");
     }
-    if (longNorm >= dynamicMinConf && ms15m.structure === "BEARISH") {
+    if (longNorm >= dynamicMinConf && (ms15m.structure === "DOWNTREND" || trend15m === "BEARISH")) {
         longNorm = Math.max(0, longNorm - 25);
-        logger.info("[AccuracyGuard] HTF (15m) structure is BEARISH — penalizing LONG score");
+        logger.info("[AccuracyGuard] HTF (15m) structure is DOWNTREND — penalizing LONG score");
     }
 
     // ── Per-direction minimum confidence (consecutive-stop circuit breaker) ──
