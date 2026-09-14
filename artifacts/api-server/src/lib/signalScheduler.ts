@@ -155,6 +155,7 @@ async function runScheduledSignal(): Promise<void> {
 
       // 2. Demo Account Execution (Concurrent)
       const isDemoAuto = Boolean(settings.autoTradingDemoEnabled || (settings.autoTradingEnabled && settings.tradingMode === "DEMO"));
+      const isRealTrade = isRealAuto || isDemoAuto;
       if (isDemoAuto) {
         const demoId = settings.demoAccountId?.trim();
         if (demoId) {
@@ -196,7 +197,8 @@ async function runScheduledSignal(): Promise<void> {
       obLow: null,
       signalType:    signal.signalType,
       candlePattern: null,
-      candleScore: null
+      candleScore: null,
+      isRealTrade: isRealTrade
     }).catch((dbErr: any) => {
       logger.warn({ dbErr }, "Scheduler: failed to persist signal");
     });

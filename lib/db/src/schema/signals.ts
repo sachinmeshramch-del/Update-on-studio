@@ -25,6 +25,8 @@ export interface Signal {
   signalType: string | null;
   candlePattern: string | null;
   candleScore: number | null;
+  isRealTrade?: boolean | null;
+  brokerPositionId?: string | null;
 }
 
 export type InsertSignal = Omit<Signal, 'id' | 'createdAt'>;

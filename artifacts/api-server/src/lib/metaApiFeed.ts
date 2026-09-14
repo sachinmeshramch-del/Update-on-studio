@@ -321,10 +321,8 @@ async function getOrInitRpcConnection(accountId: string) {
     }
     const account = await metaApi.metatraderAccountApi.getAccount(trimmed);
     if (account.state !== 'DEPLOYED') {
-        await Promise.race([
-            account.deploy(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Deploy timeout")), 4000))
-        ]).catch(() => {});
+        try { await account.deploy(); await account.waitDeployed(120); } catch (e) { console.error("[MetaApi] RPC Forced deploy failed:", e?.message || e); }
+        try { await account.waitConnected(120); } catch (e) { console.warn("[MetaApi] waitConnected timed out in RPC init."); }
     }
     const rpc = account.getRPCConnection();
     await Promise.race([
@@ -407,14 +405,19 @@ export async function startMetaApiFeed() {
                 const account = await metaApi.metatraderAccountApi.getAccount(accountId);
                 
                 if (account.state !== 'DEPLOYED') {
-                    logger.info({ accountId }, "Deploying MetaApi account...");
+                    logger.info({ accountId, state: account.state }, "Deploying MetaApi account...");
                     await account.deploy();
+                    await account.waitDeployed(120);
+                } else {
+                    // Explicitly deploy anyway if there might be a sync issue
+                    try { await account.deploy(); await account.waitDeployed(120); } catch (e) { console.error("[MetaApi] Forced deploy failed:", e?.message || e); }
                 }
                 
                 try {
-                    await account.waitConnected(60);
+                    await account.waitConnected(120);
                 } catch(waitErr: any) {
-                    logger.warn({ accountId, err: waitErr?.message }, "waitConnected warning/timeout, continuing...");
+                    logger.warn({ accountId, err: waitErr?.message }, "waitConnected timed out, cannot subscribe to market data yet.");
+                    continue;
                 }
                 
                 const streamingConn = account.getStreamingConnection();

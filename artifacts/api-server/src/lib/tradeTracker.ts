@@ -305,7 +305,7 @@ export async function checkRunningTrades(): Promise<void> {
         }
 
         // ── EXIT EVALUATION FOR PAPER TRADES (Real trades exit via MT5 native SL/TP) ──
-        if (!matchingOpenPos && currentBid <= stopLoss) {
+        if (!matchingOpenPos && !trade.isRealTrade && currentBid <= stopLoss) {
           newStatus   = "STOP_HIT";
           // Weekend gap protection: If price gapped violently through the stop loss (e.g. over weekend),
           // real brokers will execute at the current market price (first available tick), NOT the requested SL price.
@@ -321,7 +321,7 @@ export async function checkRunningTrades(): Promise<void> {
           }
           pnlPoints   = +(closedPrice - actualEntry).toFixed(2);
           activeTradeStates.delete(id as string);
-        } else if (!matchingOpenPos && currentBid >= trade.takeProfit) {
+        } else if (!matchingOpenPos && !trade.isRealTrade && currentBid >= trade.takeProfit) {
           if (!trackerState.runnerActivated) {
             trackerState.runnerActivated = true;
             const runnerExtension = Math.max(distanceToInitialTarget * 4.0, 25.0);
@@ -430,7 +430,7 @@ export async function checkRunningTrades(): Promise<void> {
                   }
                 }).finally(() => trailingSLInFlight.delete(id as string));
               }
-            } else {
+            } else if (!trade.isRealTrade) {
               trade.stopLoss = targetSl;
               trackerState.lastTargetSl = targetSl;
               await updateTradeStopLossAndTakeProfit(id as string, targetSl, trade.takeProfit);
@@ -469,7 +469,7 @@ export async function checkRunningTrades(): Promise<void> {
         }
 
         // ── EXIT EVALUATION FOR PAPER TRADES ──
-        if (!matchingOpenPos && currentAsk >= stopLoss) {
+        if (!matchingOpenPos && !trade.isRealTrade && currentAsk >= stopLoss) {
           newStatus   = "STOP_HIT";
           // Weekend gap protection: If price gapped violently through the stop loss (e.g. over weekend),
           // real brokers will execute at the current market price (first available tick), NOT the requested SL price.
@@ -484,7 +484,7 @@ export async function checkRunningTrades(): Promise<void> {
           }
           pnlPoints   = +(actualEntry - closedPrice).toFixed(2);
           activeTradeStates.delete(id as string);
-        } else if (!matchingOpenPos && currentAsk <= trade.takeProfit) {
+        } else if (!matchingOpenPos && !trade.isRealTrade && currentAsk <= trade.takeProfit) {
           if (!trackerState.runnerActivated) {
             trackerState.runnerActivated = true;
             const runnerExtension = Math.max(distanceToInitialTarget * 4.0, 25.0);
@@ -593,7 +593,7 @@ export async function checkRunningTrades(): Promise<void> {
                   }
                 }).finally(() => trailingSLInFlight.delete(id as string));
               }
-            } else {
+            } else if (!trade.isRealTrade) {
               trade.stopLoss = targetSl;
               trackerState.lastTargetSl = targetSl;
               await updateTradeStopLossAndTakeProfit(id as string, targetSl, trade.takeProfit);
