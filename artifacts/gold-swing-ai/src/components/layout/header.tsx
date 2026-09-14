@@ -221,7 +221,7 @@ export function Header() {
               <Activity className="text-black w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
             <div className="hidden sm:block relative group">
-              <h1 className="text-base font-bold tracking-tight text-foreground leading-none">Gold Scalp AI</h1>
+              <h1 className="text-base font-bold tracking-tight text-foreground leading-none">Gold Intraday AI</h1>
                             <div className="flex items-center gap-2 mt-1 cursor-help">
                 <span className="text-[11px] font-mono tracking-widest text-muted-foreground uppercase">
                   XAUUSD

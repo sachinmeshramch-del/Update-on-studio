@@ -354,24 +354,24 @@ export async function checkRunningTrades(): Promise<void> {
           // Step B: Asymmetric Trailing Logic
           if (trackerState.runnerActivated) {
             // Floor guaranteed profit: lock at least +2.50 or 50% of initial target
-            const minLockedProfit = Math.max(2.50, +(distanceToInitialTarget * 0.50).toFixed(2));
+            const minLockedProfit = Math.max(5.00, +(distanceToInitialTarget * 0.50).toFixed(2));
             const floorProfitPrice = +(actualEntry + minLockedProfit).toFixed(2);
             targetSl = Math.max(targetSl, floorProfitPrice);
 
             // Progressive Asymmetric Tiers (with ample breathing space for Gold swings)
-            if (peakProfit >= 5.0 && peakProfit < 9.0) {
-              // Tier 1 Runner (+5 to +9 pts): Trail 3.5 pts behind peak price
-              const tier1Sl = +(trackerState.peakFavorablePrice - 3.50).toFixed(2);
+            if (peakProfit >= 10.0 && peakProfit < 20.0) {
+              // Tier 1 Runner (+10 to +20 pts): Trail 6.0 pts behind peak price
+              const tier1Sl = +(trackerState.peakFavorablePrice - 6.00).toFixed(2);
               targetSl = Math.max(targetSl, tier1Sl);
               trackerState.trailStage = "RUNNER_STAGE_1";
-            } else if (peakProfit >= 9.0 && peakProfit < 15.0) {
-              // Tier 2 Strong Runner (+9 to +15 pts): Trail 4.5 pts behind peak price
-              const tier2Sl = +(trackerState.peakFavorablePrice - 4.50).toFixed(2);
+            } else if (peakProfit >= 20.0 && peakProfit < 35.0) {
+              // Tier 2 Strong Runner (+20 to +35 pts): Trail 9.0 pts behind peak price
+              const tier2Sl = +(trackerState.peakFavorablePrice - 9.00).toFixed(2);
               targetSl = Math.max(targetSl, tier2Sl);
               trackerState.trailStage = "RUNNER_STAGE_2";
-            } else if (peakProfit >= 15.0) {
-              // Tier 3 Mega Runner (> +15 pts): Trail 5.5 pts behind peak price
-              const tier3Sl = +(trackerState.peakFavorablePrice - 5.50).toFixed(2);
+            } else if (peakProfit >= 35.0) {
+              // Tier 3 Mega Runner (> +35 pts): Trail 15.0 pts behind peak price
+              const tier3Sl = +(trackerState.peakFavorablePrice - 15.00).toFixed(2);
               targetSl = Math.max(targetSl, tier3Sl);
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
@@ -517,24 +517,24 @@ export async function checkRunningTrades(): Promise<void> {
           // Step B: Asymmetric Trailing Logic
           if (trackerState.runnerActivated) {
             // Floor guaranteed profit: lock at least +2.50 or 50% of initial target
-            const minLockedProfit = Math.max(2.50, +(distanceToInitialTarget * 0.50).toFixed(2));
+            const minLockedProfit = Math.max(5.00, +(distanceToInitialTarget * 0.50).toFixed(2));
             const floorProfitPrice = +(actualEntry - minLockedProfit).toFixed(2);
             targetSl = Math.min(targetSl, floorProfitPrice);
 
             // Progressive Asymmetric Tiers (with ample breathing space for Gold swings)
-            if (peakProfit >= 5.0 && peakProfit < 9.0) {
-              // Tier 1 Runner (+5 to +9 pts): Trail 3.5 pts behind peak price
-              const tier1Sl = +(trackerState.peakFavorablePrice + 3.50).toFixed(2);
+            if (peakProfit >= 10.0 && peakProfit < 20.0) {
+              // Tier 1 Runner (+10 to +20 pts): Trail 6.0 pts behind peak price
+              const tier1Sl = +(trackerState.peakFavorablePrice + 6.00).toFixed(2);
               targetSl = Math.min(targetSl, tier1Sl);
               trackerState.trailStage = "RUNNER_STAGE_1";
-            } else if (peakProfit >= 9.0 && peakProfit < 15.0) {
-              // Tier 2 Strong Runner (+9 to +15 pts): Trail 4.5 pts behind peak price
-              const tier2Sl = +(trackerState.peakFavorablePrice + 4.50).toFixed(2);
+            } else if (peakProfit >= 20.0 && peakProfit < 35.0) {
+              // Tier 2 Strong Runner (+20 to +35 pts): Trail 9.0 pts behind peak price
+              const tier2Sl = +(trackerState.peakFavorablePrice + 9.00).toFixed(2);
               targetSl = Math.min(targetSl, tier2Sl);
               trackerState.trailStage = "RUNNER_STAGE_2";
-            } else if (peakProfit >= 15.0) {
-              // Tier 3 Mega Runner (> +15 pts): Trail 5.5 pts behind peak price
-              const tier3Sl = +(trackerState.peakFavorablePrice + 5.50).toFixed(2);
+            } else if (peakProfit >= 35.0) {
+              // Tier 3 Mega Runner (> +35 pts): Trail 15.0 pts behind peak price
+              const tier3Sl = +(trackerState.peakFavorablePrice + 15.00).toFixed(2);
               targetSl = Math.min(targetSl, tier3Sl);
               trackerState.trailStage = "RUNNER_STAGE_3";
             }

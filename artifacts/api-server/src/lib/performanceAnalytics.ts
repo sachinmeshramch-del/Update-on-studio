@@ -106,7 +106,7 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
 
     let smartModeStatus = "OFF – all signals shown";
     if (smartModeEnabled && !sufficientData) {
-      smartModeStatus = `ON – building history (${totalCompleted}/10 scalp trades needed)`;
+      smartModeStatus = `ON – building history (${totalCompleted}/10 intraday trades needed)`;
     } else if (smartModeEnabled && winRate >= 60) {
       smartModeStatus = `ON – win rate ${winRate}% ✓ (above 60% threshold)`;
     } else if (smartModeEnabled && winRate < 60) {
@@ -115,13 +115,13 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
 
     let learningStatus: string;
     if (totalCompleted === 0) {
-      learningStatus = "Collecting first scalp trades…";
+      learningStatus = "Collecting first intraday trades…";
     } else if (totalCompleted < 5) {
       learningStatus = `Early phase (${totalCompleted} trades) — observing EMA/RSI/MACD patterns`;
     } else if (totalCompleted < 10) {
       learningStatus = `Learning (${totalCompleted}/10 trades) — building performance baseline`;
     } else if (winRate >= 60) {
-      learningStatus = `Active (${totalCompleted} trades) — ${winRate}% win rate · scalp system performing well`;
+      learningStatus = `Active (${totalCompleted} trades) — ${winRate}% win rate · intraday system performing well`;
     } else {
       learningStatus = `Active (${totalCompleted} trades) — ${winRate}% win rate · monitoring signal quality`;
     }

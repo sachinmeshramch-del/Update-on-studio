@@ -73,8 +73,8 @@ export interface SignalResult {
     macdSignal:    number;
     macdHistogram: number;
     atr:           number;
-    trend5m: "BULLISH" | "BEARISH" | "NEUTRAL";
-    trend1m: "BULLISH" | "BEARISH" | "NEUTRAL";
+    trendPrimary: "BULLISH" | "BEARISH" | "NEUTRAL";
+    trendEntry: "BULLISH" | "BEARISH" | "NEUTRAL";
     trend1h?: "BULLISH" | "BEARISH" | "NEUTRAL";
   };
   circuitBreakerActive: boolean;
@@ -102,10 +102,10 @@ let lastSignalTime = 0;
 
 // ── Raw Candle Cache (caches historical fetch for 4s, but re-evaluates indicators & cooldown on every tick) ──
 let cachedCandlesTime = 0;
-let cachedCandles5m: OHLCCandle[] = [];
-let cachedCandles1m: OHLCCandle[] = [];
-let cachedCandles15m: OHLCCandle[] = [];
-let cachedCandles1h: OHLCCandle[] = [];
+let cachedCandlesPrimary: OHLCCandle[] = [];
+let cachedCandlesEntry: OHLCCandle[] = [];
+let cachedCandlesMacro: OHLCCandle[] = [];
+let cachedCandlesHTF: OHLCCandle[] = [];
 const CANDLE_CACHE_TTL = 4_000;
 
 // ── Two-candle confirmation state ─────────────────────────────────────────
@@ -118,7 +118,7 @@ interface PendingPatternState {
   patternStrength:   number;
   contextValid:      boolean;
   confluenceMet:     boolean;
-  formingCandleTime: number;  // candles5m[length-1].time at detection
+  formingCandleTime: number;  // candlesPrimary[length-1].time at detection
   detectedClose:     number;  // close of that forming candle (to measure follow-through)
 }
 let pendingPattern: PendingPatternState | null = null;
@@ -129,17 +129,17 @@ let spikeDetectedAt = 0;
 let lastSpikeCandleTime = 0; // tracks which candle triggered the spike to avoid re-triggering on the same candle
 const SPIKE_ATR_MULT       = 2.5;   // body must exceed ATR × this
 const SPIKE_COOLDOWN_COUNT = 2;     // candles to block after a spike
-const CANDLE_5M_MS         = 300_000; // 5 min in ms
+const CANDLE_PRIMARY_MS         = 900_000; // 15 min in ms
 
-// ── Scalping constants ────────────────────────────────────────────────────
+// ── Intraday constants ────────────────────────────────────────────────────
 const SIGNAL_CACHE_TTL        = 60_000;   // 1 minute
-const COOLDOWN_MS             = 900_000;  // 15 minutes between signals
-const MIN_SIGNAL_INTERVAL_MS  = 5 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
+const COOLDOWN_MS             = 7_200_000;  // 2 hours between signals
+const MIN_SIGNAL_INTERVAL_MS  = 30 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
 const MIN_CONF_NORMAL         = 50;
 const MIN_CONF_STRONG         = 65;
 const MIN_CONF_REVERSAL       = 60;  // counter-trend trades need higher conviction
 const MIN_CONF_RANGE          = 55;  // range-bound / consolidation markets require high conviction
-const MIN_PRICE_MOVE_PCT      = 0.002;    // 0.2% to override standard cooldown (raised from 0.1% — $4→$8 on gold)
+const MIN_PRICE_MOVE_PCT      = 0.004;    // 0.2% to override standard cooldown (raised from 0.1% — $4→$8 on gold)
 const MAX_RAW_SCORE           = 125;      // realistic max without all institutional factors aligning
 
 // ── Session detection ─────────────────────────────────────────────────────
@@ -467,7 +467,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       indicators: {
         rsi: 50, ema9: currentPrice, ema21: currentPrice,
         macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
-        trend5m: "NEUTRAL", trend1m: "NEUTRAL",
+        trendPrimary: "NEUTRAL", trendEntry: "NEUTRAL",
       },
       circuitBreakerActive: false,
       circuitBreakerRemainingMinutes: 0,
@@ -477,9 +477,9 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
   // Compute fresh spike cooldown status on every call (time-based, no candles needed)
   const _spikeElapsed = now - spikeDetectedAt;
-  const _spikeCdMs    = SPIKE_COOLDOWN_COUNT * CANDLE_5M_MS;
+  const _spikeCdMs    = SPIKE_COOLDOWN_COUNT * CANDLE_PRIMARY_MS;
   const freshSpikeCooldownCandles = (spikeDetectedAt > 0 && _spikeElapsed < _spikeCdMs)
-    ? Math.ceil((_spikeCdMs - _spikeElapsed) / CANDLE_5M_MS)
+    ? Math.ceil((_spikeCdMs - _spikeElapsed) / CANDLE_PRIMARY_MS)
     : 0;
 
   // ── SPIKE GATE (runs before cache, before everything) ─────────────────────
@@ -491,11 +491,11 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const base = cachedSignal ?? {
       confidence: 0, entryPrice: +currentPrice.toFixed(2),
       stopLoss: +(currentPrice - 3).toFixed(2), takeProfit: +(currentPrice + 4.5).toFixed(2),
-      trend: "NEUTRAL" as const, tradeDuration: "5-30 minutes",
+      trend: "NEUTRAL" as const, tradeDuration: "2-8 hours",
       signalStrength: null, emaScore: 0, rsiScore: 0, macdScore: 0,
       momentumScore: 0, fvgScore: 0, sweepScore: 0, obScore: 0, candleScore: 0, candlePattern: null, signalType: "TREND_FOLLOW" as const,
       patternDetected: null, patternStrength: 0, contextValid: false, confluenceMet: false, confirmationStatus: null,
-      indicators: { rsi: 50, ema9: currentPrice, ema21: currentPrice, macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3, trend5m: "NEUTRAL" as const, trend1m: "NEUTRAL" as const },
+      indicators: { rsi: 50, ema9: currentPrice, ema21: currentPrice, macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3, trendPrimary: "NEUTRAL" as const, trendEntry: "NEUTRAL" as const },
     };
     return {
       ...base,
@@ -531,30 +531,30 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       }
     };
     
-    let candles5m: OHLCCandle[];
-    let candles1m: OHLCCandle[];
-    let candles15m: OHLCCandle[];
-    let candles1h: OHLCCandle[];
+    let candlesPrimary: OHLCCandle[];
+    let candlesEntry: OHLCCandle[];
+    let candlesMacro: OHLCCandle[];
+    let candlesHTF: OHLCCandle[];
 
     try {
-      if (Date.now() - cachedCandlesTime < CANDLE_CACHE_TTL && cachedCandles5m.length > 0) {
+      if (Date.now() - cachedCandlesTime < CANDLE_CACHE_TTL && cachedCandlesPrimary.length > 0) {
         // Use cached candles and clone them
-        candles5m = cachedCandles5m.map(c => ({ ...c }));
-        candles1m = cachedCandles1m.map(c => ({ ...c }));
-        candles15m = cachedCandles15m.map(c => ({ ...c }));
-        candles1h = cachedCandles1h.map(c => ({ ...c }));
+        candlesPrimary = cachedCandlesPrimary.map(c => ({ ...c }));
+        candlesEntry = cachedCandlesEntry.map(c => ({ ...c }));
+        candlesMacro = cachedCandlesMacro.map(c => ({ ...c }));
+        candlesHTF = cachedCandlesHTF.map(c => ({ ...c }));
       } else {
-        candles5m = await fetchWithFallback("5m", 300);
-        candles1m = await fetchWithFallback("1m", 300);
+        candlesPrimary = await fetchWithFallback("4h", 300);
+        candlesEntry = await fetchWithFallback("5m", 300);
         try {
-          candles15m = await fetchWithFallback("15m", 100);
+          candlesMacro = await fetchWithFallback("4h", 100);
         } catch {
           // Synthesize 15m candles from 5m candles if direct 15m REST fetch is delayed
-          candles15m = [];
-          for (let i = 0; i < candles5m.length; i += 3) {
-            const chunk = candles5m.slice(i, i + 3);
+          candlesMacro = [];
+          for (let i = 0; i < candlesPrimary.length; i += 4) {
+            const chunk = candlesPrimary.slice(i, i + 4);
             if (chunk.length === 0) continue;
-            candles15m.push({
+            candlesMacro.push({
               time: chunk[0].time,
               open: chunk[0].open,
               high: Math.max(...chunk.map(c => c.high)),
@@ -565,14 +565,14 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
           }
         }
         try {
-          candles1h = await fetchWithFallback("1h", 100);
+          candlesHTF = await fetchWithFallback("4h", 100);
         } catch {
           // Synthesize 1h candles from 5m candles if direct 1h fetch is delayed
-          candles1h = [];
-          for (let i = 0; i < candles5m.length; i += 12) {
-            const chunk = candles5m.slice(i, i + 12);
+          candlesHTF = [];
+          for (let i = 0; i < candlesPrimary.length; i += 16) {
+            const chunk = candlesPrimary.slice(i, i + 16);
             if (chunk.length === 0) continue;
-            candles1h.push({
+            candlesHTF.push({
               time: chunk[0].time,
               open: chunk[0].open,
               high: Math.max(...chunk.map(c => c.high)),
@@ -582,19 +582,19 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
             });
           }
         }
-        cachedCandles5m = candles5m.map(c => ({ ...c }));
-        cachedCandles1m = candles1m.map(c => ({ ...c }));
-        cachedCandles15m = candles15m.map(c => ({ ...c }));
-        cachedCandles1h = candles1h.map(c => ({ ...c }));
+        cachedCandlesPrimary = candlesPrimary.map(c => ({ ...c }));
+        cachedCandlesEntry = candlesEntry.map(c => ({ ...c }));
+        cachedCandlesMacro = candlesMacro.map(c => ({ ...c }));
+        cachedCandlesHTF = candlesHTF.map(c => ({ ...c }));
         cachedCandlesTime = Date.now();
       }
     } catch (candleFetchErr) {
-      if (cachedCandles5m.length > 0) {
+      if (cachedCandlesPrimary.length > 0) {
         logger.warn("Transient candle fetch issue; continuing signal analysis using cached candles");
-        candles5m = cachedCandles5m.map(c => ({ ...c }));
-        candles1m = cachedCandles1m.map(c => ({ ...c }));
-        candles15m = cachedCandles15m.map(c => ({ ...c }));
-        candles1h = cachedCandles1h.map(c => ({ ...c }));
+        candlesPrimary = cachedCandlesPrimary.map(c => ({ ...c }));
+        candlesEntry = cachedCandlesEntry.map(c => ({ ...c }));
+        candlesMacro = cachedCandlesMacro.map(c => ({ ...c }));
+        candlesHTF = cachedCandlesHTF.map(c => ({ ...c }));
       } else {
         throw candleFetchErr;
       }
@@ -612,27 +612,27 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         if (currentPrice > last.high) last.high = currentPrice;
         if (currentPrice < last.low) last.low = currentPrice;
     };
-    updateLiveCandle(candles5m);
-    updateLiveCandle(candles1m);
-    updateLiveCandle(candles15m);
-    updateLiveCandle(candles1h);
+    updateLiveCandle(candlesPrimary);
+    updateLiveCandle(candlesEntry);
+    updateLiveCandle(candlesMacro);
+    updateLiveCandle(candlesHTF);
 
-    const closes5m = candles5m.map(c => c.close);
-    const closes1m = candles1m.map(c => c.close);
-    const closes15m = candles15m.map(c => c.close);
+    const closes5m = candlesPrimary.map(c => c.close);
+    const closes1m = candlesEntry.map(c => c.close);
+    const closes15m = candlesMacro.map(c => c.close);
     
     const ema9_15m = calcEMA(closes15m, 9);
     const ema21_15m = calcEMA(closes15m, 21);
-    const trend15m = detectTrend(ema9_15m, ema21_15m);
+    const trendMacro = detectTrend(ema9_15m, ema21_15m);
 
     // ── 1-Hour Macro Trend & EMAs ─────────────────────────────────────────
-    const closes1h = candles1h.map(c => c.close);
+    const closes1h = candlesHTF.map(c => c.close);
     const ema20_1h = calcEMA(closes1h, 20);
     const ema50_1h = calcEMA(closes1h, 50);
     const trend1h = detectTrend(ema20_1h, ema50_1h);
     const lastEma20_1h = ema20_1h[ema20_1h.length - 1] ?? currentPrice;
     const lastEma50_1h = ema50_1h[ema50_1h.length - 1] ?? currentPrice;
-    const ms1h = detectMarketStructure(candles1h);
+    const ms1h = detectMarketStructure(candlesHTF);
 
     // ── EMAs on 5m ────────────────────────────────────────────────────────
     const ema9_5m  = calcEMA(closes5m, 9);
@@ -656,7 +656,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const rsi      = rsi5mArr[rsi5mArr.length - 1] ?? 50;
     
     // ── ADX (Trend Strength) ──────────────────────────────────────────────
-    const { adx: adxArr } = calcADX(candles5m, 14);
+    const { adx: adxArr } = calcADX(candlesPrimary, 14);
     const currentAdx = adxArr[adxArr.length - 1] ?? 0;
 
     // ── MACD (12,26,9) on 5m ──────────────────────────────────────────────
@@ -671,7 +671,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const macdCrossBear = macdPrevHist >= 0 && macdHist < 0;
 
     // ── ATR (14) on 5m ────────────────────────────────────────────────────
-    const atrArr = calcATR(candles5m, 14);
+    const atrArr = calcATR(candlesPrimary, 14);
     const atr    = atrArr[atrArr.length - 1] ?? 3;
 
     // ── Post-spike cooldown detection ─────────────────────────────────────
@@ -679,21 +679,21 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     // (index -2). A spike firing at 11:02 on a 5m chart started at 11:00 is
     // still forming — index -2 won't show it yet, so we'd miss it entirely.
     // ── Candle index verification log ─────────────────────────────────────
-    const closedCandle   = candles5m[candles5m.length - 2];
-    const formingCandle  = candles5m[candles5m.length - 1];
+    const closedCandle   = candlesPrimary[candlesPrimary.length - 2];
+    const formingCandle  = candlesPrimary[candlesPrimary.length - 1];
     logger.info(
       {
         "Using candle index -2 (closed) close":  closedCandle  ? +closedCandle.close.toFixed(2)  : null,
         "Using candle index -1 (forming) close": formingCandle ? +formingCandle.close.toFixed(2) : null,
-        totalCandles5m: candles5m.length,
+        totalCandles5m: candlesPrimary.length,
       },
       "Candle index check"
     );
 
     const spikeThreshold = atr * SPIKE_ATR_MULT;
     const candidates = [
-      candles5m[candles5m.length - 1], // forming candle — spike in progress
-      candles5m[candles5m.length - 2], // last completed candle
+      candlesPrimary[candlesPrimary.length - 1], // forming candle — spike in progress
+      candlesPrimary[candlesPrimary.length - 2], // last completed candle
     ].filter(Boolean) as any[];
 
     for (const candle of candidates) {
@@ -742,7 +742,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         } else {
           // Same candle is still in the OHLC window — do NOT reset the timer
           logger.info(
-            { candleTime, remainingMs: (SPIKE_COOLDOWN_COUNT * CANDLE_5M_MS) - (now - spikeDetectedAt) },
+            { candleTime, remainingMs: (SPIKE_COOLDOWN_COUNT * CANDLE_PRIMARY_MS) - (now - spikeDetectedAt) },
             "[SpikeGuard] Same spike candle re-detected — cooldown timer preserved, NOT reset"
           );
         }
@@ -751,45 +751,45 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     }
 
     const spikeElapsedMs   = now - spikeDetectedAt;
-    const spikeCooldownMs  = SPIKE_COOLDOWN_COUNT * CANDLE_5M_MS;
+    const spikeCooldownMs  = SPIKE_COOLDOWN_COUNT * CANDLE_PRIMARY_MS;
     const inSpikeCooldown  = spikeDetectedAt > 0 && spikeElapsedMs < spikeCooldownMs;
     const spikeCooldownCandles = inSpikeCooldown
-      ? Math.ceil((spikeCooldownMs - spikeElapsedMs) / CANDLE_5M_MS)
+      ? Math.ceil((spikeCooldownMs - spikeElapsedMs) / CANDLE_PRIMARY_MS)
       : 0;
 
     // ── 1m trend (entry confirmation) ─────────────────────────────────────
     const ema9_1m  = calcEMA(closes1m, 9);
     const ema21_1m = calcEMA(closes1m, 21);
-    const trend1m  = detectTrend(ema9_1m, ema21_1m);
-    const trend5m  = detectTrend(ema9_5m, ema21_5m);
+    const trendEntry  = detectTrend(ema9_1m, ema21_1m);
+    const trendPrimary  = detectTrend(ema9_5m, ema21_5m);
 
     // ── FVG Detection (5m candles) ────────────────────────────────────────
-    const volSma = calcVolumeSMA(candles5m, 20);
-    const fvgZones  = detectFVGZones(candles5m, volSma);
+    const volSma = calcVolumeSMA(candlesPrimary, 20);
+    const fvgZones  = detectFVGZones(candlesPrimary, volSma);
 
     // ── Liquidity Sweep Detection (5m candles) ────────────────────────────
-    const sweepDir  = detectLiquiditySweep(candles5m, volSma);
+    const sweepDir  = detectLiquiditySweep(candlesPrimary, volSma);
 
     // ── Order Block Detection (5m candles, ATR-validated) ─────────────────
-    const { bullishOB, bearishOB } = detectOrderBlocks(candles5m, atr);
+    const { bullishOB, bearishOB } = detectOrderBlocks(candlesPrimary, atr);
 
     // ── Reversal Confirmation Signals (5m candles) ────────────────────────
     // CHoCH: first structural break against the trend → earliest reversal signal
     // SweepRejection: wick beyond swing high/low + close back inside → institutional reversal
-    const choch    = detectCHoCH(candles5m, trend5m);
-    const sweepRej = detectSweepRejection(candles5m, atr);
+    const choch    = detectCHoCH(candlesPrimary, trendPrimary);
+    const sweepRej = detectSweepRejection(candlesPrimary, atr);
 
     const isBullishSweep = sweepDir === "BULLISH" || sweepRej.rejectionType === "BULLISH";
     const isBearishSweep = sweepDir === "BEARISH" || sweepRej.rejectionType === "BEARISH";
 
     // ── Candlestick Pattern Detection (last 2 candles, ATR-scaled) ────────
-    const candleResult = detectCandlePattern(candles5m, atr);
+    const candleResult = detectCandlePattern(candlesPrimary, atr);
 
     // ── Recent candle momentum (4 completed 5m candles, faster than EMA) ──
     // Penalty: -25 pts when recent momentum opposes the signal direction.
     // Bonus:   +10 pts when recent momentum confirms the direction.
     // Exception: neutralize penalty when confirmed institutional sweep/CHoCH reversal is present
-    const recentMomentum     = getRecentMomentum(candles5m);
+    const recentMomentum     = getRecentMomentum(candlesPrimary);
     let longMomentumAdj      = recentMomentum === "BULLISH" ? 10
                              : recentMomentum === "BEARISH" ? -25 : 0;
     let shortMomentumAdj     = recentMomentum === "BEARISH" ? 10
@@ -829,8 +829,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     // MACD line in positive territory but hist slightly negative (signal-line lag) = mild bullish
     else if (macdVal > 0) longMacdScore = 8;
 
-    if      (trend1m === "BULLISH") longMomentum = 15;
-    else if (trend1m === "NEUTRAL") longMomentum =  5;
+    if      (trendEntry === "BULLISH") longMomentum = 15;
+    else if (trendEntry === "NEUTRAL") longMomentum =  5;
 
     // SHORT scores
     let shortEmaScore  = 0;
@@ -852,8 +852,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     else if (macdBearish)      shortMacdScore = 20;
     else if (macdHist < 0)     shortMacdScore = 10;
 
-    if      (trend1m === "BEARISH") shortMomentum = 15;
-    else if (trend1m === "NEUTRAL") shortMomentum =  5;
+    if      (trendEntry === "BEARISH") shortMomentum = 15;
+    else if (trendEntry === "NEUTRAL") shortMomentum =  5;
 
     // FVG scores (direction-dependent)
     const longFvgScore  = getFVGScore(currentPrice, fvgZones, "LONG");
@@ -871,7 +871,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     // Hammer / Shooting Star / Doji: store as pending on detection; only score
     // after the NEXT candle closes in the expected reversal direction.
     // Engulfing patterns: two-candle by nature — context must be valid; immediate.
-    const formingCandleTime = candles5m[candles5m.length - 1]?.time ?? 0;
+    const formingCandleTime = candlesPrimary[candlesPrimary.length - 1]?.time ?? 0;
 
     // Step 1: resolve any previously pending pattern
     let confirmedCandleResult: typeof candleResult | null = null;
@@ -880,8 +880,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     if (pendingPattern !== null) {
       if (formingCandleTime !== pendingPattern.formingCandleTime) {
         // A new 5m bar has started — the detection candle is now fully closed.
-        // The "follow-through" candle is candles5m[length-2] (last completed).
-        const followThrough = candles5m[candles5m.length - 2];
+        // The "follow-through" candle is candlesPrimary[length-2] (last completed).
+        const followThrough = candlesPrimary[candlesPrimary.length - 2];
         if (followThrough) {
           const bullOk = pendingPattern.bias === "BULLISH" && followThrough.close > pendingPattern.detectedClose;
           const bearOk = pendingPattern.bias === "BEARISH" && followThrough.close < pendingPattern.detectedClose;
@@ -932,7 +932,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
           contextValid:      candleResult.contextValid,
           confluenceMet:     candleResult.confluenceMet,
           formingCandleTime,
-          detectedClose:     candles5m[candles5m.length - 1]?.close ?? 0,
+          detectedClose:     candlesPrimary[candlesPrimary.length - 1]?.close ?? 0,
         };
         if (confirmationStatus === null) confirmationStatus = "pending_confirmation";
         logger.info({ pattern: candleResult.pattern, bias: candleResult.bias, strength: candleResult.patternStrength, contextValid: candleResult.contextValid }, "[PatternConfirm] Stored as pending — awaiting next-candle confirmation");
@@ -963,14 +963,14 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
     // ── High-Precision Accuracy Guards (Prevent buying tops / selling bottoms) ──
     // ── Market Structure & Range Analysis (Move these UP so we can use them in the guards) ──
-    const ms5m = detectMarketStructure(candles5m);
-    const ms15m = detectMarketStructure(candles15m);
-    const rangeInfo = analyzeMarketRange(candles5m, currentPrice, atr, 30);
-    const isMarketConsolidating = ms5m.structure === "RANGING" || trend5m === "NEUTRAL" || currentAdx < 18;
+    const ms5m = detectMarketStructure(candlesPrimary);
+    const msMacro = detectMarketStructure(candlesMacro);
+    const rangeInfo = analyzeMarketRange(candlesPrimary, currentPrice, atr, 30);
+    const isMarketConsolidating = ms5m.structure === "RANGING" || trendPrimary === "NEUTRAL" || currentAdx < 18;
 
     // RSI Guard for LONGs:
     // If macro is Bearish/Ranging, don't buy if RSI > 65. If Bullish, allow up to 75.
-    const maxLongRSI = ((ms15m.structure === "UPTREND" || trend15m === "BULLISH") && trend5m === "BULLISH") ? 75 : 65;
+    const maxLongRSI = ((msMacro.structure === "UPTREND" || trendMacro === "BULLISH") && trendPrimary === "BULLISH") ? 75 : 65;
     if (rsi > maxLongRSI) {
       longNorm = 0;
       logger.info({ rsi, maxLongRSI }, `[AccuracyGuard] Overbought RSI (>${maxLongRSI}) — LONG signals suppressed`);
@@ -979,7 +979,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     // RSI Guard for SHORTs:
     // If macro is Bullish/Ranging, don't short if RSI < 42 (prevent selling dips). 
     // If Bearish, allow shorting until RSI drops below 28 (extreme oversold).
-    const minShortRSI = ((ms15m.structure === "DOWNTREND" || trend15m === "BEARISH") && trend5m === "BEARISH") ? 28 : 42;
+    const minShortRSI = ((msMacro.structure === "DOWNTREND" || trendMacro === "BEARISH") && trendPrimary === "BEARISH") ? 28 : 42;
     if (rsi < minShortRSI) {
       shortNorm = 0;
       logger.info({ rsi, minShortRSI }, `[AccuracyGuard] Oversold RSI (<${minShortRSI}) — SHORT signals suppressed to prevent whipsaws`);
@@ -998,11 +998,11 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     const dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
 
     // HTF Alignment Guard: Never short if the 15m structural trend is BULLISH
-    if (shortNorm >= dynamicMinConf && (ms15m.structure === "UPTREND" || trend15m === "BULLISH")) {
+    if (shortNorm >= dynamicMinConf && (msMacro.structure === "UPTREND" || trendMacro === "BULLISH")) {
         shortNorm = Math.max(0, shortNorm - 25);
         logger.info("[AccuracyGuard] HTF (15m) structure is UPTREND — penalizing SHORT score");
     }
-    if (longNorm >= dynamicMinConf && (ms15m.structure === "DOWNTREND" || trend15m === "BEARISH")) {
+    if (longNorm >= dynamicMinConf && (msMacro.structure === "DOWNTREND" || trendMacro === "BEARISH")) {
         longNorm = Math.max(0, longNorm - 25);
         logger.info("[AccuracyGuard] HTF (15m) structure is DOWNTREND — penalizing LONG score");
     }
@@ -1159,7 +1159,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       "NEUTRAL";
 
     const effectiveTrend =
-      trend5m !== "NEUTRAL" ? trend5m :
+      trendPrimary !== "NEUTRAL" ? trendPrimary :
       emaDirection !== "NEUTRAL" ? emaDirection :
       "NEUTRAL";
 
@@ -1259,20 +1259,20 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       // 1. Strict Multi-Timeframe Cascade Blocker (Major Drawdown Killer):
       // When 1H and 15m are both aligned bearish or in a downtrend, ALL LONG trades (TREND_FOLLOW, RANGE, REVERSAL) are strictly FORBIDDEN!
       const isMultiTimeframeBearish = (macro1hState === "BEARISH" || trend1h === "BEARISH" || ms1h.structure === "DOWNTREND") &&
-                                      (trend15m === "BEARISH" || ms15m.structure === "DOWNTREND");
+                                      (trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND");
       const isMultiTimeframeBullish = (macro1hState === "BULLISH" || trend1h === "BULLISH" || ms1h.structure === "UPTREND") &&
-                                      (trend15m === "BULLISH" || ms15m.structure === "UPTREND");
+                                      (trendMacro === "BULLISH" || msMacro.structure === "UPTREND");
 
       if (finalSignal === "LONG" && isMultiTimeframeBearish) {
         logger.warn(
-          { finalSignal, signalType, macro1hState, trend1h, trend15m, ms15m: ms15m.structure, currentPrice },
+          { finalSignal, signalType, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure, currentPrice },
           "[Macro Cascade Gate] Suppressed LONG: 1H & 15m are aligned BEARISH (No counter-trend buying in waterfalls!)"
         );
         finalSignal = "HOLD";
         suppressionReason = "Strict Multi-Timeframe Cascade Gate: Cannot BUY when 1H & 15m are in confirmed downtrend";
       } else if (finalSignal === "SHORT" && isMultiTimeframeBullish) {
         logger.warn(
-          { finalSignal, signalType, macro1hState, trend1h, trend15m, ms15m: ms15m.structure, currentPrice },
+          { finalSignal, signalType, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure, currentPrice },
           "[Macro Cascade Gate] Suppressed SHORT: 1H & 15m are aligned BULLISH (No counter-trend selling in rallies!)"
         );
         finalSignal = "HOLD";
@@ -1315,16 +1315,16 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
       // 3. Strict blocking for Trend-Following Trades: Never trend-follow against 1H macro or 15m structure
       if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
-        if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) {
+        if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND")) {
           logger.warn(
-            { finalSignal, macro1hState, trend1h, trend15m, ms15m: ms15m.structure },
+            { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed LONG trend-follow: Higher timeframe structure is BEARISH"
           );
           finalSignal = "HOLD";
           suppressionReason = "Strict Macro Gate: Cannot BUY trend-follow in a bearish higher timeframe structure";
-        } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend15m === "BULLISH" || ms15m.structure === "UPTREND")) {
+        } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND")) {
           logger.warn(
-            { finalSignal, macro1hState, trend1h, trend15m, ms15m: ms15m.structure },
+            { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed SHORT trend-follow: Higher timeframe structure is BULLISH"
           );
           finalSignal = "HOLD";
@@ -1336,13 +1336,13 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       // If higher timeframes are trending strongly (ADX > 25), range mean-reversion trades are forbidden!
       if (finalSignal !== "HOLD" && (signalType === "RANGE" || signalType === "REVERSAL")) {
         const isCounterTo1hOr15m = 
-            (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend15m === "BEARISH" || ms15m.structure === "DOWNTREND")) ||
-            (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend15m === "BULLISH" || ms15m.structure === "UPTREND"));
+            (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND")) ||
+            (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND"));
         
         if (isCounterTo1hOr15m) {
           if (currentAdx > 25) {
             logger.warn(
-              { finalSignal, signalType, currentAdx, macro1hState, trend15m },
+              { finalSignal, signalType, currentAdx, macro1hState, trendMacro },
               "[Macro Gate] Counter-macro trade suppressed: ADX > 25 indicates strong trending market (mean reversion blocked)"
             );
             finalSignal = "HOLD";
@@ -1353,14 +1353,14 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
             if (confidence < minCounterConf || !hasSweepConfirmation) {
               logger.warn(
-                { finalSignal, signalType, confidence, minCounterConf, macro1hState, trend15m, hasSweepConfirmation },
+                { finalSignal, signalType, confidence, minCounterConf, macro1hState, trendMacro, hasSweepConfirmation },
                 "[Macro Gate] Counter-macro range/reversal suppressed due to insufficient confidence or lack of sweep"
               );
               finalSignal = "HOLD";
               suppressionReason = `Counter-Macro trade requires confirmed sweep rejection and ≥${minCounterConf}% confidence (got ${confidence}%)`;
             } else {
               logger.info(
-                { finalSignal, signalType, confidence, macro1hState, trend15m, hasSweepConfirmation },
+                { finalSignal, signalType, confidence, macro1hState, trendMacro, hasSweepConfirmation },
                 "[Macro Gate] Counter-macro setup validated with high confluence"
               );
             }
@@ -1382,7 +1382,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     }
 
     // ── SL / TP: Structure-Based Dynamic Stops (ATR-backed, min 1.5:1 R:R) ──
-    const { nearestSwingHigh, nearestSwingLow } = getNearestSwingLevels(candles5m, 25);
+    const { nearestSwingHigh, nearestSwingLow } = getNearestSwingLevels(candlesPrimary, 25);
     const minAtrPadding = atr * (signalType === "REVERSAL" ? 1.5 : 1.8);
 
     let slDist: number;
@@ -1395,7 +1395,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const structuralDist = anchorLow !== null
         ? (currentPrice - anchorLow) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.0), 3.5); // Tightened initial risk cap
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 4.0), 12.0); // Tightened initial risk cap
     } else if (calcDir === "SHORT") {
       const anchorHigh = (sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel)
         ? sweepRej.sweptLevel
@@ -1403,24 +1403,24 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       const structuralDist = anchorHigh !== null
         ? (anchorHigh - currentPrice) + (atr * 0.5)
         : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 2.0), 3.5); // Tightened initial risk cap
+      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 4.0), 12.0); // Tightened initial risk cap
     } else {
-      slDist = Math.min(Math.max(minAtrPadding, 2.5), 8.0);
+      slDist = Math.min(Math.max(minAtrPadding, 5.0), 15.0);
     }
 
     // Reward to Risk: 1.6:1 baseline, tightly restricted to 1.2:1 for counter-trend reversals, up to 2.5:1 when ADX > 25 indicates strong trend
     // Updated for $50-$100 day trading goal: minimum 1.5:1, baseline 2.0:1 R:R
     // Dynamically scaled RR for scalping (much tighter targets to ensure high win rate)
-    const rrMultiplier = signalType === "REVERSAL" ? 1.0 : currentAdx > 25 ? 1.5 : 1.2;
+    const rrMultiplier = signalType === "REVERSAL" ? 1.5 : currentAdx > 25 ? 2.5 : 1.8;
     
     let tpDist = +(slDist * rrMultiplier).toFixed(2);
     
     // For RANGE trades, SL is placed tightly outside the box, and TP is placed near the opposite edge
     if (signalType === "RANGE") {
-      slDist = Math.min(Math.max(atr * 1.0, 2.0), 6.0);
+      slDist = Math.min(Math.max(atr * 1.5, 4.0), 10.0);
       const targetDist = calcDir === "LONG" 
-        ? Math.max((rangeInfo.resistance - currentPrice) * 0.8, 2.5) 
-        : Math.max((currentPrice - rangeInfo.support) * 0.8, 2.5);
+        ? Math.max((rangeInfo.resistance - currentPrice) * 0.8, 5.0) 
+        : Math.max((currentPrice - rangeInfo.support) * 0.8, 5.0);
       tpDist = +targetDist.toFixed(2);
     }
 
@@ -1452,7 +1452,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       else if (macdScore >= 20) parts.push(`MACD ${finalSignal === "LONG" ? "bull" : "bear"}`);
       if (isTrueBreakout) parts.push("True Breakout Confirmed");
       if (isFalseBreakout) parts.push("False Breakout (Sweep) Confirmed");
-      if (momentumScore >= 15) parts.push("1m confirms");
+      if (momentumScore >= 15) parts.push("5m confirms");
       if (fvgScore   > 0) parts.push("FVG entry zone");
       if (sweepScore > 0) parts.push("Liquidity swept");
       if (obScore    > 0) parts.push(`OB ×${dominant === "LONG" ? bullishOB?.strength : bearishOB?.strength}`);
@@ -1493,16 +1493,16 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       entryPrice:        +currentPrice.toFixed(2),
       stopLoss,
       takeProfit,
-      trend:             overallTrend(trend5m, trend1m),
+      trend:             overallTrend(trendPrimary, trendEntry),
       reason,
       timestamp:         new Date().toISOString(),
-      tradeDuration:     "5-30 minutes",
+      tradeDuration:        "2-8 hours",
       cooldownRemaining: finalSignal !== "HOLD" ? 0 : cooldownRemaining,
       smartMode,
       session,
       signalStrength,
             spikeCooldownCandles,
-      spikeCooldownRemaining: Math.max(0, Math.ceil(((SPIKE_COOLDOWN_COUNT * 300000) - (Date.now() - spikeDetectedAt)) / 1000)),
+      spikeCooldownRemaining: Math.max(0, Math.ceil(((SPIKE_COOLDOWN_COUNT * 900000) - (Date.now() - spikeDetectedAt)) / 1000)),
       emaScore,
       rsiScore,
       macdScore,
@@ -1526,8 +1526,8 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         macdSignal:    +macdSig.toFixed(4),
         macdHistogram: +macdHist.toFixed(4),
         atr:           +atr.toFixed(2),
-        trend5m,
-        trend1m,
+        trendPrimary,
+        trendEntry,
         trend1h:       macro1hState,
       },
       circuitBreakerActive:            recentStops.inCircuitBreakerCooldown,
@@ -1556,7 +1556,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       trend:      "NEUTRAL",
       reason:     "HOLD – Signal generation failed; using safe defaults " + String(err.stack || err.message),
       timestamp:  new Date().toISOString(),
-      tradeDuration:     "5-30 minutes",
+      tradeDuration:        "2-8 hours",
       cooldownRemaining,
       smartMode,
       session,
@@ -1581,7 +1581,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       indicators: {
         rsi: 50, ema9: currentPrice, ema21: currentPrice,
         macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
-        trend5m: "NEUTRAL", trend1m: "NEUTRAL",
+        trendPrimary: "NEUTRAL", trendEntry: "NEUTRAL",
       },
       circuitBreakerActive: false,
       circuitBreakerRemainingMinutes: 0,

@@ -187,7 +187,7 @@ export function SignalPanel() {
       <Card className="h-full flex items-center justify-center border-destructive/20 bg-destructive/5">
         <div className="text-center text-destructive flex flex-col items-center gap-2">
           <AlertCircle className="w-8 h-8" />
-          <p>Failed to load scalp signal</p>
+          <p>Failed to load intraday signal</p>
         </div>
       </Card>
     );
@@ -255,7 +255,7 @@ export function SignalPanel() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-                Scalp Signal · 5m/1m
+                Intraday Signal · 1h/15m
               </h2>
               <SessionBadge active={session?.active} asian={session?.asian} />
               <button 

@@ -243,7 +243,10 @@ Reason: ${signal.reason}`;
   }
 }
 
+let debugTickCount = 0;
 function handleLivePriceTick(live: LivePrice): void {
+  debugTickCount++;
+  if (debugTickCount % 50 === 0) logger.info({ price: live.price }, "[DEBUG] Received 50 live ticks");
   const now = Date.now();
   if (now - lastTickEvaluatedAt < MIN_TICK_EVALUATION_GAP) return;
 

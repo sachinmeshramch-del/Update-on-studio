@@ -510,7 +510,7 @@ function TodayTradesModal({
 
   function handleCopySummary() {
     const lines = [
-      `📊 XAUUSD Gold Scalp – Today's Trading Activity (${todayDateStr})`,
+      `📊 XAUUSD Gold Intraday – Today's Trading Activity (${todayDateStr})`,
       `Total Trades Triggered: ${trades.length} (${longCount} Long / ${shortCount} Short)`,
       `Performance: ${wins}W / ${losses}L / ${breakEven}BE ${winRate !== null ? `(${winRate}% Win Rate)` : ""}`,
       `Net Realized / Live P&L: ${pnlPositive ? "+" : ""}${totalPnl.toFixed(2)} pts`,
