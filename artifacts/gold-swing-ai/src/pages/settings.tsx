@@ -138,25 +138,17 @@ export default function SettingsPage() {
 
     setIsChangingPass(true);
     try {
-      const success = await changePasscode(currentPass || "goldswing2024", newPass.trim());
-      if (success) {
-        toast({
-          title: "Passcode Updated",
-          description: "Dashboard passcode changed successfully.",
-        });
-        setCurrentPass("");
-        setNewPass("");
-      } else {
-        toast({
-          title: "Failed to Update",
-          description: "Current passcode was incorrect.",
-          variant: "destructive",
-        });
-      }
+      await changePasscode(currentPass || "goldswing2024", newPass.trim());
+      toast({
+        title: "Passcode Updated",
+        description: "Dashboard passcode changed successfully.",
+      });
+      setCurrentPass("");
+      setNewPass("");
     } catch {
       toast({
-        title: "Error",
-        description: "An unexpected error occurred.",
+        title: "Failed to Update",
+        description: "Current passcode was incorrect or an error occurred.",
         variant: "destructive",
       });
     } finally {

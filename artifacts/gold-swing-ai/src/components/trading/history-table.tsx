@@ -777,7 +777,7 @@ export function HistoryTable() {
   const { mutate: clearHistory, isPending: isClearing } = useClearHistory();
   const [confirmClear, setConfirmClear] = useState(false);
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
-  const [period, setPeriod]             = useState<Period>("TODAY");
+  const [period, setPeriod]             = useState<Period>("ALL");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
 
   // Compact pagination state (Default 5 trades at a time)
@@ -811,23 +811,23 @@ export function HistoryTable() {
   // Filter today's trades specifically for the dedicated whole-day viewer
   const todayCutoff = periodStart("TODAY");
   const todayTrades = todayCutoff
-    ? allSignals.filter(s => s.timestamp && new Date(s.timestamp) >= todayCutoff && s.signal !== "HOLD")
+    ? allSignals.filter((s: any) => s.timestamp && new Date(s.timestamp) >= todayCutoff && s.signal !== "HOLD")
     : [];
 
   // Period filter for the table
   const cutoff = periodStart(period);
   const periodSignals = cutoff
-    ? allSignals.filter(s => s.timestamp && new Date(s.timestamp) >= cutoff)
+    ? allSignals.filter((s: any) => s.timestamp && new Date(s.timestamp) >= cutoff)
     : allSignals;
 
   // Type filter
   let signals = typeFilter === "ALL"
     ? periodSignals
-    : periodSignals.filter(s => (s as any).signalType === typeFilter);
+    : periodSignals.filter((s: any) => (s as any).signalType === typeFilter);
 
   // Outcome filter
   if (outcomeFilter !== "ALL") {
-    signals = signals.filter(s => {
+    signals = signals.filter((s: any) => {
       if (s.signal === "HOLD") return false;
       let pts = 0;
       const status = (s.tradeStatus ?? "RUNNING") as TradeStatus;
@@ -1092,7 +1092,7 @@ export function HistoryTable() {
 
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <span>Show:</span>
-                  {[5, 10, 25].map(n => (
+                  {[5, 10, 25, 50, 1000].map(n => (
                     <button
                       key={n}
                       onClick={() => setPageSize(n)}
@@ -1102,7 +1102,7 @@ export function HistoryTable() {
                           : "bg-black/10 dark:bg-white/5 text-muted-foreground hover:text-foreground border border-border"
                       }`}
                     >
-                      {n}
+                      {n === 1000 ? "All" : n}
                     </button>
                   ))}
                 </div>

@@ -15,7 +15,7 @@ export default function Dashboard() {
         {/* Top Section: Chart (left) + Signal Panel (right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           <motion.div
-            className="lg:col-span-7 xl:col-span-8 h-[350px] sm:h-[500px] lg:h-auto min-h-[350px] sm:min-h-[500px]"
+            className="lg:col-span-7 xl:col-span-8 min-h-[520px] sm:min-h-[600px] lg:min-h-[660px] flex flex-col"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}

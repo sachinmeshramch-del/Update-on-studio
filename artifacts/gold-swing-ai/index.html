@@ -14,6 +14,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.body.innerHTML = '<div style="color:red;padding:20px;font-family:monospace;"><b>Global Error:</b> ' + e.message + '<br/><br/>' + e.filename + ':' + e.lineno + '<br/><br/>' + (e.error ? e.error.stack : '') + '</div>';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.body.innerHTML = '<div style="color:red;padding:20px;font-family:monospace;"><b>Unhandled Promise Rejection:</b> ' + e.reason + '</div>';
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

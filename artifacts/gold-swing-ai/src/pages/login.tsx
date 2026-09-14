@@ -85,16 +85,6 @@ export default function LoginScreen() {
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
                 <p className="break-words flex-1 font-medium">{errorMsg}</p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleQuickUnlock}
-                className="w-full h-8 text-xs border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-semibold"
-              >
-                <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
-                Click here to unlock with default: goldswing2024
-              </Button>
             </div>
           )}
 
@@ -140,37 +130,8 @@ export default function LoginScreen() {
             </Button>
           </form>
 
-          {/* Quick Unlock / Default Fill Button */}
           <div className="pt-1 flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleQuickUnlock}
-              disabled={isLoggingIn}
-              className="w-full h-9 text-xs border-zinc-800 bg-zinc-800/40 hover:bg-zinc-800 hover:text-amber-400 text-zinc-400 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              id="quick-unlock-btn"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Quick Unlock with Default Passcode</span>
-            </Button>
-
-            <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1 pt-1">
-              <span>
-                Default:{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPasscode("goldswing2024");
-                    setErrorMsg("");
-                  }}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-amber-400 px-1.5 py-0.5 rounded font-mono text-[10px] cursor-pointer transition-colors"
-                  title="Click to fill default passcode"
-                >
-                  goldswing2024
-                </button>
-              </span>
-
+            <div className="flex items-center justify-end text-[11px] text-zinc-500 px-1 pt-1">
               <button
                 type="button"
                 onClick={handleResetPasscode}

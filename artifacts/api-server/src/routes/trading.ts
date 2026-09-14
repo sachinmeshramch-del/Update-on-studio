@@ -199,8 +199,8 @@ router.get("/signal", async (req, res) => {
 // ── History endpoint ───────────────────────────────────────────────────────
 router.get(["/history", "/signals"], async (req, res) => {
   try {
-    const limitParam = parseInt((req.query.limit as string) ?? "200", 10);
-    const limit = isNaN(limitParam) || limitParam < 1 ? 200 : Math.min(limitParam, 500);
+    const limitParam = parseInt((req.query.limit as string) ?? "1000", 10);
+    const limit = isNaN(limitParam) || limitParam < 1 ? 1000 : Math.min(limitParam, 5000);
 
     const rows = await getRecentSignals(limit);
 
