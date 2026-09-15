@@ -1280,36 +1280,46 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       }
 
       // 2. Severe EMA Distance / Overextension Protection (Falling Knife & Late Chaser Guard):
-      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > 6.0) {
+      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > Math.max(atr * 0.8, 10.0)) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(lastEma20_1h - currentPrice).toFixed(2) },
-          "[Macro Gate] Suppressed LONG: Falling knife protection — price is >6.0 pts below 1H EMA20 in a downtrend"
+          "[Macro Gate] Suppressed LONG: Falling knife protection — price is > ATR*0.8 below 1H EMA20 in a downtrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Falling Knife Protection: Price severely below 1H EMA20 in downtrend";
-      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH") && (currentPrice - lastEma20_1h) > 6.0) {
+      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH") && (currentPrice - lastEma20_1h) > Math.max(atr * 0.8, 10.0)) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(currentPrice - lastEma20_1h).toFixed(2) },
-          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is >6.0 pts above 1H EMA20 in an uptrend"
+          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is > ATR*0.8 above 1H EMA20 in an uptrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Rocket Rally Protection: Price severely above 1H EMA20 in uptrend";
       } else if (signalType === "TREND_FOLLOW") {
+        const isExtremeMomentum = currentAdx > 25; // ADX > 35 indicates a violent, extremely strong trend (Waterfall/Rocket)
+        
         // Prevent "late to the party" chasing (selling the bottom or buying the top)
-        if (finalSignal === "SHORT" && (lastEma20_1h - currentPrice) > 5.0) {
+        if (finalSignal === "SHORT" && (lastEma20_1h - currentPrice) > Math.max(atr * 0.6, 8.0)) {
+            if (isExtremeMomentum) {
+                logger.info({ finalSignal, currentAdx, currentPrice }, "[Macro Gate] Extreme momentum detected. Bypassing overextension block to catch the waterfall.");
+            } else {
             logger.warn(
                 { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2) },
-                "[Macro Gate] Suppressed SHORT Trend Follow: Price is overextended downside (>5.0 pts below 1H EMA20). Wait for pullback."
+                "[Macro Gate] Suppressed SHORT Trend Follow: Price is overextended downside (> ATR*0.6 below 1H EMA20). Wait for pullback."
             );
             finalSignal = "HOLD";
-            suppressionReason = "Overextended downside: Price too far below 1H EMA20 to short safely.";
-        } else if (finalSignal === "LONG" && (currentPrice - lastEma20_1h) > 5.0) {
+            suppressionReason = "Overextended downside: Price too far below 1H EMA20 to short safely. (ADX < 25)";
+            }
+        } else if (finalSignal === "LONG" && (currentPrice - lastEma20_1h) > Math.max(atr * 0.6, 8.0)) {
+            if (isExtremeMomentum) {
+                logger.info({ finalSignal, currentAdx, currentPrice }, "[Macro Gate] Extreme momentum detected. Bypassing overextension block to catch the rocket.");
+            } else {
             logger.warn(
                 { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2) },
-                "[Macro Gate] Suppressed LONG Trend Follow: Price is overextended upside (>5.0 pts above 1H EMA20). Wait for pullback."
+                "[Macro Gate] Suppressed LONG Trend Follow: Price is overextended upside (> ATR*0.6 above 1H EMA20). Wait for pullback."
             );
             finalSignal = "HOLD";
-            suppressionReason = "Overextended upside: Price too far above 1H EMA20 to long safely.";
+            suppressionReason = "Overextended upside: Price too far above 1H EMA20 to long safely. (ADX < 25)";
+            }
         }
       }
 
