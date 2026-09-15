@@ -133,8 +133,8 @@ const CANDLE_PRIMARY_MS         = 900_000; // 15 min in ms
 
 // ── Intraday constants ────────────────────────────────────────────────────
 const SIGNAL_CACHE_TTL        = 60_000;   // 1 minute
-const COOLDOWN_MS             = 7_200_000;  // 2 hours between signals
-const MIN_SIGNAL_INTERVAL_MS  = 30 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
+const COOLDOWN_MS             = 3_600_000;  // 1 hour between signals
+const MIN_SIGNAL_INTERVAL_MS  = 15 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
 const MIN_CONF_NORMAL         = 50;
 const MIN_CONF_STRONG         = 65;
 const MIN_CONF_REVERSAL       = 60;  // counter-trend trades need higher conviction
@@ -1280,33 +1280,33 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       }
 
       // 2. Severe EMA Distance / Overextension Protection (Falling Knife & Late Chaser Guard):
-      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > 3.0) {
+      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > 6.0) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(lastEma20_1h - currentPrice).toFixed(2) },
-          "[Macro Gate] Suppressed LONG: Falling knife protection — price is >3.0 pts below 1H EMA20 in a downtrend"
+          "[Macro Gate] Suppressed LONG: Falling knife protection — price is >6.0 pts below 1H EMA20 in a downtrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Falling Knife Protection: Price severely below 1H EMA20 in downtrend";
-      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH") && (currentPrice - lastEma20_1h) > 3.0) {
+      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH") && (currentPrice - lastEma20_1h) > 6.0) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(currentPrice - lastEma20_1h).toFixed(2) },
-          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is >3.0 pts above 1H EMA20 in an uptrend"
+          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is >6.0 pts above 1H EMA20 in an uptrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Rocket Rally Protection: Price severely above 1H EMA20 in uptrend";
       } else if (signalType === "TREND_FOLLOW") {
         // Prevent "late to the party" chasing (selling the bottom or buying the top)
-        if (finalSignal === "SHORT" && (lastEma20_1h - currentPrice) > 2.5) {
+        if (finalSignal === "SHORT" && (lastEma20_1h - currentPrice) > 5.0) {
             logger.warn(
                 { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2) },
-                "[Macro Gate] Suppressed SHORT Trend Follow: Price is overextended downside (>2.5 pts below 1H EMA20). Wait for pullback."
+                "[Macro Gate] Suppressed SHORT Trend Follow: Price is overextended downside (>5.0 pts below 1H EMA20). Wait for pullback."
             );
             finalSignal = "HOLD";
             suppressionReason = "Overextended downside: Price too far below 1H EMA20 to short safely.";
-        } else if (finalSignal === "LONG" && (currentPrice - lastEma20_1h) > 2.5) {
+        } else if (finalSignal === "LONG" && (currentPrice - lastEma20_1h) > 5.0) {
             logger.warn(
                 { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2) },
-                "[Macro Gate] Suppressed LONG Trend Follow: Price is overextended upside (>2.5 pts above 1H EMA20). Wait for pullback."
+                "[Macro Gate] Suppressed LONG Trend Follow: Price is overextended upside (>5.0 pts above 1H EMA20). Wait for pullback."
             );
             finalSignal = "HOLD";
             suppressionReason = "Overextended upside: Price too far above 1H EMA20 to long safely.";
@@ -1373,7 +1373,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     if (finalSignal !== "HOLD") {
       // For XAUUSD, an ATR on 5m below 0.60 generally means a flat, lifeless market.
       // We will suppress entries to avoid being chopped up by the spread.
-      const VOLATILITY_THRESHOLD = 0.60;
+      const VOLATILITY_THRESHOLD = 0.40;
       if (atr < VOLATILITY_THRESHOLD) {
         logger.warn({ finalSignal, atr, threshold: VOLATILITY_THRESHOLD }, "[VolatilityFilter] Suppressed due to extremely low market volatility (Flat Market)");
         finalSignal = "HOLD";
