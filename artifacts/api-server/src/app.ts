@@ -17,6 +17,7 @@ const candidatePublicPaths = [
   path.resolve(process.cwd(), "artifacts/gold-swing-ai/dist/public"),
   path.resolve(process.cwd(), "gold-swing-ai/dist/public"),
   path.resolve(process.cwd(), "dist/public"),
+  path.resolve(process.cwd(), "public"),
 ];
 const publicPath = candidatePublicPaths.find(p => fs.existsSync(p)) || candidatePublicPaths[0];
 
@@ -84,7 +85,7 @@ app.get("/healthz", (_req, res) => res.status(200).send("OK"));
 app.use(express.static(publicPath));
 
 app.get(/.*/, (req, res) => {
-  if (req.path.startsWith('/assets/')) {
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|json|woff2?|map)$/i)) {
     res.status(404).send('Asset not found');
     return;
   }

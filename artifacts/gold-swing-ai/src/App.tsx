@@ -47,7 +47,7 @@ function App() {
       <ThemeProvider defaultTheme="dark" storageKey="gold-swing-theme">
         <AuthProvider>
           <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <WouterRouter>
               <Router />
             </WouterRouter>
             <Toaster />
