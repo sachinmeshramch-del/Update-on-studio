@@ -1502,7 +1502,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     }
 
     // EXPERIMENT: INVERT SIGNALS (SCALPING)
-    const EXPERIMENT_INVERT_SIGNALS = true;
+    const EXPERIMENT_INVERT_SIGNALS = false;
     if (EXPERIMENT_INVERT_SIGNALS && finalSignal !== "HOLD") {
         finalSignal = finalSignal === "LONG" ? "SHORT" : "LONG";
         

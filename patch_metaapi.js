@@ -1,22 +1,20 @@
 const fs = require('fs');
-let code = fs.readFileSync('artifacts/api-server/src/lib/metaApiFeed.ts', 'utf8');
+const file = 'artifacts/api-server/src/lib/metaApiFeed.ts';
+let code = fs.readFileSync(file, 'utf8');
 
-const patch = `
-// Intercept and suppress noisy MetaApi SDK background timeout errors
-const originalConsoleError = console.error;
-console.error = (...args) => {
-    if (typeof args[0] === 'string' && args[0].includes('Error refreshing market data subscriptions job')) {
-        // Suppress harmless background timeout error when broker is disconnected
-        return;
-    }
-    originalConsoleError(...args);
-};
-`;
+const target = `    if (connection && activeAccountId === targetAccountId) {
+        try {
+            executionResult = direction === "LONG"`;
+const replace = `    if (connection && activeAccountId === targetAccountId) {
+        try {
+            logger.info({
+                event: "DIAGNOSTIC_MT5_DISPATCH",
+                direction: direction,
+                buyAction: direction === "LONG" ? "createMarketBuyOrder" : "createMarketSellOrder"
+            }, "=== BACKEND MT5 DISPATCH DIAGNOSTIC ===");
+            executionResult = direction === "LONG"`;
 
-if (!code.includes('originalConsoleError')) {
-  // insert after imports
-  const importEnd = code.lastIndexOf('import ');
-  const insertPos = code.indexOf('\n', importEnd) + 1;
-  code = code.slice(0, insertPos) + '\n' + patch + '\n' + code.slice(insertPos);
-  fs.writeFileSync('artifacts/api-server/src/lib/metaApiFeed.ts', code);
+if (code.includes(target) && !code.includes('DIAGNOSTIC_MT5_DISPATCH')) {
+    code = code.replace(target, replace);
+    fs.writeFileSync(file, code);
 }

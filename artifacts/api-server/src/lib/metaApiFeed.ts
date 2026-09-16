@@ -967,8 +967,8 @@ export async function verifyOrderStatusBeforeUpdate(
     positionId: string,
     options?: OrderVerificationOptions
 ): Promise<OrderVerificationStatus> {
-    const pollInterval = options?.pollIntervalMs ?? 50;
-    const maxWait = options?.maxWaitMs ?? 1000;
+    const pollInterval = options?.pollIntervalMs ?? 100;
+    const maxWait = options?.maxWaitMs ?? 3000;
     const startTime = Date.now();
     const targetAccountId = options?.accountId || activeAccountId;
     const targetOrderId = options?.orderId;
@@ -1141,12 +1141,12 @@ export async function verifyOrderStatusBeforeUpdate(
     }
     logger.warn(
         { positionId, elapsedMs: Date.now() - startTime },
-        "[Verify-before-Update] Timeout verifying position status; aborting update to prevent race conditions"
+        "[Verify-before-Update] Timeout verifying position status; allowing update anyway to avoid abandoning trade."
     );
     return {
-        canUpdate: false,
-        status: "TIMEOUT",
-        reason: `Verification timed out after ${Date.now() - startTime}ms without confirming active position`
+        canUpdate: true,
+        status: "TIMEOUT_BYPASSED",
+        reason: `Verification timed out but bypassed to ensure stops are placed`
     };
 }
 
@@ -1173,14 +1173,31 @@ export async function safeModifyPositionSLTP(params: {
         accountId,
         orderId,
         pollIntervalMs: 50,
-        maxWaitMs: 1000
+        maxWaitMs: 3000
     });
 
     if (!verification.canUpdate) {
+        // Log the failure, but attempt a blind RPC update as a fallback
         logger.warn(
             { positionId, reason, verificationStatus: verification.status, failureReason: verification.reason },
-            `[Verify-before-Update] Pre-update verification failed. Aborting MetaApi SL/TP modification.`
+            `[Verify-before-Update] Pre-update verification failed. Attempting blind RPC SL/TP modification fallback.`
         );
+        
+        // Attempt blind fallback
+        try {
+            const rpc = await getOrInitRpcConnection(accountId);
+            let fallbackSL = params.stopLoss !== undefined ? Number(params.stopLoss.toFixed(2)) : 0;
+            let fallbackTP = params.takeProfit !== undefined ? Number(params.takeProfit.toFixed(2)) : 0;
+            
+            if (fallbackSL > 0 || fallbackTP > 0) {
+                 await rpc.modifyPosition(positionId, fallbackSL || undefined, fallbackTP || undefined);
+                 logger.info({ positionId, fallbackSL, fallbackTP }, "Blind fallback SL/TP attachment succeeded");
+                 return { success: true, reason: "BLIND_FALLBACK_SUCCESS", calibratedSL: fallbackSL, calibratedTP: fallbackTP };
+            }
+        } catch (blindErr: any) {
+             logger.error({ err: blindErr?.message }, "Blind fallback SL/TP attachment failed");
+        }
+        
         return { success: false, reason: verification.reason };
     }
 
@@ -1388,6 +1405,11 @@ export async function executeTradeOnAccount(
     // 1. If active streaming connection is already connected to this account, execute directly (fastest: ~80-120ms)
     if (connection && activeAccountId === targetAccountId) {
         try {
+            logger.info({
+                event: "DIAGNOSTIC_MT5_DISPATCH",
+                direction: direction,
+                buyAction: direction === "LONG" ? "createMarketBuyOrder" : "createMarketSellOrder"
+            }, "=== BACKEND MT5 DISPATCH DIAGNOSTIC ===");
             executionResult = direction === "LONG"
                 ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
                 : await connection.createMarketSellOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);

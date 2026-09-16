@@ -160,6 +160,16 @@ export async function executeTradeWithCapitalManagement(
     }
 
     try {
+        logger.info({
+            event: "DIAGNOSTIC_BACKEND_EXECUTION",
+            accountId: accountId,
+            direction: direction,
+            stopLoss: stopLoss,
+            takeProfit: takeProfit,
+            volume: calculatedVolume,
+            entryPrice: entryPrice
+        }, "=== BACKEND AUTOTRADER EXECUTION DIAGNOSTIC ===");
+        
         const result = await executeTradeOnAccount(
             accountId, 
             accountType, 
