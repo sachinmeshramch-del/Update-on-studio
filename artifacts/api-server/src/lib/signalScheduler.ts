@@ -5,7 +5,7 @@ import { sendPushToAll } from "./pushNotifications.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { logger } from "./logger.js";
 import { getSystemSettings } from "@workspace/db";
-import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions } from "./metaApiFeed.js";
+import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions, getOpenBrokerPositions } from "./metaApiFeed.js";
 import { executeTradeWithCapitalManagement } from "./autoTrader.js";
 
 const SCHEDULER_INTERVAL = 1_000; // 1 second polling for rapid signal generation
@@ -78,9 +78,39 @@ async function runScheduledSignal(): Promise<void> {
   if (isScheduling) return;
   isScheduling = true;
   try {
+    logger.info("Scheduler running check...");
     await checkDailyRolloverAndClose();
 
-    const live  = getLatestPrice();
+    let live  = getLatestPrice();
+    if (!live) {
+      try {
+        const { getMetaApiHistoricalOHLC } = await import("./metaApiFeed.js");
+        const recent = await getMetaApiHistoricalOHLC("1m", 1);
+        if (recent && recent.length > 0) {
+            const c = recent[recent.length - 1];
+            live = {
+                price: c.close,
+                bid: c.close,
+                ask: c.close,
+                spread: 20,
+                change: 0,
+                changePercent: 0,
+                high24h: c.high,
+                low24h: c.low,
+                timestamp: new Date().toISOString(),
+                direction: "unchanged",
+                ms: Date.now(),
+                source: "metaapi"
+            };
+            // Seed the emitter so it's not null next time
+            const { setLatestPrice } = await import("./priceEvents.js");
+            setLatestPrice(live);
+        }
+      } catch (e) {
+        logger.error({ err: e }, "Failed to fallback fetch price");
+      }
+    }
+    
     const price = live?.price;
     if (!price || !live) {
       logger.warn("Skipping signal evaluation: no live price available");
@@ -103,6 +133,9 @@ async function runScheduledSignal(): Promise<void> {
 
     // ── Circuit Breaker & HOLD Guard ─────────────────────────────────────────
     if (signal.signal === "HOLD" || signal.circuitBreakerActive) {
+      if (signal.signal === "HOLD") {
+        logger.info({ reason: signal.reason }, "Scheduler: Holding signal");
+      }
       if (signal.circuitBreakerActive) {
         logger.info(
           { cooldownMins: signal.circuitBreakerRemainingMinutes, consecutiveLosses: signal.consecutiveLosses },
@@ -117,14 +150,17 @@ async function runScheduledSignal(): Promise<void> {
       const latest = await getLatestSignal();
       if (latest && latest.signal === signal.signal) {
         const msSince = Date.now() - latest.createdAt.getTime();
-        if (msSince < 20 * 60 * 1000) {
-          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate signal (fired within 20 min)");
+        if (msSince < 5 * 60 * 1000) {
+          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate signal (fired within 5 min)");
           return;
         }
       }
+
       const running = await getRunningTrades();
-      if (running.length > 0) {
-        logger.info({ runningCount: running.length, newSignal: signal.signal }, "Scheduler: Suppressing signal (a trade is already active)");
+      const brokerOpen = await getOpenBrokerPositions().catch(() => []);
+      
+      if (running.length > 0 || brokerOpen.length > 0) {
+        logger.info({ dbRunning: running.length, brokerRunning: brokerOpen.length, newSignal: signal.signal }, "Scheduler: Suppressing signal (a trade is already active either in DB or MT5)");
         return;
       }
     } catch (checkErr) {
@@ -133,6 +169,7 @@ async function runScheduledSignal(): Promise<void> {
 
     // ── Auto-Trading MetaApi Order Execution (Ultra-Fast Concurrent Dispatch) ──────
     const tradePromises: Promise<any>[] = [];
+    let isRealTrade = false;
     const signalDetectedAt = Date.now();
 
     try {
@@ -155,7 +192,7 @@ async function runScheduledSignal(): Promise<void> {
 
       // 2. Demo Account Execution (Concurrent)
       const isDemoAuto = Boolean(settings.autoTradingDemoEnabled || (settings.autoTradingEnabled && settings.tradingMode === "DEMO"));
-      const isRealTrade = isRealAuto || isDemoAuto;
+      isRealTrade = isRealAuto || isDemoAuto;
       if (isDemoAuto) {
         const demoId = settings.demoAccountId?.trim();
         if (demoId) {

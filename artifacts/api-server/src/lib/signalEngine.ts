@@ -21,7 +21,7 @@ import {
 import { getAnalyticsSummary, isSmartMode } from "./performanceAnalytics.js";
 import { logger } from "./logger.js";
 import { sendTelegramNotification } from "./telegram.js";
-import { getLatestSignal, getRecentSignals, getRunningTrades } from "@workspace/db";
+import { getLatestSignal, getRecentSignals, getRunningTrades, getSystemSettings } from "@workspace/db";
 
 
 export interface SessionInfo {
@@ -128,13 +128,13 @@ const SINGLE_CANDLE_PATTERNS = new Set(["Hammer", "Dragonfly Doji", "Shooting St
 let spikeDetectedAt = 0;
 let lastSpikeCandleTime = 0; // tracks which candle triggered the spike to avoid re-triggering on the same candle
 const SPIKE_ATR_MULT       = 2.5;   // body must exceed ATR × this
-const SPIKE_COOLDOWN_COUNT = 2;     // candles to block after a spike
+const SPIKE_COOLDOWN_COUNT = 1;     // candles to block after a spike
 const CANDLE_PRIMARY_MS         = 900_000; // 15 min in ms
 
 // ── Intraday constants ────────────────────────────────────────────────────
 const SIGNAL_CACHE_TTL        = 60_000;   // 1 minute
-const COOLDOWN_MS             = 3_600_000;  // 1 hour between signals
-const MIN_SIGNAL_INTERVAL_MS  = 15 * 60_000; // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
+const COOLDOWN_MS             = 900_000;  // 15 mins  // 1 hour between signals
+const MIN_SIGNAL_INTERVAL_MS  = 5 * 60_000; // 5-min hard floor // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
 const MIN_CONF_NORMAL         = 50;
 const MIN_CONF_STRONG         = 65;
 const MIN_CONF_REVERSAL       = 60;  // counter-trend trades need higher conviction
@@ -426,6 +426,7 @@ export function detectLiquiditySweep(candles: OHLCCandle[], volSma: number[] = [
 
 export async function generateSignal(currentPrice: number, isCommit = false): Promise<SignalResult> {
   const now = Date.now();
+
   const sinceLastSignal    = now - lastSignalTime;
   const cooldownRemaining  = Math.max(0, Math.ceil((COOLDOWN_MS - sinceLastSignal) / 1000));
   const smartMode = isSmartMode();
@@ -752,7 +753,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
     const spikeElapsedMs   = now - spikeDetectedAt;
     const spikeCooldownMs  = SPIKE_COOLDOWN_COUNT * CANDLE_PRIMARY_MS;
-    const inSpikeCooldown  = spikeDetectedAt > 0 && spikeElapsedMs < spikeCooldownMs;
+    let inSpikeCooldown  = spikeDetectedAt > 0 && spikeElapsedMs < spikeCooldownMs;
     const spikeCooldownCandles = inSpikeCooldown
       ? Math.ceil((spikeCooldownMs - spikeElapsedMs) / CANDLE_PRIMARY_MS)
       : 0;
@@ -1061,11 +1062,11 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
     // ── Cooldown Guard ────────────────────────────────────────────────────
     // Layer 1 — Hard 5-minute floor (absolute minimum, no bypass).
-    const hardFloorActive = sinceLastSignal < MIN_SIGNAL_INTERVAL_MS;
+    let hardFloorActive = sinceLastSignal < MIN_SIGNAL_INTERVAL_MS;
 
     // Layer 2 — Standard 15-minute cooldown (bypassable only when price
     //   moved ≥0.2% AND the signal is in the opposite direction).
-    const inCooldown     = sinceLastSignal < COOLDOWN_MS;
+    let inCooldown     = sinceLastSignal < COOLDOWN_MS;
     const priceMoved     = lastSignalState
       ? Math.abs(currentPrice - lastSignalState.price) / lastSignalState.price >= MIN_PRICE_MOVE_PCT
       : true;
@@ -1258,10 +1259,13 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     if (finalSignal !== "HOLD") {
       // 1. Strict Multi-Timeframe Cascade Blocker (Major Drawdown Killer):
       // When 1H and 15m are both aligned bearish or in a downtrend, ALL LONG trades (TREND_FOLLOW, RANGE, REVERSAL) are strictly FORBIDDEN!
-      const isMultiTimeframeBearish = (macro1hState === "BEARISH" || trend1h === "BEARISH" || ms1h.structure === "DOWNTREND") &&
-                                      (trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND");
-      const isMultiTimeframeBullish = (macro1hState === "BULLISH" || trend1h === "BULLISH" || ms1h.structure === "UPTREND") &&
-                                      (trendMacro === "BULLISH" || msMacro.structure === "UPTREND");
+      const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
+      const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
+
+      const isMultiTimeframeBearish = (macro1hState === "BEARISH" || trend1h === "BEARISH" || ms1h.structure === "DOWNTREND" || priceBearish1h) &&
+                                      (trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h);
+      const isMultiTimeframeBullish = (macro1hState === "BULLISH" || trend1h === "BULLISH" || ms1h.structure === "UPTREND" || priceBullish1h) &&
+                                      (trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h);
 
       if (finalSignal === "LONG" && isMultiTimeframeBearish) {
         logger.warn(
@@ -1280,14 +1284,14 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       }
 
       // 2. Severe EMA Distance / Overextension Protection (Falling Knife & Late Chaser Guard):
-      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH") && (lastEma20_1h - currentPrice) > Math.max(atr * 0.8, 10.0)) {
+      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH" || priceBearish1h) && (lastEma20_1h - currentPrice) > Math.max(atr * 0.8, 10.0)) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(lastEma20_1h - currentPrice).toFixed(2) },
           "[Macro Gate] Suppressed LONG: Falling knife protection — price is > ATR*0.8 below 1H EMA20 in a downtrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Falling Knife Protection: Price severely below 1H EMA20 in downtrend";
-      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH") && (currentPrice - lastEma20_1h) > Math.max(atr * 0.8, 10.0)) {
+      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH" || priceBullish1h) && (currentPrice - lastEma20_1h) > Math.max(atr * 0.8, 10.0)) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(currentPrice - lastEma20_1h).toFixed(2) },
           "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is > ATR*0.8 above 1H EMA20 in an uptrend"
@@ -1325,14 +1329,17 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
 
       // 3. Strict blocking for Trend-Following Trades: Never trend-follow against 1H macro or 15m structure
       if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
-        if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND")) {
+        const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
+        const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
+        
+        if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h)) {
           logger.warn(
             { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed LONG trend-follow: Higher timeframe structure is BEARISH"
           );
           finalSignal = "HOLD";
           suppressionReason = "Strict Macro Gate: Cannot BUY trend-follow in a bearish higher timeframe structure";
-        } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND")) {
+        } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h)) {
           logger.warn(
             { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed SHORT trend-follow: Higher timeframe structure is BULLISH"
@@ -1345,9 +1352,11 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       // 4. High-Confluence Requirement for Counter-Macro Range & Reversal Trades (when 15m is NOT in cascade)
       // If higher timeframes are trending strongly (ADX > 25), range mean-reversion trades are forbidden!
       if (finalSignal !== "HOLD" && (signalType === "RANGE" || signalType === "REVERSAL")) {
+        const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
+        const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
         const isCounterTo1hOr15m = 
-            (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND")) ||
-            (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND"));
+            (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h)) ||
+            (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h));
         
         if (isCounterTo1hOr15m) {
           if (currentAdx > 25) {
@@ -1492,6 +1501,23 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${reqConf}%)${rangeText}`;
     }
 
+    // EXPERIMENT: INVERT SIGNALS (SCALPING)
+    const EXPERIMENT_INVERT_SIGNALS = true;
+    if (EXPERIMENT_INVERT_SIGNALS && finalSignal !== "HOLD") {
+        finalSignal = finalSignal === "LONG" ? "SHORT" : "LONG";
+        
+        // Force tight SCALPING Stop Loss and Take Profit
+        slDist = Math.max(1.5, Math.min(slDist * 0.5, 3.0)); // Extremely tight SL (1.5 to 3.0 points)
+        tpDist = Math.max(2.5, Math.min(tpDist * 0.4, 6.0)); // Tight scalping TP (2.5 to 6.0 points)
+        
+        const newStopLoss = finalSignal === "LONG" ? currentPrice - slDist : currentPrice + slDist;
+        const newTakeProfit = finalSignal === "LONG" ? currentPrice + tpDist : currentPrice - tpDist;
+        
+        stopLoss = +newStopLoss.toFixed(2);
+        takeProfit = +newTakeProfit.toFixed(2);
+        reason = "[INVERSE SCALP EXPERIMENT] " + reason.replace(/LONG/g, "LONG_TEMP").replace(/SHORT/g, "LONG").replace(/LONG_TEMP/g, "SHORT");
+    }
+
     if (finalSignal !== "HOLD" && isCommit) {
       lastSignalState = { signal: finalSignal, price: currentPrice, timestamp: now };
       lastSignalTime  = now;
@@ -1506,7 +1532,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       trend:             overallTrend(trendPrimary, trendEntry),
       reason,
       timestamp:         new Date().toISOString(),
-      tradeDuration:        "2-8 hours",
+      tradeDuration:        EXPERIMENT_INVERT_SIGNALS ? "15-45 mins (Scalp)" : "2-8 hours",
       cooldownRemaining: finalSignal !== "HOLD" ? 0 : cooldownRemaining,
       smartMode,
       session,

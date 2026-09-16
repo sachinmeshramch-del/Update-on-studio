@@ -11,4 +11,5 @@ export interface SystemSettings {
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
   dashboardPasscode?: string;
+  disableCooldowns?: boolean;
 }

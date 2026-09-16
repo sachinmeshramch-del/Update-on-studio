@@ -52,7 +52,7 @@ export async function updateTradeStatus(id: string, tradeStatus: string, closedP
 }
 
 export async function getClosedTrades(limitCount: number): Promise<Signal[]> {
-  const q = query(collection(db, 'signals'), where('tradeStatus', 'in', ['TARGET_HIT', 'STOP_HIT']), orderBy('createdAt', 'desc'), limit(limitCount));
+  const q = query(collection(db, 'signals'), where('tradeStatus', 'in', ['TARGET_HIT', 'STOP_HIT', 'MANUALLY_CLOSED', 'CLOSED']), orderBy('createdAt', 'desc'), limit(limitCount));
   const snap = await getDocs(q);
   return snap.docs.map(d => {
     const data = d.data();
@@ -129,6 +129,7 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
   if (snap.empty) {
     const defaultSettings: SystemSettings = {
       tradingMode: 'DEMO',
+      disableCooldowns: false,
       demoAccountId: '',
       realAccountId: process.env.META_ACCOUNT_ID || '',
       autoTradingDemoEnabled: false,
