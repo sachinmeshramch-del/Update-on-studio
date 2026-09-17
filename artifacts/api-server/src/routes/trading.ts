@@ -3,6 +3,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { generateSignal, initSignalCooldown } from "../lib/signalEngine.js";
 import { startTradeTracker } from "../lib/tradeTracker.js";
 import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.js";
+import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
 import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal } from "../lib/metaApiFeed.js";
@@ -280,6 +281,13 @@ router.post("/signals/:id/close", async (req, res) => {
     }
 
     await updateTradeStatus(id, "MANUALLY_CLOSED", currentPrice, Number(pnl.toFixed(2)));
+    
+    // Forcibly reset the bot's signal cooldown to prevent it from instantly jumping back into the market
+    try {
+        resetCooldownTimer();
+    } catch (e) {
+        req.log.warn({ e }, "Failed to reset cooldown timer");
+    }
     
     res.json({ success: true, closedPrice: currentPrice, pnl: Number(pnl.toFixed(2)) });
   } catch (err: any) {

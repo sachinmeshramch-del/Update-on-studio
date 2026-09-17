@@ -1,20 +1,50 @@
 const fs = require('fs');
 const file = 'artifacts/api-server/src/lib/signalScheduler.ts';
-let content = fs.readFileSync(file, 'utf8');
+let code = fs.readFileSync(file, 'utf8');
 
-// replace the hardcoded executeTradeOnAccount with the autoTrader
-content = content.replace(
-  'import { getMetaApiStatus, executeTradeOnAccount } from "./metaApiFeed.js";',
-  'import { getMetaApiStatus, executeTradeOnAccount } from "./metaApiFeed.js";\nimport { executeTradeWithCapitalManagement } from "./autoTrader.js";'
-);
+const target1 = `                if (settings.autoTradingDemoEnabled && settings.demoAccountId) {
+                    await closeAllPositions(settings.demoAccountId);
+                }`;
+code = code.replace(target1, '');
 
-const targetDemo = `            await executeTradeOnAccount(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, 0.01);`;
-const replaceDemo = `            await executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);`;
-content = content.replace(targetDemo, replaceDemo);
+const target2 = `        const demoId = settings.demoAccountId?.trim();
+        const realId = settings.realAccountId?.trim();
+        const mode = settings.tradingMode || "DEMO";
 
-const targetReal = `            await executeTradeOnAccount(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, 0.01);`;
-const replaceReal = `            await executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice);`;
-content = content.replace(targetReal, replaceReal);
+        let targetAccountId = mode === "REAL" ? realId : demoId;
 
-fs.writeFileSync(file, content);
-console.log("Patched signalScheduler.ts to use AutoTrader");
+        // Fallback safely if requested account is missing
+        if (!targetAccountId) {
+            targetAccountId = demoId || realId;
+        }
+
+        if (!targetAccountId) {
+            throw new Error("No MetaApi Account ID configured in Settings");
+        }`;
+
+const replace2 = `        const realId = settings.realAccountId?.trim();
+        let targetAccountId = realId;
+
+        if (!targetAccountId) {
+            throw new Error("No MetaApi Real Account ID configured in Settings");
+        }`;
+code = code.replace(target2, replace2);
+
+
+const target3 = `        if (mode === "DEMO" && !settings.autoTradingDemoEnabled) {
+            logger.info("Signal committed, but auto-trading (Demo) is disabled in settings. Skipping execution.");
+            return;
+        }
+        
+        if (mode === "REAL" && !settings.autoTradingRealEnabled) {
+            logger.info("Signal committed, but auto-trading (Real) is disabled in settings. Skipping execution.");
+            return;
+        }`;
+
+const replace3 = `        if (!settings.autoTradingRealEnabled) {
+            logger.info("Signal committed, but auto-trading (Real) is disabled in settings. Skipping execution.");
+            return;
+        }`;
+code = code.replace(target3, replace3);
+
+fs.writeFileSync(file, code);

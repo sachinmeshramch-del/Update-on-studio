@@ -355,18 +355,11 @@ export async function startMetaApiFeed() {
         const configuredSymbol = settings.metaApiSymbol || process.env.META_API_SYMBOL || "XAUUSD";
         SYMBOL = configuredSymbol.trim();
         
-        const primaryAccountId = settings.tradingMode === 'REAL'
-            ? (settings.realAccountId || settings.demoAccountId || (settings as any).metaAccountId || process.env.META_ACCOUNT_ID)
-            : (settings.demoAccountId || settings.realAccountId || (settings as any).metaAccountId || process.env.META_ACCOUNT_ID);
-
-        const secondaryAccountId = settings.tradingMode === 'REAL'
-            ? settings.demoAccountId
-            : settings.realAccountId;
-
-        const rawCandidates = [primaryAccountId, secondaryAccountId, (settings as any).metaAccountId, process.env.META_ACCOUNT_ID];
+        const primaryAccountId = settings.realAccountId || (settings as any).metaAccountId || process.env.META_ACCOUNT_ID;
+        const rawCandidates = [primaryAccountId, (settings as any).metaAccountId, process.env.META_ACCOUNT_ID];
         const candidateAccountIds = Array.from(new Set(
             rawCandidates
-                .filter((id): id is string => Boolean(id && isValidAccountId(id) && true))
+                .filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))
                 .map(id => id.trim())
         ));
 
@@ -861,9 +854,9 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
     const accountIdsToTry = Array.from(new Set([
         activeAccountId,
         settings.realAccountId,
-        settings.demoAccountId,
+
         process.env.META_ACCOUNT_ID
-    ].filter((id): id is string => Boolean(id && isValidAccountId(id) && true))));
+    ].filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))));
 
     if (accountIdsToTry.length === 0) {
         throw new Error("No valid MetaApi account ID configured in settings");
@@ -920,6 +913,7 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                     if (errMsg.toLowerCase().includes('account') && (errMsg.includes('does not exist') || errMsg.includes('NotFoundError') || errMsg.includes('not found'))) {
                         invalidAccountBlacklist.add(accId);
                         logger.debug({ accId }, "Quietly blacklisted invalid MetaApi account ID");
+                        // We do not throw or warn loudly here, just skip to the next account
                     } else {
                         logger.warn({ accId, err: errMsg }, "Failed to get MetaApi account");
                     }
@@ -1205,6 +1199,22 @@ export async function safeModifyPositionSLTP(params: {
     let targetSL = params.stopLoss !== undefined ? Number(params.stopLoss.toFixed(2)) : (pos ? pos.stopLoss : 0);
     let targetTP = params.takeProfit !== undefined ? Number(params.takeProfit.toFixed(2)) : (pos ? pos.takeProfit : 0);
 
+    // Slippage Calibration: Shift SL and TP exactly by the entry slippage to preserve R:R and Risk
+    if (intendedEntryPrice && pos && pos.openPrice && pos.openPrice > 0) {
+        const slippage = pos.openPrice - intendedEntryPrice;
+        if (Math.abs(slippage) >= 0.05) {
+            targetSL = targetSL > 0 ? Number((targetSL + slippage).toFixed(2)) : targetSL;
+            targetTP = targetTP > 0 ? Number((targetTP + slippage).toFixed(2)) : targetTP;
+            logger.info({ 
+                positionId, 
+                intendedEntryPrice, 
+                actualEntryPrice: pos.openPrice, 
+                slippage: slippage.toFixed(2), 
+                originalSL: params.stopLoss, 
+                calibratedSL: targetSL 
+            }, "Calibrating SL/TP dynamically based on actual broker execution price to preserve exact risk distance");
+        }
+    }
 
     // Check if target SL/TP are effectively identical to current stops (avoid spamming broker)
     if (pos && targetSL > 0 && Math.abs(pos.stopLoss - targetSL) < 0.05 && 
@@ -1366,7 +1376,8 @@ export async function executeTradeOnAccount(
     const targetAccountId = accountId.trim();
     const formattedSL = Number(stopLoss.toFixed(2));
     const formattedTP = Number(takeProfit.toFixed(2));
-    const formattedVol = Number(Math.max(0.01, Math.min(volume, 5.0)).toFixed(2));
+    // Let autoTrader handle volume safety limits. We just format here.
+    const formattedVol = Number(Math.max(0.01, volume).toFixed(2));
     const tradeSymbol = SYMBOL || "GOLD";
     const tradeOptions = { comment: "GoldSwing AI" };
 
@@ -1457,6 +1468,7 @@ export async function executeTradeOnAccount(
                 logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Streaming execution failed, attempting fast RPC connection fallback...`);
             }
         }
+    }
     // 2. Pre-warmed RPC connection execution (NO waitSynchronized: ~200ms)
     try {
         const rpc = await getOrInitRpcConnection(targetAccountId);
@@ -1523,7 +1535,6 @@ export async function executeTradeOnAccount(
         }
     }
 }
-}
 
 export async function executeTrade(direction: "LONG" | "SHORT", stopLoss: number, takeProfit: number, volume: number = 0.01) {
     if (!activeAccountId) {
@@ -1542,6 +1553,16 @@ async function getMetaApiInstance() {
 }
 
 export async function getOpenBrokerPositions(): Promise<BrokerPosition[]> {
+    // Refresh the in-memory map from terminalState first to ensure it's not holding onto ghosts
+    if (connection && connection.terminalState?.positions) {
+        const rawPosIds = connection.terminalState.positions.map(p => String(p.id));
+        for (const [key, _] of liveBrokerPositions.entries()) {
+            if (!rawPosIds.includes(key)) {
+                liveBrokerPositions.delete(key);
+            }
+        }
+    }
+
     // 1. Zero-latency path (<1ms): return in-memory live positions updated by streaming WebSocket
     if (liveBrokerPositions.size > 0) {
         return Array.from(liveBrokerPositions.values());
@@ -1602,7 +1623,7 @@ export async function closeBrokerPosition(positionId: string, accountId?: string
             }
         }
         const settings = await getSystemSettings().catch(() => ({} as any));
-        const targetAccId = accountId || activeAccountId || settings.realAccountId || settings.demoAccountId;
+        const targetAccId = accountId || activeAccountId || settings.realAccountId;
         if (!targetAccId) return false;
 
         const rpc = await getOrInitRpcConnection(targetAccId.trim());

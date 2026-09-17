@@ -33,7 +33,7 @@ export function Header() {
   const queryClient = useQueryClient();
 
   const { data: settings } = useQuery<{
-    tradingMode: "DEMO" | "REAL";
+    tradingMode?: "REAL";
     autoTradingDemoEnabled: boolean;
     autoTradingRealEnabled: boolean;
     demoAccountId: string;

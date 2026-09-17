@@ -737,17 +737,7 @@ function TodayTradesModal({
 
                     {status === "RUNNING" && (
                       <button
-                        onClick={async () => {
-                          if (!confirm("Are you sure you want to forcefully close this trade at market price?")) return;
-                          try {
-                            const res = await fetch(`/api/signals/${row.id}/close`, { method: "POST" });
-                            if (!res.ok) throw new Error("Failed to close");
-                            toast.success("Trade manually closed successfully!");
-                            onRefetch();
-                          } catch (e) {
-                            toast.error("Failed to close trade.");
-                          }
-                        }}
+                        onClick={() => setTradeToClose(row.id)}
                         className="px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase text-white bg-red-600/80 hover:bg-red-500 rounded-md transition-colors shadow-sm flex-shrink-0"
                       >
                         Close Trade
@@ -776,6 +766,8 @@ export function HistoryTable() {
   const { mutate: deleteSignal } = useDeleteSignal();
   const { mutate: clearHistory, isPending: isClearing } = useClearHistory();
   const [confirmClear, setConfirmClear] = useState(false);
+  const [tradeToClose, setTradeToClose] = useState<string | null>(null);
+  const [isClosingTrade, setIsClosingTrade] = useState(false);
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
   const [period, setPeriod]             = useState<Period>("ALL");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
@@ -1017,17 +1009,7 @@ export function HistoryTable() {
                             <StatusBadge status={status} pnlPoints={row.pnlPoints} />
                             {status === "RUNNING" && (
                               <button
-                                onClick={async () => {
-                                  if (!confirm("Are you sure you want to forcefully close this trade at the current market price?")) return;
-                                  try {
-                                    const res = await fetch(`/api/signals/${row.id}/close`, { method: "POST" });
-                                    if (!res.ok) throw new Error("Failed to close");
-                                    toast.success("Trade manually closed successfully!");
-                                    refetch();
-                                  } catch (e) {
-                                    toast.error("Failed to close trade.");
-                                  }
-                                }}
+                                onClick={() => setTradeToClose(row.id)}
                                 className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-white bg-red-600/80 hover:bg-red-500 rounded-md transition-colors shadow-sm"
                               >
                                 Close
@@ -1146,6 +1128,47 @@ export function HistoryTable() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!tradeToClose} onOpenChange={(o) => { if (!o) setTradeToClose(null); }}>
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle>Force Close Trade</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to forcefully close this trade at the current market price? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-4">
+            <button
+              onClick={() => setTradeToClose(null)}
+              className="px-4 py-2 text-sm font-semibold text-foreground bg-secondary rounded-lg hover:bg-secondary/80"
+              disabled={isClosingTrade}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                if (!tradeToClose) return;
+                setIsClosingTrade(true);
+                try {
+                  const res = await fetch(`/api/signals/${tradeToClose}/close`, { method: "POST" });
+                  if (!res.ok) throw new Error("Failed to close");
+                  toast.success("Trade manually closed successfully!");
+                  refetch();
+                  setTradeToClose(null);
+                } catch (e) {
+                  toast.error("Failed to close trade.");
+                } finally {
+                  setIsClosingTrade(false);
+                }
+              }}
+              className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-500 disabled:opacity-50 flex items-center gap-2"
+              disabled={isClosingTrade}
+            >
+              {isClosingTrade ? "Closing..." : "Close Trade"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

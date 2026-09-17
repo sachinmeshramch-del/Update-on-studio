@@ -97,8 +97,9 @@ export async function executeTradeWithCapitalManagement(
     
     // Constrain volume safely based on symbol spec
     if (isNaN(calculatedVolume) || calculatedVolume < minVolume) calculatedVolume = minVolume;
-    // Cap at reasonable maximum (e.g. 5.0 lots) to prevent catastrophic errors
-    if (calculatedVolume > 5.0) calculatedVolume = 5.0;
+    // Cap at reasonable maximum (e.g. 50.0 lots) to prevent catastrophic errors
+    const maxVol = symbolSpec?.volumeMax || 50.0;
+    if (calculatedVolume > maxVol) calculatedVolume = maxVol;
     
     // Format to avoid floating point precision issues (e.g. 0.01000000000001)
     const stepDecimals = (lotStep.toString().split('.')[1] || '').length || 2;
@@ -111,53 +112,7 @@ export async function executeTradeWithCapitalManagement(
         return;
     }
 
-    // Circuit Breaker Guard: Strictly block trade if in circuit breaker or directional cooldown
-    try {
-        const recentSignals = await getRecentSignals(25);
-        const completed = recentSignals.filter((r: any) => r.tradeStatus === "STOP_HIT" || r.tradeStatus === "TARGET_HIT");
-        let consecutiveLosses = 0;
-        let lastLossTime = 0;
-        let directionalLosses2h = 0;
-        let lastDirectionalLossTime = 0;
-        const now = Date.now();
-        const twoHoursAgo = now - 120 * 60 * 1000;
-
-        for (const r of completed) {
-            const tradeTime = r.closedAt ? new Date(r.closedAt).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : 0);
-            const pnl = r.pnlPoints ?? 0;
-
-            if (tradeTime > twoHoursAgo && r.signal === direction && pnl < -0.1) {
-                directionalLosses2h++;
-                if (lastDirectionalLossTime === 0) lastDirectionalLossTime = tradeTime;
-            }
-
-            if (pnl < -0.1) {
-                if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
-                consecutiveLosses++;
-            } else if (pnl >= 1.5 || r.tradeStatus === "TARGET_HIT") {
-                break;
-            }
-        }
-
-        let circuitBreakerMins = 0;
-        if (consecutiveLosses >= 4) circuitBreakerMins = 720; // 12 hours (done for the day)
-        else if (consecutiveLosses >= 3) circuitBreakerMins = 120; // 2 hours
-        else if (consecutiveLosses >= 2) circuitBreakerMins = 45;
-
-        if (circuitBreakerMins > 0 && lastLossTime > 0 && (now - lastLossTime < circuitBreakerMins * 60 * 1000)) {
-            const remainingMins = Math.max(1, Math.ceil((circuitBreakerMins * 60 * 1000 - (now - lastLossTime)) / 60000));
-            logger.warn({ consecutiveLosses, remainingMins }, `[AutoTrader] Execution BLOCKED: Progressive Circuit Breaker active (${remainingMins}m left after ${consecutiveLosses} consecutive losses)`);
-            return;
-        }
-
-        if (directionalLosses2h >= 2 && lastDirectionalLossTime > 0 && (now - lastDirectionalLossTime < 45 * 60 * 1000)) {
-            const remainingMins = Math.max(1, Math.ceil((45 * 60 * 1000 - (now - lastDirectionalLossTime)) / 60000));
-            logger.warn({ direction, directionalLosses2h, remainingMins }, `[AutoTrader] Execution BLOCKED: Directional Circuit Breaker active (${remainingMins}m left for ${direction})`);
-            return;
-        }
-    } catch (cbErr) {
-        logger.warn({ cbErr }, "[AutoTrader] Circuit breaker pre-check non-blocking error");
-    }
+    // Circuit Breaker Guard is now handled entirely by the SignalEngine before execution!
 
     try {
         logger.info({

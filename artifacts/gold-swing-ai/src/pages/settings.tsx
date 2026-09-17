@@ -20,10 +20,8 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 interface Settings {
-  tradingMode: "DEMO" | "REAL";
-  demoAccountId: string;
+  tradingMode: "REAL";
   realAccountId: string;
-  autoTradingDemoEnabled: boolean;
   autoTradingRealEnabled: boolean;
   autoTradingEnabled?: boolean;
   metaApiSymbol?: string;
@@ -52,10 +50,8 @@ export default function SettingsPage() {
   });
 
   const [formData, setFormData] = useState<Settings>({
-    tradingMode: "DEMO",
-    demoAccountId: "",
+    tradingMode: "REAL",
     realAccountId: "",
-    autoTradingDemoEnabled: false,
     autoTradingRealEnabled: false,
     autoTradingEnabled: false,
     metaApiSymbol: "XAUUSD",
@@ -67,7 +63,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (settings) {
       setFormData({
-        tradingMode: settings.tradingMode || "DEMO",
+        tradingMode: "REAL",
         demoAccountId: settings.demoAccountId || "",
         realAccountId: settings.realAccountId || "",
         autoTradingDemoEnabled: settings.autoTradingDemoEnabled ?? settings.autoTradingEnabled ?? false,
@@ -116,7 +112,7 @@ export default function SettingsPage() {
     mutation.mutate(updated);
   };
 
-  const handleModeChange = (mode: "DEMO" | "REAL") => {
+  const handleModeChange = (mode: "REAL") => {
     const updated = { ...formData, tradingMode: mode };
     setFormData(updated);
     mutation.mutate(updated);

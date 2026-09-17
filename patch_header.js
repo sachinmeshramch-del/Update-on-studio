@@ -1,27 +1,16 @@
 const fs = require('fs');
-const file = '/app/applet/artifacts/gold-swing-ai/src/components/layout/header.tsx';
-let content = fs.readFileSync(file, 'utf8');
+const file = 'artifacts/gold-swing-ai/src/components/layout/header.tsx';
+let code = fs.readFileSync(file, 'utf8');
 
-if (!content.includes('import { useAuth } from "@/lib/firebase/auth-context"')) {
-  content = content.replace(
-    'import { RefreshCw,',
-    'import { LogOut, RefreshCw,'
-  );
-  content = content.replace(
-    'import { ModeToggle } from "@/components/mode-toggle";',
-    'import { ModeToggle } from "@/components/mode-toggle";\nimport { useAuth } from "@/lib/firebase/auth-context";'
-  );
-  
-  // Inject the logout button before ModeToggle
-  content = content.replace(
-    '<ModeToggle />',
-    `
-          <button
-            onClick={async () => {
-              const { logout } = require("@/lib/firebase/auth-context").useAuth();
-              // Will not work directly inside onClick like this due to hook rules. 
-            }}
-          />
-    `
-  );
-}
+const target1 = `    tradingMode: "DEMO" | "REAL";
+    demoAccountId: string;
+    realAccountId: string;`;
+const replace1 = `    tradingMode: "REAL";
+    realAccountId: string;`;
+code = code.replace(target1, replace1);
+
+const target2 = `  const isDemo = settings?.tradingMode === "DEMO";`;
+const replace2 = `  const isDemo = false;`;
+code = code.replace(target2, replace2);
+
+fs.writeFileSync(file, code);

@@ -424,7 +424,7 @@ export function detectLiquiditySweep(candles: OHLCCandle[], volSma: number[] = [
   return null;
 }
 
-export async function generateSignal(currentPrice: number, isCommit = false): Promise<SignalResult> {
+export async function generateSignal(currentPrice: number, isCommit = false, liveSpread = 0.50): Promise<SignalResult> {
   const now = Date.now();
 
   const sinceLastSignal    = now - lastSignalTime;
@@ -545,15 +545,15 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         candlesMacro = cachedCandlesMacro.map(c => ({ ...c }));
         candlesHTF = cachedCandlesHTF.map(c => ({ ...c }));
       } else {
-        candlesPrimary = await fetchWithFallback("4h", 300);
-        candlesEntry = await fetchWithFallback("5m", 300);
+        candlesPrimary = await fetchWithFallback("5m", 300);
+        candlesEntry = await fetchWithFallback("1m", 300);
         try {
-          candlesMacro = await fetchWithFallback("4h", 100);
+          candlesMacro = await fetchWithFallback("15m", 100);
         } catch {
           // Synthesize 15m candles from 5m candles if direct 15m REST fetch is delayed
           candlesMacro = [];
-          for (let i = 0; i < candlesPrimary.length; i += 4) {
-            const chunk = candlesPrimary.slice(i, i + 4);
+          for (let i = 0; i < candlesPrimary.length; i += 3) {
+            const chunk = candlesPrimary.slice(i, i + 3);
             if (chunk.length === 0) continue;
             candlesMacro.push({
               time: chunk[0].time,
@@ -566,12 +566,12 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
           }
         }
         try {
-          candlesHTF = await fetchWithFallback("4h", 100);
+          candlesHTF = await fetchWithFallback("1h", 100);
         } catch {
           // Synthesize 1h candles from 5m candles if direct 1h fetch is delayed
           candlesHTF = [];
-          for (let i = 0; i < candlesPrimary.length; i += 16) {
-            const chunk = candlesPrimary.slice(i, i + 16);
+          for (let i = 0; i < candlesPrimary.length; i += 12) {
+            const chunk = candlesPrimary.slice(i, i + 12);
             if (chunk.length === 0) continue;
             candlesHTF.push({
               time: chunk[0].time,
@@ -1261,11 +1261,13 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       // When 1H and 15m are both aligned bearish or in a downtrend, ALL LONG trades (TREND_FOLLOW, RANGE, REVERSAL) are strictly FORBIDDEN!
       const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
       const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
+      const priceBullishMacro = currentPrice > ema9 && currentPrice > ema21; // 15m price structure
+      const priceBearishMacro = currentPrice < ema9 && currentPrice < ema21; // 15m price structure
 
       const isMultiTimeframeBearish = (macro1hState === "BEARISH" || trend1h === "BEARISH" || ms1h.structure === "DOWNTREND" || priceBearish1h) &&
-                                      (trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h);
+                                      (trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearishMacro);
       const isMultiTimeframeBullish = (macro1hState === "BULLISH" || trend1h === "BULLISH" || ms1h.structure === "UPTREND" || priceBullish1h) &&
-                                      (trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h);
+                                      (trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullishMacro);
 
       if (finalSignal === "LONG" && isMultiTimeframeBearish) {
         logger.warn(
@@ -1284,17 +1286,17 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
       }
 
       // 2. Severe EMA Distance / Overextension Protection (Falling Knife & Late Chaser Guard):
-      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH" || priceBearish1h) && (lastEma20_1h - currentPrice) > Math.max(atr * 0.8, 10.0)) {
+      if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trend1h === "BEARISH" || priceBearish1h) && (lastEma20_1h - currentPrice) > Math.max(atr * 2.0, 5.0)) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(lastEma20_1h - currentPrice).toFixed(2) },
-          "[Macro Gate] Suppressed LONG: Falling knife protection — price is > ATR*0.8 below 1H EMA20 in a downtrend"
+          "[Macro Gate] Suppressed LONG: Falling knife protection — price is severely below 1H EMA20 in a downtrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Falling Knife Protection: Price severely below 1H EMA20 in downtrend";
-      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH" || priceBullish1h) && (currentPrice - lastEma20_1h) > Math.max(atr * 0.8, 10.0)) {
+      } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trend1h === "BULLISH" || priceBullish1h) && (currentPrice - lastEma20_1h) > Math.max(atr * 2.0, 5.0)) {
         logger.warn(
           { finalSignal, currentPrice, ema20_1h: +lastEma20_1h.toFixed(2), diff: +(currentPrice - lastEma20_1h).toFixed(2) },
-          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is > ATR*0.8 above 1H EMA20 in an uptrend"
+          "[Macro Gate] Suppressed SHORT: Rocket rally protection — price is severely above 1H EMA20 in an uptrend"
         );
         finalSignal = "HOLD";
         suppressionReason = "Rocket Rally Protection: Price severely above 1H EMA20 in uptrend";
@@ -1392,11 +1394,11 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
     if (finalSignal !== "HOLD") {
       // For XAUUSD, an ATR on 5m below 0.60 generally means a flat, lifeless market.
       // We will suppress entries to avoid being chopped up by the spread.
-      const VOLATILITY_THRESHOLD = 0.40;
-      if (atr < VOLATILITY_THRESHOLD) {
-        logger.warn({ finalSignal, atr, threshold: VOLATILITY_THRESHOLD }, "[VolatilityFilter] Suppressed due to extremely low market volatility (Flat Market)");
+      const minRequiredAtr = Math.max(0.40, liveSpread * 2.5);
+      if (atr < minRequiredAtr) {
+        logger.warn({ finalSignal, atr, liveSpread, minRequiredAtr }, "[VolatilityFilter] Suppressed due to low volatility vs high spread");
         finalSignal = "HOLD";
-        suppressionReason = "Filtered by Low Volatility (Flat Market / Chop Zone)";
+        suppressionReason = `Filtered by High Spread/Low Volatility (Spread: ${liveSpread.toFixed(2)})`;
       }
     }
 
@@ -1518,10 +1520,7 @@ export async function generateSignal(currentPrice: number, isCommit = false): Pr
         reason = "[INVERSE SCALP EXPERIMENT] " + reason.replace(/LONG/g, "LONG_TEMP").replace(/SHORT/g, "LONG").replace(/LONG_TEMP/g, "SHORT");
     }
 
-    if (finalSignal !== "HOLD" && isCommit) {
-      lastSignalState = { signal: finalSignal, price: currentPrice, timestamp: now };
-      lastSignalTime  = now;
-    }
+    // (Commit logic moved to commitSignal, called by scheduler upon successful dispatch)
 
     const result: SignalResult = {
       signal:            finalSignal,
@@ -1642,4 +1641,16 @@ export async function initSignalCooldown(): Promise<void> {
   } catch (err: any) {
     logger.warn({ err }, "Failed to restore signal cooldown from DB — starting fresh");
   }
+}
+
+export function resetCooldownTimer() {
+    lastSignalTime = Date.now();
+    logger.info("Signal cooldown timer forcibly reset.");
+}
+
+export function commitSignal(signal: SignalResult) {
+    if (signal.signal !== "HOLD") {
+        lastSignalState = { signal: signal.signal, price: signal.entryPrice, timestamp: Date.now() };
+        lastSignalTime = Date.now();
+    }
 }

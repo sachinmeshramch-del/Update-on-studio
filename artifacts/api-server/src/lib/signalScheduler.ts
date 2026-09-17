@@ -1,4 +1,4 @@
-import { generateSignal } from "./signalEngine.js";
+import { generateSignal, commitSignal } from "./signalEngine.js";
 import { getLatestPrice, priceEmitter, type LivePrice } from "./priceEvents.js";
 import { insertSignal, getLatestSignal, getRunningTrades, updateTradeStatus } from "@workspace/db";
 import { sendPushToAll } from "./pushNotifications.js";
@@ -47,9 +47,7 @@ async function checkDailyRolloverAndClose(): Promise<void> {
                 logger.info("[Rollover Check] Approaching daily/weekend rollover. Auto-closing all open positions.");
                 const settings = await getSystemSettings();
                 
-                if (settings.autoTradingDemoEnabled && settings.demoAccountId) {
-                    await closeAllPositions(settings.demoAccountId);
-                }
+
                 if (settings.autoTradingRealEnabled && settings.realAccountId) {
                     await closeAllPositions(settings.realAccountId);
                 }
@@ -112,6 +110,7 @@ async function runScheduledSignal(): Promise<void> {
     }
     
     const price = live?.price;
+    const spread = live?.spread || 0.50;
     if (!price || !live) {
       logger.warn("Skipping signal evaluation: no live price available");
       return;
@@ -129,7 +128,7 @@ async function runScheduledSignal(): Promise<void> {
         return;
     }
 
-    const signal = await generateSignal(price, true);
+    const signal = await generateSignal(price, false, spread);
 
     // ── Circuit Breaker & HOLD Guard ─────────────────────────────────────────
     if (signal.signal === "HOLD" || signal.circuitBreakerActive) {
@@ -146,8 +145,16 @@ async function runScheduledSignal(): Promise<void> {
     }
 
     // ── Deduplication Guard (Scheduler Level) ───────────────────────────────
+    let settings: any = null;
     try {
-      const latest = await getLatestSignal();
+      const [latest, running, brokerOpen, dbSettings] = await Promise.all([
+          getLatestSignal().catch(() => null),
+          getRunningTrades().catch(() => []),
+          getOpenBrokerPositions().catch(() => []),
+          getSystemSettings().catch(() => null)
+      ]);
+      settings = dbSettings;
+
       if (latest && latest.signal === signal.signal) {
         const msSince = Date.now() - latest.createdAt.getTime();
         if (msSince < 5 * 60 * 1000) {
@@ -156,9 +163,6 @@ async function runScheduledSignal(): Promise<void> {
         }
       }
 
-      const running = await getRunningTrades();
-      const brokerOpen = await getOpenBrokerPositions().catch(() => []);
-      
       if (running.length > 0 || brokerOpen.length > 0) {
         logger.info({ dbRunning: running.length, brokerRunning: brokerOpen.length, newSignal: signal.signal }, "Scheduler: Suppressing signal (a trade is already active either in DB or MT5)");
         return;
@@ -173,10 +177,8 @@ async function runScheduledSignal(): Promise<void> {
     const signalDetectedAt = Date.now();
 
     try {
-      const settings = await getSystemSettings();
-
       // 1. Real Account Execution (Concurrent)
-      const isRealAuto = Boolean(settings.autoTradingRealEnabled || (settings.autoTradingEnabled && settings.tradingMode === "REAL"));
+      const isRealAuto = settings ? Boolean(settings.autoTradingRealEnabled || settings.autoTradingEnabled) : false;
       if (isRealAuto) {
         const realId = settings.realAccountId?.trim();
         if (realId) {
@@ -190,25 +192,14 @@ async function runScheduledSignal(): Promise<void> {
         }
       }
 
-      // 2. Demo Account Execution (Concurrent)
-      const isDemoAuto = Boolean(settings.autoTradingDemoEnabled || (settings.autoTradingEnabled && settings.tradingMode === "DEMO"));
-      isRealTrade = isRealAuto || isDemoAuto;
-      if (isDemoAuto) {
-        const demoId = settings.demoAccountId?.trim();
-        if (demoId) {
-          logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Dispatching trade to DEMO MT5 account concurrently...");
-          tradePromises.push(
-            executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
-              .catch((demoErr: any) => logger.error({ err: demoErr?.message || demoErr, accountId: demoId }, "[MetaApi Execution] DEMO trade execution failed"))
-          );
-        } else {
-          logger.warn("[MetaApi Execution] Auto-trading (Demo) is ON, but Demo Account ID is not configured in settings.");
-        }
-      }
+      isRealTrade = isRealAuto;
     } catch (e: any) {
       logger.error({ err: e.message || e }, "Failed to evaluate auto-trade execution");
     }
 
+    // Commit the signal to engine memory to reset cooldowns
+    commitSignal(signal);
+    
     // Persist signal concurrently so database write latency doesn't delay broker execution
     const dbPersistPromise = insertSignal({
       signal:        signal.signal,
