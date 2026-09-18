@@ -11,6 +11,28 @@ import { useAuth } from "@/lib/firebase/auth-context";
 import { SettingsDialog } from "./settings-dialog";
 import { useToast } from "@/hooks/use-toast";
 
+function Heartbeat({ lastBeat, connected }: { lastBeat?: number, connected: boolean }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const int = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(int);
+  }, []);
+  
+  if (!connected || !lastBeat) return null;
+  const diff = Math.max(0, Math.floor((now - lastBeat) / 1000));
+  
+  return (
+    <div className="flex items-center gap-1.5 ml-1 border-l border-border/50 pl-2">
+      <div className={cn(
+        "w-1.5 h-1.5 rounded-full",
+        diff < 5 ? "bg-green-500 animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.5)]" : 
+        diff < 30 ? "bg-amber-500" : "bg-red-500"
+      )} />
+      <span className="text-[9px] text-muted-foreground font-mono">{diff}s</span>
+    </div>
+  );
+}
+
 function formatNum(n: number, decimals = 2) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
@@ -193,11 +215,24 @@ export function Header() {
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground uppercase">MetaApi:</span>
             <span className={cn(
-              "font-bold uppercase",
+              "font-bold uppercase flex items-center",
               connections?.metaapi === "connected" ? "text-green-600 dark:text-green-400" :
               connections?.metaapi === "connecting" ? "text-amber-600 dark:text-amber-400" :
               "text-red-600 dark:text-red-400"
-            )}>{connections?.metaapi || "disconnected"}</span>
+            )}>
+              {connections?.metaapi || "disconnected"}
+              <Heartbeat lastBeat={connections?.lastHeartbeat} connected={connections?.metaapi === "connected"} />
+              {connections?.latencyMs !== undefined && connections.metaapi === "connected" && (
+                <span className={cn(
+                  "ml-2 text-[10px] lowercase font-mono border px-1 rounded-sm",
+                  connections.latencyMs > 2000 ? "text-red-600 border-red-500/30 bg-red-500/10" :
+                  connections.latencyMs > 500 ? "text-amber-600 border-amber-500/30 bg-amber-500/10" :
+                  "text-green-600 border-green-500/30 bg-green-500/10"
+                )}>
+                  {connections.latencyMs}ms
+                </span>
+              )}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground uppercase">TwelveData:</span>

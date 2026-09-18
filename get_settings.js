@@ -1,11 +1,16 @@
-const { initializeApp } = require('firebase/app');
-const { getFirestore, collection, getDocs, limit, query } = require('firebase/firestore');
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import fs from 'fs';
 
-const app = initializeApp({ projectId: "ai-studio-newupdate-e592ea8b-365a-4957-b176-b1d6a1a78904" });
-const db = getFirestore(app);
+const rawConfig = fs.readFileSync('./firebase-applet-config.json', 'utf8');
+const config = JSON.parse(rawConfig);
+const app = initializeApp(config);
+const db = getFirestore(app, config.firestoreDatabaseId);
+
 async function run() {
-  const snap = await getDocs(query(collection(db, 'settings'), limit(1)));
-  if (snap.empty) { console.log("Empty"); return; }
-  console.log(snap.docs[0].data());
+  const snap = await getDocs(collection(db, "settings"));
+  snap.forEach(doc => {
+    console.log(doc.id, JSON.stringify(doc.data(), null, 2));
+  });
 }
-run();
+run().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });

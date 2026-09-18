@@ -5,6 +5,8 @@ export interface ConnectionsState {
   twelvedata: "disconnected" | "connecting" | "connected";
   finnhub: "disconnected" | "connecting" | "connected";
   activeSource: string;
+  lastHeartbeat?: number;
+  latencyMs?: number;
 }
 
 export function useConnections() {

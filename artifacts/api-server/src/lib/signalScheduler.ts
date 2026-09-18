@@ -5,7 +5,7 @@ import { sendPushToAll } from "./pushNotifications.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { logger } from "./logger.js";
 import { getSystemSettings } from "@workspace/db";
-import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions, getOpenBrokerPositions } from "./metaApiFeed.js";
+import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions, getOpenBrokerPositions, getMetaApiLatency } from "./metaApiFeed.js";
 import { executeTradeWithCapitalManagement } from "./autoTrader.js";
 
 const SCHEDULER_INTERVAL = 1_000; // 1 second polling for rapid signal generation
@@ -129,6 +129,15 @@ async function runScheduledSignal(): Promise<void> {
     }
 
     const signal = await generateSignal(price, false, spread);
+
+    // ── High Latency Circuit Breaker ─────────────────────────────────────────
+    const latencyMs = getMetaApiLatency();
+    if (latencyMs > 2000) {
+        if (Date.now() % (15 * 1000) < 5000) {
+            logger.warn({ latencyMs }, "Scheduler: Auto-trading paused due to high MetaApi connection latency (>2000ms)");
+        }
+        return;
+    }
 
     // ── Circuit Breaker & HOLD Guard ─────────────────────────────────────────
     if (signal.signal === "HOLD" || signal.circuitBreakerActive) {

@@ -6,7 +6,7 @@ import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.j
 import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal } from "../lib/metaApiFeed.js";
+import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency } from "../lib/metaApiFeed.js";
 import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
@@ -150,6 +150,8 @@ router.get("/debug", (req, res) => {
 router.get("/connections", (req, res) => {
   res.json({
     metaapi: getMetaApiStatus(),
+    lastHeartbeat: getLastPriceTime(),
+    latencyMs: getMetaApiLatency(),
     activeSource: getLatestPrice()?.source || "none",
     activeAccountId: getActiveAccountId()
   });

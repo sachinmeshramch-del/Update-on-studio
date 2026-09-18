@@ -769,7 +769,7 @@ export function HistoryTable() {
   const [tradeToClose, setTradeToClose] = useState<string | null>(null);
   const [isClosingTrade, setIsClosingTrade] = useState(false);
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
-  const [period, setPeriod]             = useState<Period>("ALL");
+  const [period, setPeriod]             = useState<Period>("TODAY");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
 
   // Compact pagination state (Default 5 trades at a time)

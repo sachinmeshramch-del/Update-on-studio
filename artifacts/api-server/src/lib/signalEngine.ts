@@ -229,6 +229,9 @@ export interface StopHistoryAnalysis {
   longDirectionCooldown: boolean;
   shortDirectionCooldown: boolean;
   directionalCooldownRemainingMinutes: number;
+  lastWinTime: number;
+  lastWinDirection: "LONG" | "SHORT" | null;
+  lastWinPnl: number;
 }
 
 async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
@@ -244,6 +247,9 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
     let shortNetPnl2h = 0;
     let lastLongLossTime = 0;
     let lastShortLossTime = 0;
+    let lastWinTime = 0;
+    let lastWinDirection: "LONG" | "SHORT" | null = null;
+    let lastWinPnl = 0;
 
     const now = Date.now();
     const oneHourAgo = now - 60 * 60 * 1000;
@@ -281,6 +287,13 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
         if (lastLossTime === 0 && tradeTime > 0) lastLossTime = tradeTime;
         if (countingStreak) consecutiveLosses++;
       } else if (pnl >= 1.5 || r.tradeStatus === "TARGET_HIT") {
+        // Track the most recent substantial win for exhaustion cooldown
+        if (lastWinTime === 0 && pnl >= 5.0) { // Big win threshold
+            lastWinTime = tradeTime;
+            lastWinDirection = r.signal;
+            lastWinPnl = pnl;
+        }
+        
         // Only a substantial win (>= +1.5 pts or target hit) breaks the loss streak!
         // Micro/scratch trailing stop exits (+0.2 to +0.5 pts) do NOT reset a loss streak.
         countingStreak = false;
@@ -338,6 +351,9 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
       longDirectionCooldown,
       shortDirectionCooldown,
       directionalCooldownRemainingMinutes,
+      lastWinTime,
+      lastWinDirection,
+      lastWinPnl
     };
   } catch {
     return {
@@ -355,6 +371,9 @@ async function getRecentStopCounts(): Promise<StopHistoryAnalysis> {
       longDirectionCooldown: false,
       shortDirectionCooldown: false,
       directionalCooldownRemainingMinutes: 0,
+      lastWinTime: 0,
+      lastWinDirection: null,
+      lastWinPnl: 0
     };
   }
 }
@@ -1150,6 +1169,22 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         }
       } catch (dbErr) {
         logger.warn({ err: dbErr }, "[SignalEngine] Failed to check DB for running trades");
+      }
+    }
+
+    // ── TP Exhaustion Guard (Prevents chasing after a massive win) ──
+    if (finalSignal !== "HOLD" && recentStops.lastWinTime > 0) {
+      const timeSinceBigWin = Date.now() - recentStops.lastWinTime;
+      // If we had a massive win (> 5.0 pts) in the SAME direction within the last 60 minutes
+      if (recentStops.lastWinDirection === finalSignal && timeSinceBigWin < 60 * 60 * 1000) {
+        logger.warn(
+          { finalSignal, pnl: recentStops.lastWinPnl, minsAgo: Math.round(timeSinceBigWin / 60000) },
+          "[Macro Gate] TP Exhaustion Halt: Suppressed signal to prevent chasing an exhausted move right after a massive profit."
+        );
+        finalSignal = "HOLD";
+        confidence = 0;
+        signalStrength = null;
+        suppressionReason = `TP Exhaustion Cooldown: Wait for pullback. Massive +${recentStops.lastWinPnl.toFixed(1)}pt ${recentStops.lastWinDirection} win was just secured ${Math.round(timeSinceBigWin / 60000)}m ago.`;
       }
     }
 

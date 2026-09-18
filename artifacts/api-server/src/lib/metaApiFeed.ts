@@ -198,6 +198,12 @@ let metaApiStatus: "disconnected" | "connecting" | "connected" = "disconnected";
 let isConnecting = false;
 let lastPriceReceivedAt = 0;
 let activeAccountId: string | null = null;
+let currentMetaApiLatencyMs = 0;
+let latencyPingInterval: NodeJS.Timeout | null = null;
+
+export function getMetaApiLatency() {
+    return currentMetaApiLatencyMs;
+}
 
 // In-memory real-time candle stores updated by live ticks
 const liveCandleStore: Record<string, OHLCCandle[]> = {
@@ -582,6 +588,11 @@ export async function startMetaApiFeed() {
                         break;
                     } catch (err: any) {
                         lastSubError = err;
+                        const msg = err?.message || String(err);
+                        if (msg.includes('timed out') || msg.includes('connected to broker')) {
+                            logger.warn(`Broker subscription timed out for ${sym}, aborting standard symbol checks.`);
+                            break;
+                        }
                         continue;
                     }
                 }
@@ -633,6 +644,11 @@ export async function startMetaApiFeed() {
                                     break;
                                 } catch (err: any) {
                                     lastSubError = err;
+                                    const msg = err?.message || String(err);
+                                    if (msg.includes('timed out') || msg.includes('connected to broker')) {
+                                        logger.warn(`Broker subscription timed out for ${sym}, aborting dynamic symbol checks.`);
+                                        break;
+                                    }
                                     continue;
                                 }
                             }
@@ -754,6 +770,7 @@ export async function startMetaApiFeed() {
 
         // Start active watchdog heartbeat timer
         startWatchdog();
+        startPingPongMonitor();
     } catch (err: any) {
         metaApiStatus = "disconnected";
         const msg = err?.message || String(err || "");
@@ -798,6 +815,30 @@ function scheduleReconnect() {
  * Ensures connection is alive and ticks are actively flowing.
  * If stalled for >300s or disconnected for >15s, automatically heals connection.
  */
+function startPingPongMonitor() {
+    if (latencyPingInterval) return;
+    latencyPingInterval = setInterval(async () => {
+        if (connection && metaApiStatus === "connected") {
+            try {
+                const start = Date.now();
+                // Simple fast RPC call to measure end-to-end MT5 latency
+                if (typeof connection.getAccountInformation === 'function') {
+                    await connection.getAccountInformation();
+                    currentMetaApiLatencyMs = Date.now() - start;
+                } else if (typeof connection.getServerTime === 'function') {
+                    await connection.getServerTime();
+                    currentMetaApiLatencyMs = Date.now() - start;
+                }
+            } catch (err) {
+                // If ping fails, we don't necessarily disconnect, but latency is effectively unknown/high
+                currentMetaApiLatencyMs = 5000;
+            }
+        } else {
+            currentMetaApiLatencyMs = 0;
+        }
+    }, 5000); // Ping every 5 seconds
+}
+
 function startWatchdog() {
     if (watchdogTimer) return;
     watchdogTimer = setInterval(async () => {
