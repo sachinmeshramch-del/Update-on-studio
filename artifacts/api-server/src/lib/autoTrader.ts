@@ -52,22 +52,22 @@ export async function executeTradeWithCapitalManagement(
 
     // Risk amount = Equity * Risk%
     const riskAmount = actualEquity * (riskPerTrade / 100);
-    // SL distance in pips/points - minimum distance fallback to prevent excessive lot size
-    const rawSlDistance = Math.abs(entryPrice - stopLoss);
+    // 1. HARD SL FLOOR (Vulnerability #1 Fix)
+    // Prevent ultra-tight stops from generating massively inflated lot sizes.
+    // E.g., if a bug passes a 0.20 SL, we calculate volume as if the SL was 2.50 to protect the account.
+    const safeSlDistance = Math.max(2.5, Math.abs(entryPrice - stopLoss));
     
     let calculatedVolume = 0.01;
     let lotStep = 0.01;
     let minVolume = 0.01;
+    let riskPerLot = 0;
     
-    if (symbolSpec && rawSlDistance > 0) {
+    if (symbolSpec && safeSlDistance > 0) {
         // MetaTrader 5 Formula: 
         // Profit = (Close - Open) * ContractSize * Volume
         // So RiskAmount = SL_Distance * ContractSize * Volume
         // Volume = RiskAmount / (SL_Distance * ContractSize)
-        // Note: For forex, there's also exchange rate, but for USD pairs/metals it's 1.
         
-        // Sometimes brokers define tickValue and tickSize.
-        // RiskAmount = (SL_Distance / tickSize) * tickValue * Volume
         const tickSize = symbolSpec.tickSize || symbolSpec.point || 0.01;
         const tickValue = symbolSpec.tickValue; // e.g. 1.0 for USD accounts
         const contractSize = symbolSpec.contractSize || 100;
@@ -75,11 +75,10 @@ export async function executeTradeWithCapitalManagement(
         lotStep = symbolSpec.volumeStep || 0.01;
         minVolume = symbolSpec.volumeMin || 0.01;
         
-        let riskPerLot = 0;
         if (tickValue && tickSize) {
-            riskPerLot = (rawSlDistance / tickSize) * tickValue;
+            riskPerLot = (safeSlDistance / tickSize) * tickValue;
         } else {
-            riskPerLot = rawSlDistance * contractSize;
+            riskPerLot = safeSlDistance * contractSize;
         }
         
         if (riskPerLot > 0) {
@@ -89,26 +88,67 @@ export async function executeTradeWithCapitalManagement(
         }
     } else {
         // Fallback to standard Gold logic (1 lot = 100 oz) if spec fails
-        const slDistanceFallback = Math.max(1.0, rawSlDistance);
+        const slDistanceFallback = Math.max(2.5, safeSlDistance);
         if (slDistanceFallback > 0) {
-            calculatedVolume = parseFloat((riskAmount / (slDistanceFallback * 100)).toFixed(2));
+            riskPerLot = slDistanceFallback * 100;
+            calculatedVolume = parseFloat((riskAmount / riskPerLot).toFixed(2));
         }
     }
     
-    // Constrain volume safely based on symbol spec
-    if (isNaN(calculatedVolume) || calculatedVolume < minVolume) calculatedVolume = minVolume;
+    // 2. EXCESSIVE RISK REJECTOR (Vulnerability #3 Fix)
+    // If the account is so small that minVolume risks MORE than double our intended risk, reject the trade.
+    if (calculatedVolume < minVolume) {
+        const actualRiskWithMinVolume = riskPerLot * minVolume;
+        const actualRiskPct = (actualRiskWithMinVolume / actualEquity) * 100;
+        
+        if (actualRiskPct > (riskPerTrade * 2.5)) { // Tolerance buffer
+            logger.warn({
+                accountId, actualEquity, requestedRiskPct: riskPerTrade, actualRiskPct, minVolume, safeSlDistance
+            }, "[AutoTrader] TRADE REJECTED: Account too small for this Stop Loss width. Using minVolume would risk too much equity.");
+            return;
+        }
+        calculatedVolume = minVolume;
+    }
+    
     // Cap at reasonable maximum (e.g. 50.0 lots) to prevent catastrophic errors
     const maxVol = symbolSpec?.volumeMax || 50.0;
     if (calculatedVolume > maxVol) calculatedVolume = maxVol;
     
-    // Format to avoid floating point precision issues (e.g. 0.01000000000001)
+    // Format to avoid floating point precision issues
     const stepDecimals = (lotStep.toString().split('.')[1] || '').length || 2;
     calculatedVolume = parseFloat(calculatedVolume.toFixed(stepDecimals));
 
+    // 3. FREE MARGIN CHECK (Vulnerability #2 Fix)
+    // Check if the calculated volume exceeds our available leverage
+    if (leverage && leverage > 0) {
+        const notionalValue = entryPrice * (symbolSpec?.contractSize || 100) * calculatedVolume;
+        const marginRequired = notionalValue / leverage;
+        const freeMargin = fundsInfo ? fundsInfo.freeMargin : actualEquity;
+        
+        if (marginRequired > freeMargin * 0.85) { // Leave 15% buffer
+            logger.warn({ 
+                accountId, freeMargin, marginRequired, calculatedVolume, leverage 
+            }, "[AutoTrader] Margin Warning: Calculated volume requires more margin than safely available. Scaling down.");
+            
+            // Scale volume down to fit 85% of free margin
+            const maxSafeNotional = (freeMargin * 0.85) * leverage;
+            const maxSafeVolume = maxSafeNotional / (entryPrice * (symbolSpec?.contractSize || 100));
+            calculatedVolume = Math.max(minVolume, Math.floor(maxSafeVolume / lotStep) * lotStep);
+        }
+    }
+
     logger.info({ accountId, actualEquity, leverage, riskAmount, calculatedVolume, symbol: sym }, `[AutoTrader] Dynamically calculated volume using broker specifications`);
 
+    // Note: Daily limits should be tracked continuously. If equity drops below (startEquity - dailyStop%)
+    if (actualEquity && dailyStats.startEquity > 0) {
+        const drawdownPct = ((dailyStats.startEquity - actualEquity) / dailyStats.startEquity) * 100;
+        if (drawdownPct >= dailyStop) {
+            dailyStats.tradingHalted = true;
+        }
+    }
+
     if (dailyStats.tradingHalted) {
-        logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit.`);
+        logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit (${dailyStop}% drawdown).`);
         return;
     }
 

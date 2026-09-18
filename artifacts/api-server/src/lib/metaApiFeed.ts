@@ -1481,14 +1481,15 @@ export async function executeTradeOnAccount(
             return executionResult;
         } catch (err: any) {
             const errMsg = err?.message || String(err);
-            // If rejected due to broker stop level proximity (e.g. XM minimum stop level 10016), execute market first, then attach stops with Verify-before-Update loop
+            
+            // If rejected due to broker stop level proximity, execute market first, then attach stops with Verify-before-Update loop
             if (errMsg.includes('INVALID_STOPS') || errMsg.includes('10016') || errMsg.includes('stops') || errMsg.includes('STOPS')) {
                 logger.warn({ accountType, err: errMsg }, "[MetaApi Execution] Broker rejected stops proximity. Executing market fill instantly with 2-stage SL/TP attachment...");
                 try {
                     executionResult = direction === "LONG"
                         ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions)
                         : await connection.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
-                    
+                      
                     if (executionResult.positionId) {
                         safeModifyPositionSLTP({
                             positionId: String(executionResult.positionId),
@@ -1503,14 +1504,21 @@ export async function executeTradeOnAccount(
                     }
                     return executionResult;
                 } catch (retryErr: any) {
-                    logger.warn({ err: retryErr?.message }, "[MetaApi] Streaming 2-stage retry failed, falling back to RPC...");
+                    logger.error({ err: retryErr?.message }, "[MetaApi] Streaming 2-stage retry failed. Throwing to prevent double-execution.");
+                    throw retryErr; // Do NOT fallback to RPC if the trade command was already sent!
                 }
+            } else if (errMsg.includes('NotConnected') || errMsg.includes('Disconnected') || errMsg.includes('Connection')) {
+                logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Streaming connection broken, attempting fast RPC connection fallback...`);
+                // Allow fallthrough to RPC
             } else {
-                logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Streaming execution failed, attempting fast RPC connection fallback...`);
+                logger.error({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Streaming execution failed with broker error. Throwing to prevent double-execution.`);
+                throw err; // DO NOT FALLBACK! The broker rejected it or it timed out. RPC will just double-execute or reject again.
             }
         }
     }
+    
     // 2. Pre-warmed RPC connection execution (NO waitSynchronized: ~200ms)
+    // Only reaches here if connection is null, or if it explicitly failed with a disconnection error.
     try {
         const rpc = await getOrInitRpcConnection(targetAccountId);
         try {
@@ -1554,24 +1562,30 @@ export async function executeTradeOnAccount(
         return executionResult;
     } catch (err: any) {
         const errMsg = err?.message || String(err);
-        logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Primary trade attempt failed, checking alternative symbol...`);
+        
+        // If symbol wasn't found (e.g. if SYMBOL was XAUUSD instead of GOLD on XM MT5), retry with alternate.
+        // DO NOT retry on generic errors or timeouts, as that causes double execution!
+        if (errMsg.includes('Unknown symbol') || errMsg.includes('Unsupported symbol') || errMsg.includes('SYMBOL') || errMsg.includes('symbol')) {
+            logger.warn({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] Primary trade attempt failed due to symbol error, checking alternative symbol...`);
+            const altSymbol = tradeSymbol.toUpperCase().includes("GOLD") ? "XAUUSD" : "GOLD";
+            try {
+                const rpc = await getOrInitRpcConnection(targetAccountId);
+                executionResult = direction === "LONG"
+                    ? await rpc.createMarketBuyOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
+                    : await rpc.createMarketSellOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
 
-        // If symbol wasn't found (e.g. if SYMBOL was XAUUSD instead of GOLD on XM MT5), retry with alternate
-        const altSymbol = tradeSymbol.toUpperCase().includes("GOLD") ? "XAUUSD" : "GOLD";
-        try {
-            const rpc = await getOrInitRpcConnection(targetAccountId);
-            executionResult = direction === "LONG"
-                ? await rpc.createMarketBuyOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
-                : await rpc.createMarketSellOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
-
-            SYMBOL = altSymbol; // Update active symbol to working one
-            logger.info({ accountId: targetAccountId, orderId: executionResult.orderId, altSymbol }, `[MetaApi ${accountType}] Executed successfully with alternative symbol`);
-            if (executionResult?.positionId) {
-                calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
+                SYMBOL = altSymbol; // Update active symbol to working one
+                logger.info({ accountId: targetAccountId, orderId: executionResult.orderId, altSymbol }, `[MetaApi ${accountType}] Executed successfully with alternative symbol`);
+                if (executionResult?.positionId) {
+                    calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
+                }
+                return executionResult;
+            } catch (retryErr: any) {
+                logger.error({ accountType, accountId: targetAccountId, err: retryErr?.message || String(retryErr) }, `[MetaApi ${accountType}] Alternative symbol execution failed`);
+                throw err; // Throw original error
             }
-            return executionResult;
-        } catch (retryErr: any) {
-            logger.error({ accountType, accountId: targetAccountId, err: retryErr?.message || String(retryErr) }, `[MetaApi ${accountType}] Trade execution failed`);
+        } else {
+            logger.error({ accountType, accountId: targetAccountId, err: errMsg }, `[MetaApi ${accountType}] RPC trade execution failed.`);
             throw err;
         }
     }

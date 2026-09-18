@@ -1,18 +1,18 @@
-const fs = require('fs');
-const file = 'artifacts/api-server/src/lib/signalScheduler.ts';
-let code = fs.readFileSync(file, 'utf8');
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import fs from 'fs';
 
-const target = `async function runScheduledSignal(): Promise<void> {
-  if (isScheduling) return;
-  isScheduling = true;
-  try {`;
-const replace = `async function runScheduledSignal(): Promise<void> {
-  if (isScheduling) return;
-  isScheduling = true;
-  try {
-    logger.info("Scheduler running check...");`;
+const rawConfig = fs.readFileSync('./firebase-applet-config.json', 'utf8');
+const config = JSON.parse(rawConfig);
+const app = initializeApp(config);
+const db = getFirestore(app, config.firestoreDatabaseId);
 
-if (code.includes(target) && !code.includes('Scheduler running check')) {
-    code = code.replace(target, replace);
-    fs.writeFileSync(file, code);
+async function run() {
+  const q = query(collection(db, "signals"), orderBy("createdAt", "desc"), limit(2));
+  const snap = await getDocs(q);
+  snap.forEach(doc => {
+    const d = doc.data();
+    console.log(`[${new Date(d.createdAt.seconds * 1000).toISOString()}] ${d.signal} PNL: ${d.pnlPoints} - Reason: ${d.reason}`);
+  });
 }
+run().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });

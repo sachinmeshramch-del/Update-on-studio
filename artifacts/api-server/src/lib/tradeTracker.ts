@@ -387,9 +387,9 @@ export async function checkRunningTrades(): Promise<void> {
             }
           }
 
-          // Step C: Time Decay Protection (Swing Trades: Allow 45 minutes of development)
+          // Step C: Time Decay Protection (Swing Trades: Allow 2.5 hours of development)
           const tradeDurationMins = (Date.now() - (trade.createdAt ? new Date(trade.createdAt).getTime() : Date.now())) / 60000;
-          if (!trackerState.runnerActivated && tradeDurationMins >= 45 && currentProfit >= 1.50) {
+          if (!trackerState.runnerActivated && tradeDurationMins >= 150 && currentProfit >= 1.50) {
             const bailoutSl = +(currentBid - Math.max(minStopBuffer * 2.0, 1.20)).toFixed(2);
             targetSl = Math.max(targetSl, Math.min(bailoutSl, breakEvenPrice));
           }
@@ -550,9 +550,9 @@ export async function checkRunningTrades(): Promise<void> {
             }
           }
 
-          // Step C: Time Decay Protection (Swing Trades: Allow 45 minutes of development)
+          // Step C: Time Decay Protection (Swing Trades: Allow 2.5 hours of development)
           const tradeDurationMins = (Date.now() - (trade.createdAt ? new Date(trade.createdAt).getTime() : Date.now())) / 60000;
-          if (!trackerState.runnerActivated && tradeDurationMins >= 45 && currentProfit >= 1.50) {
+          if (!trackerState.runnerActivated && tradeDurationMins >= 150 && currentProfit >= 1.50) {
             const bailoutSl = +(currentAsk + Math.max(minStopBuffer * 2.0, 1.20)).toFixed(2);
             targetSl = Math.min(targetSl, Math.max(bailoutSl, breakEvenPrice));
           }

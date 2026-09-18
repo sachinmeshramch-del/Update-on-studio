@@ -1152,10 +1152,10 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     if (finalSignal !== "HOLD") {
       try {
         const running = await getRunningTrades();
-        if (running.some((r: any) => r.signal === finalSignal)) {
-          logger.info({ direction: finalSignal }, "[SignalEngine] RUNNING trade already open — signal suppressed");
+        if (running.length > 0) {
+          logger.info({ direction: finalSignal, runningTrade: running[0].signal }, "[SignalEngine] RUNNING trade already open — signal suppressed");
           finalSignal = "HOLD";
-          suppressionReason = "RUNNING trade already open in same direction";
+          suppressionReason = `RUNNING trade already open (${running[0].signal})`;
         } else {
           const latest = await getLatestSignal();
           if (latest && latest.signal === finalSignal) {
@@ -1369,20 +1369,26 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
         const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
         
-        if (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h)) {
+        const htBearish = macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h;
+        const htBullish = macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h;
+
+        // Bypassing logic: If there's high confidence (e.g., > 75%) and a strong sweep, 
+        // we might allow it even if HTF is slightly against it, but generally we block.
+        // For now, let's keep it strict but make the reason clearer.
+        if (finalSignal === "LONG" && htBearish) {
           logger.warn(
             { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed LONG trend-follow: Higher timeframe structure is BEARISH"
           );
           finalSignal = "HOLD";
-          suppressionReason = "Strict Macro Gate: Cannot BUY trend-follow in a bearish higher timeframe structure";
-        } else if (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h)) {
+          suppressionReason = `Strict Macro Gate: Cannot BUY trend-follow. (1H: ${macro1hState}, 15m: ${trendMacro}, 15m MS: ${msMacro.structure})`;
+        } else if (finalSignal === "SHORT" && htBullish) {
           logger.warn(
             { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed SHORT trend-follow: Higher timeframe structure is BULLISH"
           );
           finalSignal = "HOLD";
-          suppressionReason = "Strict Macro Gate: Cannot SELL trend-follow in a bullish higher timeframe structure";
+          suppressionReason = `Strict Macro Gate: Cannot SELL trend-follow. (1H: ${macro1hState}, 15m: ${trendMacro}, 15m MS: ${msMacro.structure})`;
         }
       }
 
@@ -1394,30 +1400,35 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         const isCounterTo1hOr15m = 
             (finalSignal === "LONG" && (macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h)) ||
             (finalSignal === "SHORT" && (macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h));
+            
+        // Strict guard against the immediate 5m trend
+        const isCounterTo5mTrend = 
+            (finalSignal === "LONG" && effectiveTrend === "BEARISH") ||
+            (finalSignal === "SHORT" && effectiveTrend === "BULLISH");
         
-        if (isCounterTo1hOr15m) {
+        if (isCounterTo1hOr15m || isCounterTo5mTrend) {
           if (currentAdx > 25) {
             logger.warn(
-              { finalSignal, signalType, currentAdx, macro1hState, trendMacro },
-              "[Macro Gate] Counter-macro trade suppressed: ADX > 25 indicates strong trending market (mean reversion blocked)"
+              { finalSignal, signalType, currentAdx, macro1hState, trendMacro, effectiveTrend },
+              "[Macro Gate] Counter-trend trade suppressed: ADX > 25 indicates strong trending market (mean reversion blocked)"
             );
             finalSignal = "HOLD";
-            suppressionReason = `Counter-Macro trade blocked: ADX (${currentAdx.toFixed(1)}) indicates strong trending market`;
+            suppressionReason = `Counter-Trend trade blocked: ADX (${currentAdx.toFixed(1)}) indicates strong trending market`;
           } else {
             const hasSweepConfirmation = sweepRej.detected || sweepScore > 0 || isFalseBreakout;
             const minCounterConf = 78;
 
             if (confidence < minCounterConf || !hasSweepConfirmation) {
               logger.warn(
-                { finalSignal, signalType, confidence, minCounterConf, macro1hState, trendMacro, hasSweepConfirmation },
-                "[Macro Gate] Counter-macro range/reversal suppressed due to insufficient confidence or lack of sweep"
+                { finalSignal, signalType, confidence, minCounterConf, macro1hState, trendMacro, effectiveTrend, hasSweepConfirmation },
+                "[Macro Gate] Counter-trend range/reversal suppressed due to insufficient confidence or lack of sweep"
               );
               finalSignal = "HOLD";
-              suppressionReason = `Counter-Macro trade requires confirmed sweep rejection and ≥${minCounterConf}% confidence (got ${confidence}%)`;
+              suppressionReason = `Counter-Trend trade requires confirmed sweep rejection and ≥${minCounterConf}% confidence (got ${confidence}%)`;
             } else {
               logger.info(
-                { finalSignal, signalType, confidence, macro1hState, trendMacro, hasSweepConfirmation },
-                "[Macro Gate] Counter-macro setup validated with high confluence"
+                { finalSignal, signalType, confidence, macro1hState, trendMacro, effectiveTrend, hasSweepConfirmation },
+                "[Macro Gate] Counter-trend setup validated with high confluence"
               );
             }
           }
