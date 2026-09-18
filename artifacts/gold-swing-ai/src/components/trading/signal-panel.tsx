@@ -11,6 +11,7 @@ import {
   Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX, ShieldAlert,
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
+import { QuickAutoTrade } from "./quick-auto-trade";
 import { motion } from "framer-motion";
 
 // ── Session badge ──────────────────────────────────────────────────────────────
@@ -249,6 +250,9 @@ export function SignalPanel() {
         ${signal === "LONG" ? "bg-success" : signal === "SHORT" ? "bg-destructive" : "bg-warning"}`} />
 
       <CardContent className="p-6 lg:p-8 flex flex-col gap-5 relative z-10">
+
+        {/* ── Quick Auto-Trading Control Bar ─────────────────────────────── */}
+        <QuickAutoTrade variant="panel" />
 
         {/* ── Header: Session + Signal + Confidence ────────────────────────── */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

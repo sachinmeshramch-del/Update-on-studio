@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { SettingsDialog } from "./settings-dialog";
+import { QuickAutoTrade } from "@/components/trading/quick-auto-trade";
 import { useToast } from "@/hooks/use-toast";
 
 function Heartbeat({ lastBeat, connected }: { lastBeat?: number, connected: boolean }) {
@@ -179,7 +180,8 @@ export function Header() {
             <button
               type="button"
               onClick={() => {
-                toggleMutation.mutate({ autoTradingDemoEnabled: !settings?.autoTradingDemoEnabled });
+                const nextVal = !settings?.autoTradingDemoEnabled;
+                toggleMutation.mutate({ autoTradingDemoEnabled: nextVal, autoTradingEnabled: nextVal });
               }}
               title="Click to toggle Demo Auto-Trading"
               className={cn(
@@ -376,8 +378,10 @@ export function Header() {
           </div>
 
           
-          {/* ── Theme Toggle & Notifications ───────────────────────────── */}
+          {/* ── Quick Auto-Trade Toggle, Theme Toggle & Notifications ───────────────────────────── */}
           <div className="flex items-center gap-2 shrink-0">
+            <QuickAutoTrade variant="header" />
+
             <button
               onClick={() => {
                 queryClient.invalidateQueries();

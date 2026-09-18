@@ -7,6 +7,7 @@ import {
   getOpenBrokerPositions,
   getRecentlyClosedBrokerDeals,
   closeBrokerPosition,
+  getMetaApiStatus,
   brokerEvents,
   type BrokerPosition,
   type BrokerClosedDeal
@@ -242,7 +243,11 @@ export async function checkRunningTrades(): Promise<void> {
       }
 
       // ── 2.5 Check for Orphaned Real Trades (Missing from MT5 entirely) ──
-      if (trade.brokerPositionId && !matchingOpenPos) {
+      // Only declare orphaned if the broker feed is actively connected, terminal state is valid,
+      // and the trade has existed for at least 45 seconds to allow MT5 execution and sync to complete.
+      const isBrokerConnected = Boolean(getMetaApiStatus()?.connected);
+      const isNewlyCreated = tradeTimestamp > 0 && (Date.now() - tradeTimestamp < 45_000);
+      if (trade.brokerPositionId && !matchingOpenPos && isBrokerConnected && !isNewlyCreated) {
         logger.warn(
           { id, signal, brokerPositionId: trade.brokerPositionId },
           "[Broker Sync] Trade is marked as real but is missing from MT5 open positions. Forcing closure to sync with broker."

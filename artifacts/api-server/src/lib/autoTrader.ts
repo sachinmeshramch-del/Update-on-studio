@@ -139,16 +139,36 @@ export async function executeTradeWithCapitalManagement(
 
     logger.info({ accountId, actualEquity, leverage, riskAmount, calculatedVolume, symbol: sym }, `[AutoTrader] Dynamically calculated volume using broker specifications`);
 
-    // Note: Daily limits should be tracked continuously. If equity drops below (startEquity - dailyStop%)
+    // Track daily drawdown and profit limits with automatic day-boundary reset
+    const today = new Date().toISOString().split("T")[0];
+    if (dailyStats.date !== today) {
+        dailyStats.date = today;
+        dailyStats.startEquity = actualEquity;
+        dailyStats.currentEquity = actualEquity;
+        dailyStats.tradingHalted = false;
+        logger.info({ date: today, startEquity: actualEquity }, "[AutoTrader] New day detected: Reset daily risk limits and equity baseline");
+    } else if (dailyStats.startEquity <= 0 && actualEquity > 0) {
+        dailyStats.startEquity = actualEquity;
+        dailyStats.currentEquity = actualEquity;
+    }
+
+    dailyStats.currentEquity = actualEquity;
+
     if (actualEquity && dailyStats.startEquity > 0) {
         const drawdownPct = ((dailyStats.startEquity - actualEquity) / dailyStats.startEquity) * 100;
+        const profitPct = ((actualEquity - dailyStats.startEquity) / dailyStats.startEquity) * 100;
+
         if (drawdownPct >= dailyStop) {
             dailyStats.tradingHalted = true;
+            logger.warn({ drawdownPct, dailyStop, startEquity: dailyStats.startEquity, actualEquity }, `[AutoTrader] Trading HALTED: Hit daily stop loss (${dailyStop}% max drawdown).`);
+        } else if (dailyTarget > 0 && profitPct >= dailyTarget) {
+            dailyStats.tradingHalted = true;
+            logger.info({ profitPct, dailyTarget, startEquity: dailyStats.startEquity, actualEquity }, `[AutoTrader] Trading HALTED: Hit daily profit target (+${dailyTarget}%).`);
         }
     }
 
     if (dailyStats.tradingHalted) {
-        logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit (${dailyStop}% drawdown).`);
+        logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit.`);
         return;
     }
 

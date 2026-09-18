@@ -1257,7 +1257,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
 
     
     // ── STRICT CHOP/SIDEWAYS FILTER ───────────────────────────────────────
-    // If the market is consolidating (ADX < 25) or ranging, completely disable trading.
+    // If the market is consolidating (ADX < 20) or ranging, completely disable trading,
+    // UNLESS it is a clean range boundary bounce/breakout.
     
     // [DEBUG CHOP]
     logger.info({
@@ -1267,13 +1268,31 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         currentPrice
     }, "[Chop Filter Status]");
     
-
+    if (finalSignal !== "HOLD" && currentAdx < 20 && !rangeInfo.isRanging) {
+      logger.warn({ currentAdx, finalSignal }, "[ChopFilter] Suppressing signal in pure chop (ADX < 20, no clear range).");
+      finalSignal = "HOLD";
+      suppressionReason = "Market is in pure chop (ADX < 20, no clean range). Waiting for momentum or boundaries.";
+    }
 
     // ── Range Boundaries & Mid-Chop Gate ──────────────────────────────────
     // In consolidation/ranging conditions, reject trend-following breakouts in the middle of chop
     // and prevent buying into range resistance or selling into range support.
     if (finalSignal !== "HOLD" && isMarketConsolidating && rangeInfo.isRanging) {
-      logger.info({ rangeInfo, finalSignal }, "[RangeFilter] Range trade validated and allowed.");
+      if (rangeInfo.position === "MID_CHOP_ZONE") {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressing signal in MID_CHOP_ZONE.");
+        finalSignal = "HOLD";
+        suppressionReason = `Range consolidation ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)}) · Price in middle chop zone (waiting for boundary test)`;
+      } else if (rangeInfo.position === "RESISTANCE_ZONE" && finalSignal === "LONG" && !isTrueBreakout) {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressing LONG into Resistance (False Breakout trap).");
+        finalSignal = "HOLD";
+        suppressionReason = `Range consolidation ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)}) · Cannot BUY into Resistance without a confirmed True Breakout`;
+      } else if (rangeInfo.position === "SUPPORT_ZONE" && finalSignal === "SHORT" && !isTrueBreakout) {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressing SHORT into Support (False Breakdown trap).");
+        finalSignal = "HOLD";
+        suppressionReason = `Range consolidation ($${rangeInfo.support.toFixed(1)} – $${rangeInfo.resistance.toFixed(1)}) · Cannot SELL into Support without a confirmed True Breakout`;
+      } else {
+        logger.info({ rangeInfo, finalSignal, isTrueBreakout }, "[RangeFilter] Range trade validated and allowed at boundary.");
+      }
     }
 
     // ── 1-HOUR & 15-MINUTE MULTI-TIMEFRAME MACRO TREND GATE (Drawdown Killer) ──
@@ -1336,11 +1355,53 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         finalSignal = "HOLD";
         suppressionReason = "Rocket Rally Protection: Price severely above 1H EMA20 in uptrend";
       } else if (signalType === "TREND_FOLLOW") {
-        const isExtremeMomentum = currentAdx > 25; // ADX > 35 indicates a violent, extremely strong trend (Waterfall/Rocket)
+        const lastCandle = candlesPrimary.length >= 2 ? candlesPrimary[candlesPrimary.length - 2] : null;
+        const prevCandle = candlesPrimary.length >= 3 ? candlesPrimary[candlesPrimary.length - 3] : null;
+
+        // Exhaustion Rejection Filter: Detect shooting stars / long upper wicks at local highs or hammers at local lows
+        const localHigh10 = Math.max(...candlesPrimary.slice(-10).map(c => c.high));
+        const localLow10  = Math.min(...candlesPrimary.slice(-10).map(c => c.low));
+
+        const isUpperRejection = (c: any) => {
+          if (!c) return false;
+          const range = Math.max(0.1, c.high - c.low);
+          const upperWick = c.high - Math.max(c.open, c.close);
+          return (upperWick / range >= 0.40 && upperWick >= 1.2);
+        };
+
+        const isLowerRejection = (c: any) => {
+          if (!c) return false;
+          const range = Math.max(0.1, c.high - c.low);
+          const lowerWick = Math.min(c.open, c.close) - c.low;
+          return (lowerWick / range >= 0.40 && lowerWick >= 1.2);
+        };
+
+        const recentUpperRejection = isUpperRejection(lastCandle) || isUpperRejection(prevCandle);
+        const recentLowerRejection = isLowerRejection(lastCandle) || isLowerRejection(prevCandle);
+
+        if (finalSignal === "LONG" && recentUpperRejection && (localHigh10 - currentPrice) < Math.max(atr * 0.8, 3.5)) {
+          logger.warn(
+            { finalSignal, currentPrice, localHigh10 },
+            "[Macro Gate] Suppressed LONG: Exhaustion upper-wick rejection detected at local high. Buying into resistance/distribution blocked."
+          );
+          finalSignal = "HOLD";
+          suppressionReason = "Exhaustion Rejection: Stalling with upper wicks at highs. Buying into resistance/distribution blocked.";
+        } else if (finalSignal === "SHORT" && recentLowerRejection && (currentPrice - localLow10) < Math.max(atr * 0.8, 3.5)) {
+          logger.warn(
+            { finalSignal, currentPrice, localLow10 },
+            "[Macro Gate] Suppressed SHORT: Exhaustion lower-wick rejection detected at local low. Selling into support/absorption blocked."
+          );
+          finalSignal = "HOLD";
+          suppressionReason = "Exhaustion Rejection: Stalling with lower wicks at lows. Selling into support/absorption blocked.";
+        }
+
+        // Extreme momentum requires true runaway trend (ADX > 38) and RSI not exhausted
+        const isExtremeMomentumLong = currentAdx > 38 && macdHist > 0 && rsi < 75 && !recentUpperRejection;
+        const isExtremeMomentumShort = currentAdx > 38 && macdHist < 0 && rsi > 25 && !recentLowerRejection;
         
         // Prevent "late to the party" chasing (selling the bottom or buying the top)
         if (finalSignal === "SHORT" && (lastEma20_1h - currentPrice) > Math.max(atr * 0.6, 8.0)) {
-            if (isExtremeMomentum) {
+            if (isExtremeMomentumShort) {
                 logger.info({ finalSignal, currentAdx, currentPrice }, "[Macro Gate] Extreme momentum detected. Bypassing overextension block to catch the waterfall.");
             } else {
             logger.warn(
@@ -1348,10 +1409,10 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
                 "[Macro Gate] Suppressed SHORT Trend Follow: Price is overextended downside (> ATR*0.6 below 1H EMA20). Wait for pullback."
             );
             finalSignal = "HOLD";
-            suppressionReason = "Overextended downside: Price too far below 1H EMA20 to short safely. (ADX < 25)";
+            suppressionReason = "Overextended downside: Price too far below 1H EMA20 to short safely. (Wait for pullback)";
             }
         } else if (finalSignal === "LONG" && (currentPrice - lastEma20_1h) > Math.max(atr * 0.6, 8.0)) {
-            if (isExtremeMomentum) {
+            if (isExtremeMomentumLong) {
                 logger.info({ finalSignal, currentAdx, currentPrice }, "[Macro Gate] Extreme momentum detected. Bypassing overextension block to catch the rocket.");
             } else {
             logger.warn(
@@ -1359,7 +1420,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
                 "[Macro Gate] Suppressed LONG Trend Follow: Price is overextended upside (> ATR*0.6 above 1H EMA20). Wait for pullback."
             );
             finalSignal = "HOLD";
-            suppressionReason = "Overextended upside: Price too far above 1H EMA20 to long safely. (ADX < 25)";
+            suppressionReason = "Overextended upside: Price too far above 1H EMA20 to long safely. (Wait for pullback)";
             }
         }
       }
@@ -1438,13 +1499,21 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
 
     // ── Volatility Filter (Prevent "Death by a Thousand Cuts" in Choppy/Flat Markets) ──
     if (finalSignal !== "HOLD") {
-      // For XAUUSD, an ATR on 5m below 0.60 generally means a flat, lifeless market.
-      // We will suppress entries to avoid being chopped up by the spread.
-      const minRequiredAtr = Math.max(0.40, liveSpread * 2.5);
-      if (atr < minRequiredAtr) {
-        logger.warn({ finalSignal, atr, liveSpread, minRequiredAtr }, "[VolatilityFilter] Suppressed due to low volatility vs high spread");
+      // 1. Extreme Spread Guard (Rollover/News Protection)
+      const MAX_ALLOWED_SPREAD = 0.40; // $0.40 spread on Gold is extreme (normal is 0.08 - 0.15)
+      if (liveSpread > MAX_ALLOWED_SPREAD) {
+        logger.warn({ finalSignal, liveSpread, MAX_ALLOWED_SPREAD }, "[SpreadGuard] Suppressed due to extreme broker spread.");
         finalSignal = "HOLD";
-        suppressionReason = `Filtered by High Spread/Low Volatility (Spread: ${liveSpread.toFixed(2)})`;
+        suppressionReason = `Extreme Spread detected (${liveSpread.toFixed(2)} pt). Waiting for liquidity to return.`;
+      } else {
+        // 2. For XAUUSD, an ATR on 5m below 0.60 generally means a flat, lifeless market.
+        // We will suppress entries to avoid being chopped up by the spread.
+        const minRequiredAtr = Math.max(0.40, liveSpread * 2.5);
+        if (atr < minRequiredAtr) {
+          logger.warn({ finalSignal, atr, liveSpread, minRequiredAtr }, "[VolatilityFilter] Suppressed due to low volatility vs high spread");
+          finalSignal = "HOLD";
+          suppressionReason = `Filtered by High Spread/Low Volatility (Spread: ${liveSpread.toFixed(2)})`;
+        }
       }
     }
 
@@ -1491,18 +1560,20 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       tpDist = +targetDist.toFixed(2);
     }
 
+    const effectiveEntryPrice = calcDir === "LONG" ? +(currentPrice + liveSpread / 2).toFixed(2) : calcDir === "SHORT" ? +(currentPrice - liveSpread / 2).toFixed(2) : +currentPrice.toFixed(2);
+
     let stopLoss:   number;
     let takeProfit: number;
 
     if (calcDir === "LONG") {
-      stopLoss   = +(currentPrice - slDist).toFixed(2);
-      takeProfit = +(currentPrice + tpDist).toFixed(2);
+      stopLoss   = +(effectiveEntryPrice - slDist).toFixed(2);
+      takeProfit = +(effectiveEntryPrice + tpDist).toFixed(2);
     } else if (calcDir === "SHORT") {
-      stopLoss   = +(currentPrice + slDist).toFixed(2);
-      takeProfit = +(currentPrice - tpDist).toFixed(2);
+      stopLoss   = +(effectiveEntryPrice + slDist).toFixed(2);
+      takeProfit = +(effectiveEntryPrice - tpDist).toFixed(2);
     } else {
-      stopLoss   = +(currentPrice - slDist).toFixed(2);
-      takeProfit = +(currentPrice + tpDist).toFixed(2);
+      stopLoss   = +(effectiveEntryPrice - slDist).toFixed(2);
+      takeProfit = +(effectiveEntryPrice + tpDist).toFixed(2);
     }
 
     // ── Reason string ─────────────────────────────────────────────────────
@@ -1571,7 +1642,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const result: SignalResult = {
       signal:            finalSignal,
       confidence,
-      entryPrice:        +currentPrice.toFixed(2),
+      entryPrice:        finalSignal === "LONG" ? +(currentPrice + liveSpread / 2).toFixed(2) : finalSignal === "SHORT" ? +(currentPrice - liveSpread / 2).toFixed(2) : +currentPrice.toFixed(2),
       stopLoss,
       takeProfit,
       trend:             overallTrend(trendPrimary, trendEntry),

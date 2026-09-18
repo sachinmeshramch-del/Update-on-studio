@@ -1420,7 +1420,13 @@ export async function executeTradeOnAccount(
     // Let autoTrader handle volume safety limits. We just format here.
     const formattedVol = Number(Math.max(0.01, volume).toFixed(2));
     const tradeSymbol = SYMBOL || "GOLD";
-    const tradeOptions = { comment: "GoldSwing AI" };
+    
+    // Add strict slippage control (deviation in points) to prevent late entries after volatility moves
+    // 30 points on MetaApi usually translates to 3.0 pips or $0.30 on Gold
+    const tradeOptions = { 
+        comment: "GoldSwing AI",
+        slippage: 30 // Maximum allowed deviation in broker points
+    };
 
     logger.info({ 
         accountId: targetAccountId, 

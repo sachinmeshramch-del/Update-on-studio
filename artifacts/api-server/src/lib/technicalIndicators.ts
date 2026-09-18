@@ -805,7 +805,8 @@ export function calcADX(candles: OHLCCandle[], period: number = 14): { adx: numb
     if (trRMA[trIndex] > 0) {
       plusDI[i] = (plusDMRMA[trIndex] / trRMA[trIndex]) * 100;
       minusDI[i] = (minusDMRMA[trIndex] / trRMA[trIndex]) * 100;
-      dx[i] = Math.abs(plusDI[i] - minusDI[i]) / (plusDI[i] + minusDI[i]) * 100;
+      const diSum = plusDI[i] + minusDI[i];
+      dx[i] = diSum > 0 ? (Math.abs(plusDI[i] - minusDI[i]) / diSum) * 100 : 0;
     }
   }
   

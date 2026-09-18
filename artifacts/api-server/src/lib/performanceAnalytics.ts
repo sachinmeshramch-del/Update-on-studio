@@ -86,7 +86,7 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
     const last10: TradeRecord[] = completed.slice(0, 10).map((r: any) => ({
       id:          r.id,
       signal:      r.signal as "LONG" | "SHORT",
-      result:      (r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) >= 0) ? "WIN" : "LOSS",
+      result:      (r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) > 0) ? "WIN" : "LOSS",
       entryPrice:  r.entryPrice,
       closedPrice: r.closedPrice ?? r.entryPrice,
       pnlPoints:   r.pnlPoints ?? 0,

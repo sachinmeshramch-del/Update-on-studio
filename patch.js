@@ -1,85 +1,67 @@
 const fs = require('fs');
-let code = fs.readFileSync('artifacts/api-server/src/lib/signalScheduler.ts', 'utf8');
+let code = fs.readFileSync('artifacts/api-server/src/lib/signalEngine.ts', 'utf8');
 
-code = code.replace(
-  'import { insertSignal, getLatestSignal, getRunningTrades } from "@workspace/db";',
-  'import { insertSignal, getLatestSignal, getRunningTrades, updateTradeStatus } from "@workspace/db";'
-);
+const targetStr = `
+    // ── STRICT CHOP/SIDEWAYS FILTER ───────────────────────────────────────
+    // If the market is consolidating (ADX < 25) or ranging, completely disable trading.
+    
+    // [DEBUG CHOP]
+    logger.info({
+        adx: currentAdx,
+        isRanging: rangeInfo.isRanging,
+        position: rangeInfo.position,
+        currentPrice
+    }, "[Chop Filter Status]");
+    
 
-code = code.replace(
-  'import { getMetaApiStatus, executeTradeOnAccount } from "./metaApiFeed.js";',
-  'import { getMetaApiStatus, executeTradeOnAccount, closeAllPositions } from "./metaApiFeed.js";'
-);
 
-const rolloverCode = `
-let isRolloverClosing = false;
-let rolloverClosedDate = "";
-
-async function checkDailyRolloverAndClose(): Promise<void> {
-    if (isRolloverClosing) return;
-    isRolloverClosing = true;
-    try {
-        const now = new Date();
-        const nyFormatter = new Intl.DateTimeFormat("en-US", {
-            timeZone: "America/New_York",
-            hour12: false,
-            hour: "numeric",
-            minute: "numeric",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            weekday: "short"
-        });
-        const parts = nyFormatter.formatToParts(now);
-        let nyHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-        if (nyHour === 24) nyHour = 0;
-        const nyMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-        const nyDayStr = parts.find(p => p.type === 'weekday')?.value;
-        const currentDateKey = \`\${parts.find(p => p.type === 'year')?.value}-\${parts.find(p => p.type === 'month')?.value}-\${parts.find(p => p.type === 'day')?.value}\`;
-
-        // 15 minutes before 5 PM NY time = 16:45 NY time
-        // Weekend close check: Friday at 16:45. Daily check: Mon-Thu at 16:45
-        if (nyHour === 16 && nyMin >= 45 && nyDayStr !== 'Sat' && nyDayStr !== 'Sun') {
-            if (rolloverClosedDate !== currentDateKey) {
-                logger.info("[Rollover Check] Approaching daily/weekend rollover. Auto-closing all open positions.");
-                const settings = await getSystemSettings();
-                
-                if (settings.autoTradingDemoEnabled && settings.demoAccountId) {
-                    await closeAllPositions(settings.demoAccountId);
-                }
-                if (settings.autoTradingRealEnabled && settings.realAccountId) {
-                    await closeAllPositions(settings.realAccountId);
-                }
-                
-                // Mark running trades in DB as closed
-                const running = await getRunningTrades();
-                const currentPrice = getLatestPrice()?.price || 0;
-                for (const trade of running) {
-                    if (trade.id) {
-                        await updateTradeStatus(trade.id, "CLOSED", currentPrice, 0);
-                        logger.info({ tradeId: trade.id }, "Marked trade as CLOSED due to rollover");
-                    }
-                }
-
-                rolloverClosedDate = currentDateKey;
-            }
-        }
-    } catch (e: any) {
-        logger.error({ err: e.message || e }, "Rollover check failed");
-    } finally {
-        isRolloverClosing = false;
+    // ── Range Boundaries & Mid-Chop Gate ──────────────────────────────────
+    // In consolidation/ranging conditions, reject trend-following breakouts in the middle of chop
+    // and prevent buying into range resistance or selling into range support.
+    if (finalSignal !== "HOLD" && isMarketConsolidating && rangeInfo.isRanging) {
+      logger.info({ rangeInfo, finalSignal }, "[RangeFilter] Range trade validated and allowed.");
     }
-}
 `;
 
-code = code.replace(
-  'let isScheduling = false;',
-  'let isScheduling = false;\n' + rolloverCode
-);
+const replaceStr = `
+    // ── STRICT CHOP/SIDEWAYS FILTER ───────────────────────────────────────
+    // If the market is consolidating (ADX < 20) or ranging, completely disable trading,
+    // UNLESS it is a clean range boundary bounce/breakout.
+    
+    // [DEBUG CHOP]
+    logger.info({
+        adx: currentAdx,
+        isRanging: rangeInfo.isRanging,
+        position: rangeInfo.position,
+        currentPrice
+    }, "[Chop Filter Status]");
+    
+    if (finalSignal !== "HOLD" && currentAdx < 20 && !rangeInfo.isRanging) {
+      logger.warn({ currentAdx, finalSignal }, "[ChopFilter] Suppressing signal in pure chop (ADX < 20, no clear range).");
+      finalSignal = "HOLD";
+      suppressionReason = "Market is in pure chop (ADX < 20, no clean range). Waiting for momentum or boundaries.";
+    }
 
-code = code.replace(
-  'async function runScheduledSignal(): Promise<void> {\n  if (isScheduling) return;\n  isScheduling = true;\n  try {\n    const live  = getLatestPrice();',
-  'async function runScheduledSignal(): Promise<void> {\n  if (isScheduling) return;\n  isScheduling = true;\n  try {\n    await checkDailyRolloverAndClose();\n\n    const live  = getLatestPrice();'
-);
+    // ── Range Boundaries & Mid-Chop Gate ──────────────────────────────────
+    // In consolidation/ranging conditions, reject trend-following breakouts in the middle of chop
+    // and prevent buying into range resistance or selling into range support.
+    if (finalSignal !== "HOLD" && isMarketConsolidating && rangeInfo.isRanging) {
+      if (rangeInfo.position === "MID_CHOP_ZONE") {
+        logger.warn({ rangeInfo, finalSignal }, "[RangeFilter] Suppressing signal in MID_CHOP_ZONE.");
+        finalSignal = "HOLD";
+        suppressionReason = \`Range consolidation ($\${rangeInfo.support.toFixed(1)} - $\${rangeInfo.resistance.toFixed(1)}) · Price in middle chop zone (waiting for boundary test)\`;
+      } else {
+        logger.info({ rangeInfo, finalSignal }, "[RangeFilter] Range trade validated and allowed at boundary.");
+      }
+    }
+`;
 
-fs.writeFileSync('artifacts/api-server/src/lib/signalScheduler.ts', code);
+const regexStr = targetStr.trim().replace(/[.*+?^$\{\}()|\[\]\\]/g, '\\$&').replace(/\\s+/g, '\\s*');
+const match = code.match(new RegExp(regexStr));
+if (match) {
+    code = code.replace(match[0], replaceStr.trim());
+    fs.writeFileSync('artifacts/api-server/src/lib/signalEngine.ts', code);
+    console.log("Patched successfully!");
+} else {
+    console.log("Could not match target string.");
+}
