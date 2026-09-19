@@ -892,10 +892,15 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
     }
 
     const settings = await getSystemSettings().catch(() => ({} as any));
+    if (settings.metaApiSymbol) {
+        SYMBOL = settings.metaApiSymbol.trim();
+    }
+    const configuredSymbol = settings.metaApiSymbol || SYMBOL || "GOLD";
+
     const accountIdsToTry = Array.from(new Set([
         activeAccountId,
         settings.realAccountId,
-
+        settings.demoAccountId,
         process.env.META_ACCOUNT_ID
     ].filter((id): id is string => Boolean(id && isValidAccountId(id) && !invalidAccountBlacklist.has(id)))));
 
@@ -918,18 +923,26 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
 
     const fetchPromise = (async () => {
         try {
-            const symbolsToTry = Array.from(new Set([SYMBOL, "GOLD", "XAUUSD", "XAUUSDm"]));
+            const symbolsToTry = Array.from(new Set([configuredSymbol, SYMBOL, "GOLD", "XAUUSD", "XAUUSDm"].filter(Boolean)));
             let lastErr = null;
 
             for (const accId of accountIdsToTry) {
                 try {
                     const account = await metaApi.metatraderAccountApi.getAccount(accId);
+                    if (account.state && account.state !== 'DEPLOYED') {
+                        continue;
+                    }
                     for (const sym of symbolsToTry) {
                         try {
-                            const candles = await Promise.race([
-                                account.getHistoricalCandles(sym, targetTf, undefined, count),
-                                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 20000))
-                            ]);
+                            let timer: NodeJS.Timeout | null = null;
+                            const timeoutPromise = new Promise<never>((_, reject) => {
+                                timer = setTimeout(() => reject(new Error(`Timeout fetching ${sym}`)), 6000);
+                            });
+                            const candlesPromise = account.getHistoricalCandles(sym, targetTf, undefined, count);
+                            const candles = await Promise.race([candlesPromise, timeoutPromise]).finally(() => {
+                                if (timer) clearTimeout(timer);
+                            });
+
                             if (candles && candles.length > 0) {
                                 const formatted: OHLCCandle[] = candles.map((c: any) => ({
                                     time: typeof c.time === 'string' ? Math.floor(new Date(c.time).getTime() / 1000) : (c.time > 1000000000000 ? Math.floor(c.time / 1000) : c.time),
@@ -939,6 +952,8 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                                     close: c.close,
                                     volume: c.tickVolume || c.volume || 1
                                 }));
+                                // Update working symbol
+                                SYMBOL = sym;
                                 // Populate live store and cache
                                 liveCandleStore[tf] = [...formatted];
                                 candleCache.set(cacheKey, { timestamp: Date.now(), data: formatted });
@@ -954,7 +969,6 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                     if (errMsg.toLowerCase().includes('account') && (errMsg.includes('does not exist') || errMsg.includes('NotFoundError') || errMsg.includes('not found'))) {
                         invalidAccountBlacklist.add(accId);
                         logger.debug({ accId }, "Quietly blacklisted invalid MetaApi account ID");
-                        // We do not throw or warn loudly here, just skip to the next account
                     } else {
                         logger.warn({ accId, err: errMsg }, "Failed to get MetaApi account");
                     }

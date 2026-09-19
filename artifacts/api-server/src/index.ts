@@ -45,28 +45,63 @@ logger.info({
   kService: process.env.K_SERVICE
 }, "Initializing HTTP server");
 
-const server = app.listen(port, "0.0.0.0", () => {
-  logger.info({ port, host: "0.0.0.0" }, "Server successfully started and listening");
-});
+let hasInitializedServices = false;
 
-server.on("error", (err: any) => {
-  logger.error({ err, port }, "Fatal server listen error");
-  process.exit(1);
-});
+function initBackgroundServices(serverInstance: any) {
+  if (hasInitializedServices) return;
+  hasInitializedServices = true;
 
-// Attach WebSocket server for frontend real-time price feed
-setupWebSocketServer(server);
+  // Attach WebSocket server for frontend real-time price feed
+  setupWebSocketServer(serverInstance);
 
-// Start data stream based on configuration
-// Only use MetaApi
-startMetaApiFeed().catch(err => {
-  logger.error({ err }, "Failed to start MetaApi feed - will retry later or wait for settings");
-});
+  // Start data stream based on configuration
+  // Only use MetaApi
+  startMetaApiFeed().catch(err => {
+    logger.error({ err }, "Failed to start MetaApi feed - will retry later or wait for settings");
+  });
 
-// Web Push + background signal scheduler
-initWebPush();
-startSignalScheduler();
-startTradeTracker();
+  // Web Push + background signal scheduler
+  initWebPush();
+  startSignalScheduler();
+  startTradeTracker();
 
-// Start backend diagnostic monitor
-startDiagnosticMonitor();
+  // Start backend diagnostic monitor
+  startDiagnosticMonitor();
+}
+
+function startServer(retries = 5, delayMs = 1000) {
+  const server = app.listen(port, "0.0.0.0", () => {
+    logger.info({ port, host: "0.0.0.0" }, "Server successfully started and listening");
+    initBackgroundServices(server);
+  });
+
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE" && retries > 0) {
+      logger.warn({ port, retriesLeft: retries }, "Port is in use (EADDRINUSE), retrying in 1s...");
+      setTimeout(() => {
+        startServer(retries - 1, delayMs);
+      }, delayMs);
+    } else {
+      logger.error({ err, port }, "Fatal server listen error");
+      process.exit(1);
+    }
+  });
+
+  const shutdown = (signal: string) => {
+    logger.info({ signal }, "Received shutdown signal, closing server...");
+    server.close(() => {
+      logger.info("Server closed successfully.");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      process.exit(0);
+    }, 2000).unref();
+  };
+
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
+  return server;
+}
+
+startServer();

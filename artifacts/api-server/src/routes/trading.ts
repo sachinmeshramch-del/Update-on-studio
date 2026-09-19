@@ -65,27 +65,46 @@ router.get("/gold-price", async (req, res) => {
     
     if (!live) {
       try {
-           const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
-           const recent = await getMetaApiHistoricalOHLC("1m", 1);
-           if (recent && recent.length > 0) {
-               const c = recent[recent.length - 1];
+           const { getMetaApiHistoricalOHLC, getLivePrice } = await import("../lib/metaApiFeed.js");
+           const quickLive = await getLivePrice().catch(() => null);
+           if (quickLive && typeof quickLive.bid === 'number' && typeof quickLive.ask === 'number') {
+               const mid = Number(((quickLive.bid + quickLive.ask) / 2).toFixed(2));
                live = {
-                 price: c.close,
-                 bid: c.close,
-                 ask: c.close,
-                 spread: (c as any).spread || 20,
+                 price: mid,
+                 bid: quickLive.bid,
+                 ask: quickLive.ask,
+                 spread: quickLive.spread || 0.50,
                  change: 0,
                  changePercent: 0,
-                 high24h: c.high,
-                 low24h: c.low,
-                 timestamp: new Date(c.time).toISOString(),
+                 high24h: mid,
+                 low24h: mid,
+                 timestamp: new Date().toISOString(),
                  direction: "unchanged",
                  ms: Date.now(),
                  source: "metaapi"
                };
            } else {
-               res.status(503).json({ error: "Market data unavailable" });
-               return;
+               const recent = await getMetaApiHistoricalOHLC("1m", 1);
+               if (recent && recent.length > 0) {
+                   const c = recent[recent.length - 1];
+                   live = {
+                     price: c.close,
+                     bid: Number((c.close - 0.25).toFixed(2)),
+                     ask: Number((c.close + 0.25).toFixed(2)),
+                     spread: 0.50,
+                     change: 0,
+                     changePercent: 0,
+                     high24h: c.high,
+                     low24h: c.low,
+                     timestamp: new Date(c.time > 1000000000000 ? c.time : c.time * 1000).toISOString(),
+                     direction: "unchanged",
+                     ms: Date.now(),
+                     source: "metaapi"
+                   };
+               } else {
+                   res.status(503).json({ error: "Market data unavailable" });
+                   return;
+               }
            }
       } catch (e) {
           res.status(503).json({ error: "Market data unavailable" });
@@ -105,27 +124,46 @@ router.get("/price", async (req, res) => {
     
     if (!live) {
       try {
-           const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
-           const recent = await getMetaApiHistoricalOHLC("1m", 1);
-           if (recent && recent.length > 0) {
-               const c = recent[recent.length - 1];
+           const { getMetaApiHistoricalOHLC, getLivePrice } = await import("../lib/metaApiFeed.js");
+           const quickLive = await getLivePrice().catch(() => null);
+           if (quickLive && typeof quickLive.bid === 'number' && typeof quickLive.ask === 'number') {
+               const mid = Number(((quickLive.bid + quickLive.ask) / 2).toFixed(2));
                live = {
-                 price: c.close,
-                 bid: c.close,
-                 ask: c.close,
-                 spread: (c as any).spread || 20,
+                 price: mid,
+                 bid: quickLive.bid,
+                 ask: quickLive.ask,
+                 spread: quickLive.spread || 0.50,
                  change: 0,
                  changePercent: 0,
-                 high24h: c.high,
-                 low24h: c.low,
-                 timestamp: new Date(c.time).toISOString(),
+                 high24h: mid,
+                 low24h: mid,
+                 timestamp: new Date().toISOString(),
                  direction: "unchanged",
                  ms: Date.now(),
                  source: "metaapi"
                };
            } else {
-               res.status(503).json({ error: "Market data unavailable" });
-               return;
+               const recent = await getMetaApiHistoricalOHLC("1m", 1);
+               if (recent && recent.length > 0) {
+                   const c = recent[recent.length - 1];
+                   live = {
+                     price: c.close,
+                     bid: Number((c.close - 0.25).toFixed(2)),
+                     ask: Number((c.close + 0.25).toFixed(2)),
+                     spread: 0.50,
+                     change: 0,
+                     changePercent: 0,
+                     high24h: c.high,
+                     low24h: c.low,
+                     timestamp: new Date(c.time > 1000000000000 ? c.time : c.time * 1000).toISOString(),
+                     direction: "unchanged",
+                     ms: Date.now(),
+                     source: "metaapi"
+                   };
+               } else {
+                   res.status(503).json({ error: "Market data unavailable" });
+                   return;
+               }
            }
       } catch (e) {
           res.status(503).json({ error: "Market data unavailable" });
@@ -167,16 +205,21 @@ router.get("/signal", async (req, res) => {
     if (live) {
         price = live.price;
     } else {
-        // Fallback to historical candle close if live tick hasn't arrived
+        // Fallback to quick live price or historical candle close if live tick hasn't arrived
         try {
-           const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
-           const recent = await getMetaApiHistoricalOHLC("1m", 1);
-           if (recent && recent.length > 0) {
-               price = recent[recent.length - 1].close;
-               req.log.info({ price }, "Using recent 1m candle close for signal since live price is unavailable");
+           const { getMetaApiHistoricalOHLC, getLivePrice } = await import("../lib/metaApiFeed.js");
+           const quickLive = await getLivePrice().catch(() => null);
+           if (quickLive && typeof quickLive.bid === 'number' && typeof quickLive.ask === 'number') {
+               price = Number(((quickLive.bid + quickLive.ask) / 2).toFixed(2));
            } else {
-               res.status(503).json({ error: "Market data unavailable" });
-               return;
+               const recent = await getMetaApiHistoricalOHLC("1m", 1);
+               if (recent && recent.length > 0) {
+                   price = recent[recent.length - 1].close;
+                   req.log.info({ price }, "Using recent 1m candle close for signal since live price is unavailable");
+               } else {
+                   res.status(503).json({ error: "Market data unavailable" });
+                   return;
+               }
            }
         } catch (histErr) {
            res.status(503).json({ error: "Market data unavailable" });

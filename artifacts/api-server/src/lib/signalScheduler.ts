@@ -82,30 +82,54 @@ async function runScheduledSignal(): Promise<void> {
     let live  = getLatestPrice();
     if (!live) {
       try {
-        const { getMetaApiHistoricalOHLC } = await import("./metaApiFeed.js");
-        const recent = await getMetaApiHistoricalOHLC("1m", 1);
-        if (recent && recent.length > 0) {
-            const c = recent[recent.length - 1];
+        const { getMetaApiHistoricalOHLC, getLivePrice } = await import("./metaApiFeed.js");
+        
+        // 1. First check if streaming terminal already has a live price
+        const quickLive = await getLivePrice().catch(() => null);
+        if (quickLive && typeof quickLive.bid === 'number' && typeof quickLive.ask === 'number') {
+            const mid = Number(((quickLive.bid + quickLive.ask) / 2).toFixed(2));
             live = {
-                price: c.close,
-                bid: c.close,
-                ask: c.close,
-                spread: 20,
+                price: mid,
+                bid: quickLive.bid,
+                ask: quickLive.ask,
+                spread: quickLive.spread || 0.50,
                 change: 0,
                 changePercent: 0,
-                high24h: c.high,
-                low24h: c.low,
+                high24h: mid,
+                low24h: mid,
                 timestamp: new Date().toISOString(),
                 direction: "unchanged",
                 ms: Date.now(),
                 source: "metaapi"
             };
-            // Seed the emitter so it's not null next time
             const { setLatestPrice } = await import("./priceEvents.js");
             setLatestPrice(live);
+        } else {
+            // 2. Fallback to 1m candle
+            const recent = await getMetaApiHistoricalOHLC("1m", 1);
+            if (recent && recent.length > 0) {
+                const c = recent[recent.length - 1];
+                live = {
+                    price: c.close,
+                    bid: Number((c.close - 0.25).toFixed(2)),
+                    ask: Number((c.close + 0.25).toFixed(2)),
+                    spread: 0.50,
+                    change: 0,
+                    changePercent: 0,
+                    high24h: c.high,
+                    low24h: c.low,
+                    timestamp: new Date().toISOString(),
+                    direction: "unchanged",
+                    ms: Date.now(),
+                    source: "metaapi"
+                };
+                // Seed the emitter so it's not null next time
+                const { setLatestPrice } = await import("./priceEvents.js");
+                setLatestPrice(live);
+            }
         }
-      } catch (e) {
-        logger.error({ err: e }, "Failed to fallback fetch price");
+      } catch (e: any) {
+        logger.warn({ err: e?.message || e }, "Fallback price fetch pending (feed initializing or market closed)");
       }
     }
     
