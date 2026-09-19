@@ -67,6 +67,7 @@ COPY --from=prod-deps /app/lib ./lib
 # Copy compiled backend bundle and static frontend assets from builder stage
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /app/artifacts/gold-swing-ai/dist ./artifacts/gold-swing-ai/dist
+COPY --from=builder /app/dist ./dist
 
 # Copy optional Firebase applet configuration if present
 COPY firebase-applet-config.json* ./
