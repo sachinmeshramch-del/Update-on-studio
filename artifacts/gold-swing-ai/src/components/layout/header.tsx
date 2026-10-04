@@ -10,6 +10,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { SettingsDialog } from "./settings-dialog";
 import { QuickAutoTrade } from "@/components/trading/quick-auto-trade";
+import { RefreshIntervalControl } from "@/components/trading/refresh-interval-control";
 import { useToast } from "@/hooks/use-toast";
 
 function Heartbeat({ lastBeat, connected }: { lastBeat?: number, connected: boolean }) {
@@ -382,20 +383,7 @@ export function Header() {
           <div className="flex items-center gap-2 shrink-0">
             <QuickAutoTrade variant="header" />
 
-            <button
-              onClick={() => {
-                queryClient.invalidateQueries();
-                toast({
-                  title: "Data Refreshed",
-                  description: "Market data and signals have been updated.",
-                });
-              }}
-              title="Refresh Data"
-              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600 dark:hover:text-amber-400 transition-all shrink-0"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
+            <RefreshIntervalControl variant="header" />
             
             <button
               onClick={() => logout()}

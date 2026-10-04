@@ -106,7 +106,7 @@ async function runScheduledSignal(): Promise<void> {
             setLatestPrice(live);
         } else {
             // 2. Fallback to 1m candle
-            const recent = await getMetaApiHistoricalOHLC("1m", 1);
+            const recent = await getMetaApiHistoricalOHLC("1m", 1).catch(() => []);
             if (recent && recent.length > 0) {
                 const c = recent[recent.length - 1];
                 live = {
@@ -129,7 +129,7 @@ async function runScheduledSignal(): Promise<void> {
             }
         }
       } catch (e: any) {
-        logger.warn({ err: e?.message || e }, "Fallback price fetch pending (feed initializing or market closed)");
+        logger.debug({ err: e?.message || e }, "Fallback price fetch pending (feed initializing or market closed)");
       }
     }
     

@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useGetHistory, useDeleteSignal, useClearHistory } from "@workspace/api-client-react";
 import { usePriceStream } from "@/hooks/usePriceStream";
+import { useRefreshInterval } from "@/hooks/useRefreshInterval";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -757,8 +758,14 @@ function TodayTradesModal({
 // ── Main History Table Component ──────────────────────────────────────────────
 
 export function HistoryTable() {
+  const { refreshInterval } = useRefreshInterval();
   const { data, isLoading, isError, refetch } = useGetHistory({
-    query: { refetchInterval: 10000 } as any,
+    query: {
+      refetchInterval: refreshInterval > 0 ? Math.max(refreshInterval, 5000) : false,
+      refetchIntervalInBackground: true,
+      refetchOnWindowFocus: true,
+      staleTime: refreshInterval > 0 ? Math.min(3000, Math.floor(refreshInterval * 0.7)) : 0,
+    } as any,
   });
   const { data: priceData } = usePriceStream();
   const currentPrice = priceData?.price ?? 0;

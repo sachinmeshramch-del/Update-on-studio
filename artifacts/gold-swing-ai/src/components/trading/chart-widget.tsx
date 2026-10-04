@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
 import { LiveTickChart } from "./live-tick-chart";
 import { useGetSignal } from "@workspace/api-client-react";
+import { useRefreshInterval } from "@/hooks/useRefreshInterval";
 import {
   X,
   Maximize2,
@@ -28,6 +29,7 @@ const TIMEFRAMES = [
 ];
 
 export function ChartWidget() {
+  const cardRef = useRef<HTMLDivElement>(null);
   // Default to OHLC for intraday trading
   const [tab, setTab]                     = useState<Tab>("ohlc");
   const [interval, setInterval]           = useState("15");
@@ -43,9 +45,15 @@ export function ChartWidget() {
   // On mobile screens (< 768px), default to hiding the drawing toolbar to give candles maximum width
   const [showDrawingTools, setShowDrawingTools] = useState(false);
 
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  const { data: signalData } = useGetSignal({ query: { refetchInterval: 30_000 } as any });
+  const { refreshInterval } = useRefreshInterval();
+  const { data: signalData } = useGetSignal({
+    query: {
+      refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+      refetchIntervalInBackground: true,
+      refetchOnWindowFocus: true,
+      staleTime: refreshInterval > 0 ? Math.min(3000, Math.floor(refreshInterval * 0.7)) : 0,
+    } as any
+  });
   const candlePattern = (signalData as any)?.candlePattern as string | null | undefined;
   const candleScore   = (signalData as any)?.candleScore   as number | undefined;
 

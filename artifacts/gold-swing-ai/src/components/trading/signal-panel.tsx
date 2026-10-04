@@ -8,10 +8,11 @@ import { format } from "date-fns";
 import {
   AlertCircle, Target, ShieldX, ArrowRightCircle,
   TrendingUp, TrendingDown, Minus, Zap,
-  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX, ShieldAlert,
+  Globe, FlameKindling, Sparkles, Activity, Timer, MoonStar, RotateCcw, Repeat, RefreshCw, Volume2, VolumeX, ShieldAlert, Clock,
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
 import { QuickAutoTrade } from "./quick-auto-trade";
+import { useRefreshInterval } from "@/hooks/useRefreshInterval";
 import { motion } from "framer-motion";
 
 // ── Session badge ──────────────────────────────────────────────────────────────
@@ -128,12 +129,13 @@ function playSignalBeep() {
 }
 
 export function SignalPanel() {
+  const { refreshInterval, countdown, isRefreshing, triggerManualRefresh, currentOption } = useRefreshInterval();
   const { data: signalDataRaw, isLoading, isError, refetch, isFetching } = useGetSignal({
     query: {
-      refetchInterval: 60000,
+      refetchInterval: refreshInterval > 0 ? refreshInterval : false,
       refetchIntervalInBackground: true,
       refetchOnWindowFocus: true,
-      staleTime: 55000,
+      staleTime: refreshInterval > 0 ? Math.min(3000, Math.floor(refreshInterval * 0.7)) : 0,
     } as any
   });
   const signalData = signalDataRaw as any;
@@ -269,13 +271,22 @@ export function SignalPanel() {
               >
                 {soundEnabled ? <Volume2 className="w-4 h-4 text-sky-500" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
               </button>
-              <button 
-                disabled={isFetching}
-                className="ml-auto md:ml-2 p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
-                title="Refresh Signal"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${isFetching ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="ml-auto flex items-center gap-1.5">
+                {refreshInterval > 0 && countdown > 0 && (
+                  <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline-flex items-center gap-1">
+                    <Clock className="w-2.5 h-2.5 text-amber-500" />
+                    {countdown}s
+                  </span>
+                )}
+                <button 
+                  onClick={() => triggerManualRefresh(true)}
+                  disabled={isFetching || isRefreshing}
+                  className="p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
+                  title={refreshInterval > 0 ? `Auto-refresh in ${countdown}s (Click for instant update)` : "Refresh Signal"}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${isFetching || isRefreshing ? 'animate-spin text-amber-500' : ''}`} />
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <motion.div

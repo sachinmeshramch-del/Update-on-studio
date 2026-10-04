@@ -1,5 +1,5 @@
 import { db } from './index';
-import { Signal, InsertSignal, PushSubscription } from './schema/index';
+import { Signal, InsertSignal, PushSubscription, HermesHypothesis, HermesParameters } from './schema/index';
 import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, deleteDoc, orderBy, limit, writeBatch } from 'firebase/firestore';
 
 export async function insertPushSubscription(endpoint: string, p256dh: string, auth: string): Promise<void> {
@@ -118,6 +118,18 @@ let cachedSettings: SystemSettings | null = null;
 let lastSettingsFetch = 0;
 const SETTINGS_CACHE_TTL = 15_000; // 15 seconds fast memory cache
 
+export const DEFAULT_HERMES_PARAMETERS: HermesParameters = {
+  minConfidenceNormal: 50,
+  minConfidenceStrong: 65,
+  minConfidenceReversal: 60,
+  minConfidenceRange: 55,
+  spikeAtrMultiplier: 2.5,
+  rsiOversoldThreshold: 30,
+  rsiOverboughtThreshold: 70,
+  minAtrFilter: 1.2,
+  asianSessionMinConfidence: 55,
+};
+
 export async function getSystemSettings(forceRefresh = false): Promise<SystemSettings> {
   const now = Date.now();
   if (!forceRefresh && cachedSettings && (now - lastSettingsFetch < SETTINGS_CACHE_TTL)) {
@@ -136,14 +148,32 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       autoTradingRealEnabled: false,
       autoTradingEnabled: false,
       metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD',
-      dashboardPasscode: 'goldswing2024'
+      dashboardPasscode: 'goldswing2024',
+      hermesEnabled: true,
+      hermesReflectionCadence: 5,
+      hermesMaxDrawdownLimit: 5.0,
+      hermesStrategyVersion: 'v1.0.0',
+      hermesParameters: { ...DEFAULT_HERMES_PARAMETERS },
     };
     cachedSettings = defaultSettings;
     lastSettingsFetch = now;
     return defaultSettings;
   }
   const d = snap.docs[0];
-  const settings = { id: d.id, dashboardPasscode: 'goldswing2024', ...d.data() } as SystemSettings;
+  const raw = d.data();
+  const settings = {
+    id: d.id,
+    dashboardPasscode: 'goldswing2024',
+    hermesEnabled: raw.hermesEnabled ?? true,
+    hermesReflectionCadence: raw.hermesReflectionCadence ?? 5,
+    hermesMaxDrawdownLimit: raw.hermesMaxDrawdownLimit ?? 5.0,
+    hermesStrategyVersion: raw.hermesStrategyVersion ?? 'v1.0.0',
+    hermesParameters: {
+      ...DEFAULT_HERMES_PARAMETERS,
+      ...(raw.hermesParameters || {})
+    },
+    ...raw
+  } as SystemSettings;
   cachedSettings = settings;
   lastSettingsFetch = now;
   return settings;
@@ -164,8 +194,39 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
 }
 
 export async function getSignalById(id: string): Promise<Signal | null> {
-  
   const snap = await getDoc(doc(db, 'signals', id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as Signal;
+}
+
+export async function insertHermesHypothesis(data: Omit<HermesHypothesis, 'id'>): Promise<string> {
+  const docRef = await addDoc(collection(db, 'hermes_hypotheses'), {
+    ...data,
+    createdAt: new Date(),
+  });
+  return docRef.id;
+}
+
+export async function getHermesHypotheses(limitCount = 20): Promise<HermesHypothesis[]> {
+  try {
+    const q = query(collection(db, 'hermes_hypotheses'), orderBy('createdAt', 'desc'), limit(limitCount));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+    } as HermesHypothesis));
+  } catch (err) {
+    // If composite index is pending, fallback to un-ordered query
+    const q = query(collection(db, 'hermes_hypotheses'), limit(limitCount));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+    } as HermesHypothesis)).sort((a, b) => (b.cycle || 0) - (a.cycle || 0));
+  }
+}
+
+export async function getLatestHermesHypothesis(): Promise<HermesHypothesis | null> {
+  const list = await getHermesHypotheses(1);
+  return list.length > 0 ? list[0] : null;
 }

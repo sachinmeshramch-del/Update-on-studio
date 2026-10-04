@@ -1,10 +1,17 @@
 import { useGetSignal } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRefreshInterval } from "@/hooks/useRefreshInterval";
 
 export function IndicatorsRow() {
+  const { refreshInterval } = useRefreshInterval();
   const { data: signalData, isLoading } = useGetSignal({
-    query: { refetchInterval: 60000 } as any
+    query: {
+      refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+      refetchIntervalInBackground: true,
+      refetchOnWindowFocus: true,
+      staleTime: refreshInterval > 0 ? Math.min(3000, Math.floor(refreshInterval * 0.7)) : 0,
+    } as any
   });
 
   if (isLoading) {

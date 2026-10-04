@@ -10,11 +10,25 @@ import LoginScreen from "@/pages/login";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/firebase/auth-context";
 
+import { RefreshIntervalProvider, getStoredRefreshInterval } from "@/hooks/useRefreshInterval";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: true,
+      refetchIntervalInBackground: true,
+      refetchInterval: (query) => {
+        const key = query.queryKey?.[0];
+        if (
+          typeof key === "string" &&
+          (key.includes("/api/signal") || key.includes("/api/history") || key.includes("/api/connections"))
+        ) {
+          const interval = getStoredRefreshInterval();
+          return interval > 0 ? interval : false;
+        }
+        return false;
+      },
     },
   },
 });
@@ -53,16 +67,18 @@ function App() {
   return (
     <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="gold-swing-theme">
-        <AuthProvider>
-          <TooltipProvider>
-            <WouterRouter>
-              <Router />
-            </WouterRouter>
-            <Toaster />
-          </TooltipProvider>
-        </AuthProvider>
-      </ThemeProvider>
+      <RefreshIntervalProvider>
+        <ThemeProvider defaultTheme="dark" storageKey="gold-swing-theme">
+          <AuthProvider>
+            <TooltipProvider>
+              <WouterRouter>
+                <Router />
+              </WouterRouter>
+              <Toaster />
+            </TooltipProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </RefreshIntervalProvider>
     </QueryClientProvider>
     </ErrorBoundary>
   );

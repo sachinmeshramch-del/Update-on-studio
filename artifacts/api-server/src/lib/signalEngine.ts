@@ -22,6 +22,7 @@ import { getAnalyticsSummary, isSmartMode } from "./performanceAnalytics.js";
 import { logger } from "./logger.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { getLatestSignal, getRecentSignals, getRunningTrades, getSystemSettings } from "@workspace/db";
+import { getActiveHermesParameters } from "./hermesEngine.js";
 
 
 export interface SessionInfo {
@@ -536,8 +537,16 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
   
   
 
+  const hermesParams = await getActiveHermesParameters();
+  const effectiveMinConfNormal = hermesParams.minConfidenceNormal;
+  const effectiveMinConfStrong = hermesParams.minConfidenceStrong;
+  const effectiveMinConfReversal = hermesParams.minConfidenceReversal;
+  const effectiveMinConfRange = hermesParams.minConfidenceRange;
+  const effectiveAsianMinConf = hermesParams.asianSessionMinConfidence;
+  const effectiveSpikeAtrMult = hermesParams.spikeAtrMultiplier;
+
   const analytics = await getAnalyticsSummary();
-  const minConf = smartMode && analytics.sufficientData ? MIN_CONF_NORMAL + 5 : MIN_CONF_NORMAL;
+  const minConf = smartMode && analytics.sufficientData ? effectiveMinConfNormal + 5 : effectiveMinConfNormal;
 
   try {
     // ── Fetch 5m (primary), 1m (entry refinement), and 15m (macro structure) ──
@@ -710,7 +719,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       "Candle index check"
     );
 
-    const spikeThreshold = atr * SPIKE_ATR_MULT;
+    const spikeThreshold = atr * effectiveSpikeAtrMult;
     const candidates = [
       candlesPrimary[candlesPrimary.length - 1], // forming candle — spike in progress
       candlesPrimary[candlesPrimary.length - 2], // last completed candle
@@ -1013,9 +1022,13 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       shortNorm = Math.max(0, shortNorm - 15);
     }
 
-    // In ranging/chop conditions (ADX < 22 or NEUTRAL/RANGING structure), require higher base confidence (70% vs 53%)
-    const baseMinConf = isMarketConsolidating ? MIN_CONF_RANGE : MIN_CONF_NORMAL;
-    const dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
+    // In ranging/chop conditions (ADX < 22 or NEUTRAL/RANGING structure), require higher base confidence
+    const sessionMinConf = session.asian ? effectiveAsianMinConf : effectiveMinConfNormal;
+    const baseMinConf = isMarketConsolidating ? effectiveMinConfRange : sessionMinConf;
+    let dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
+    if (signalType === "REVERSAL") {
+      dynamicMinConf = Math.max(dynamicMinConf, effectiveMinConfReversal);
+    }
 
     // HTF Alignment Guard: Never short if the 15m structural trend is BULLISH
     if (shortNorm >= dynamicMinConf && (msMacro.structure === "UPTREND" || trendMacro === "BULLISH")) {
@@ -1075,8 +1088,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       : Math.max(longNorm, shortNorm);
 
     let signalStrength: "STRONG" | "NORMAL" | null =
-      direction !== "HOLD" && confidence >= MIN_CONF_STRONG ? "STRONG" :
-      direction !== "HOLD" && confidence >= MIN_CONF_NORMAL ? "NORMAL" :
+      direction !== "HOLD" && confidence >= effectiveMinConfStrong ? "STRONG" :
+      direction !== "HOLD" && confidence >= effectiveMinConfNormal ? "NORMAL" :
       null;
 
     // ── Cooldown Guard ────────────────────────────────────────────────────

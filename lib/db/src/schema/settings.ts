@@ -12,4 +12,19 @@ export interface SystemSettings {
   dailyStopLossPercent?: number;
   dashboardPasscode?: string;
   disableCooldowns?: boolean;
+  hermesEnabled?: boolean;
+  hermesReflectionCadence?: number; // default: 5
+  hermesMaxDrawdownLimit?: number; // default: 5.0 (%)
+  hermesStrategyVersion?: string; // e.g. "v1.0.0"
+  hermesParameters?: {
+    minConfidenceNormal: number;
+    minConfidenceStrong: number;
+    minConfidenceReversal: number;
+    minConfidenceRange: number;
+    spikeAtrMultiplier: number;
+    rsiOversoldThreshold: number;
+    rsiOverboughtThreshold: number;
+    minAtrFilter: number;
+    asianSessionMinConfidence: number;
+  };
 }
