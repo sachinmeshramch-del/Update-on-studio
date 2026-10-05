@@ -1026,9 +1026,6 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const sessionMinConf = session.asian ? effectiveAsianMinConf : effectiveMinConfNormal;
     const baseMinConf = isMarketConsolidating ? effectiveMinConfRange : sessionMinConf;
     let dynamicMinConf = smartMode && analytics.sufficientData ? baseMinConf + 5 : baseMinConf;
-    if (signalType === "REVERSAL") {
-      dynamicMinConf = Math.max(dynamicMinConf, effectiveMinConfReversal);
-    }
 
     // HTF Alignment Guard: Never short if the 15m structural trend is BULLISH
     if (shortNorm >= dynamicMinConf && (msMacro.structure === "UPTREND" || trendMacro === "BULLISH")) {
@@ -1490,7 +1487,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
             suppressionReason = `Counter-Trend trade blocked: ADX (${currentAdx.toFixed(1)}) indicates strong trending market`;
           } else {
             const hasSweepConfirmation = sweepRej.detected || sweepScore > 0 || isFalseBreakout;
-            const minCounterConf = 78;
+            const minCounterConf = Math.max(78, effectiveMinConfReversal);
 
             if (confidence < minCounterConf || !hasSweepConfirmation) {
               logger.warn(

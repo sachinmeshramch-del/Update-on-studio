@@ -928,23 +928,6 @@ export function generateFallbackOHLCCandles(tf: string, count: number): OHLCCand
         last.close = basePrice;
         if (basePrice > last.high) last.high = Number((basePrice + 0.35).toFixed(2));
         if (basePrice < last.low) last.low = Number((basePrice - 0.35).toFixed(2));
-
-        if (!existing) {
-            setLatestPrice({
-                price: basePrice,
-                bid: Number((basePrice - 0.25).toFixed(2)),
-                ask: Number((basePrice + 0.25).toFixed(2)),
-                spread: 0.50,
-                change: 0,
-                changePercent: 0,
-                high24h: last.high,
-                low24h: last.low,
-                timestamp: new Date().toISOString(),
-                direction: "unchanged",
-                ms: Date.now(),
-                source: "synthetic"
-            });
-        }
     }
 
     return candles;
