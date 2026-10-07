@@ -348,7 +348,7 @@ export async function startMetaApiFeed() {
         logger.info("MetaApi connection already in progress, skipping concurrent attempt.");
         return;
     }
-    if (metaApiStatus === "connected" && connection && Date.now() - lastPriceReceivedAt < 30000) {
+    if (metaApiStatus === "connected" && connection) {
         return;
     }
 
@@ -417,9 +417,6 @@ export async function startMetaApiFeed() {
                         }
                         throw deployErr;
                     }
-                } else {
-                    // Explicitly deploy anyway if there might be a sync issue
-                    try { await account.deploy(); await account.waitDeployed(120); } catch (e: any) { console.error("[MetaApi] Forced deploy failed:", e?.message || e); }
                 }
                 
                 try {
@@ -435,7 +432,7 @@ export async function startMetaApiFeed() {
                 try {
                     const isSync = typeof streamingConn.isSynchronized === 'function' ? streamingConn.isSynchronized() : false;
                     if (!isSync) {
-                        await streamingConn.waitSynchronized({ timeoutInSeconds: 15 });
+                        await streamingConn.waitSynchronized({ timeoutInSeconds: 25 });
                     }
                 } catch(syncErr: any) {
                     if (!syncErr?.message?.includes('already running')) {
@@ -599,15 +596,18 @@ export async function startMetaApiFeed() {
                     } catch (err: any) {
                         lastSubError = err;
                         const msg = err?.message || String(err);
-                        if (msg.includes('timed out') || msg.includes('connected to broker')) {
-                            logger.warn(`Broker subscription timed out for ${sym}, aborting standard symbol checks.`);
+                        if (msg.includes('timed out') || msg.includes('connected to broker') || msg.includes('Failed to execute a callable') || msg.includes('InternalError')) {
+                            logger.warn(`Broker subscription paused for ${sym} (${msg.split('\n')[0]}); terminal synchronizing or not ready. Aborting remaining candidate checks.`);
                             break;
                         }
                         continue;
                     }
                 }
 
-                if (!subscribed) {
+                const lastSubMsg = lastSubError?.message || String(lastSubError || "");
+                const isCallableFailure = lastSubMsg.includes('Failed to execute a callable') || lastSubMsg.includes('InternalError') || lastSubMsg.includes('connected to broker');
+
+                if (!subscribed && !isCallableFailure) {
                     logger.info(`Standard Gold symbols not found. Attempting dynamic discovery via RPC...`);
                     try {
                         const rpc = account.getRPCConnection();
@@ -655,7 +655,7 @@ export async function startMetaApiFeed() {
                                 } catch (err: any) {
                                     lastSubError = err;
                                     const msg = err?.message || String(err);
-                                    if (msg.includes('timed out') || msg.includes('connected to broker')) {
+                                    if (msg.includes('timed out') || msg.includes('connected to broker') || msg.includes('Failed to execute a callable') || msg.includes('InternalError')) {
                                         logger.warn(`Broker subscription timed out for ${sym}, aborting dynamic symbol checks.`);
                                         break;
                                     }
@@ -668,18 +668,32 @@ export async function startMetaApiFeed() {
                     }
                 }
 
-                if (!subscribed) {
-                    throw new Error(`Failed to subscribe to Gold symbols on account ${accountId}: ${lastSubError?.message || lastSubError || 'No matching Gold symbol available on broker'}`);
-                }
-
                 connection = streamingConn;
                 activeAccountObj = account;
                 activeAccountId = accountId;
                 connectedAccount = account;
                 connectedAccountId = accountId;
                 metaApiStatus = "connected";
-                
-                logger.info({ accountId, symbol: SYMBOL }, "Successfully established MetaApi streaming connection");
+
+                if (!subscribed) {
+                    logger.warn(
+                        { accountId, reason: lastSubError?.message || lastSubError || 'Symbol subscription pending' },
+                        "MetaApi streaming connected, but initial symbol subscription is pending (terminal synchronizing). Scheduling background retry..."
+                    );
+                    setTimeout(async () => {
+                        if (connection && metaApiStatus === "connected" && !subscribed) {
+                            try {
+                                await connection.subscribeToMarketData(SYMBOL);
+                                subscribed = true;
+                                logger.info(`Delayed background subscription succeeded for ${SYMBOL}`);
+                            } catch (e: any) {
+                                logger.debug({ err: e?.message }, "Delayed background subscription retry notice");
+                            }
+                        }
+                    }, 15000);
+                } else {
+                    logger.info({ accountId, symbol: SYMBOL }, "Successfully established MetaApi streaming connection");
+                }
                 
                 // Pre-populate in-memory positions from terminalState
                 try {
@@ -788,6 +802,9 @@ export async function startMetaApiFeed() {
         if (msg.includes('Cannot subscribe to market data for symbol') || msg.includes('symbol does not exist') || msg.includes('No matching Gold symbol')) {
             logger.warn("MetaApi Feed Notice: Gold symbol not active or not subscribed on the configured broker account. Live price feeds continue via primary market sources.");
             reconnectDelay = 60000;
+        } else if (msg.includes('InternalError') || msg.includes('Failed to execute a callable')) {
+            logger.warn("MetaApi broker terminal is initializing or busy; waiting for synchronization before reconnect.");
+            reconnectDelay = 45000;
         } else if (msg.includes('not connected to broker yet')) {
             logger.warn("MetaApi account is not connected to broker yet. Waiting for broker connection...");
             reconnectDelay = 20000;
@@ -820,7 +837,7 @@ function scheduleReconnect() {
         logger.info("Executing scheduled MetaApi reconnect...");
         startMetaApiFeed();
     }, reconnectDelay);
-    reconnectDelay = Math.min(reconnectDelay * 1.5, 30000); 
+    reconnectDelay = Math.min(reconnectDelay * 1.5, 120000); 
 }
 
 /**
@@ -858,15 +875,21 @@ function startWatchdog() {
         const now = Date.now();
         const secondsSinceLastTick = Math.floor((now - lastPriceReceivedAt) / 1000);
 
-        if (metaApiStatus === "connected" && secondsSinceLastTick > 30 && !isConnecting) {
-            logger.warn({ secondsSinceLastTick }, "[Watchdog] MetaApi tick stream stalled. Initiating auto-healing reconnection...");
+        if (metaApiStatus === "connected" && secondsSinceLastTick > 300 && !isConnecting) {
+            logger.warn({ secondsSinceLastTick }, "[Watchdog] MetaApi tick stream inactive for >300s. Verifying connection state...");
+            try {
+                if (connection && typeof connection.isSynchronized === 'function' && connection.isSynchronized()) {
+                    await connection.subscribeToMarketData(SYMBOL).catch(() => {});
+                    return;
+                }
+            } catch(e) {}
             metaApiStatus = "disconnected";
             await startMetaApiFeed();
         } else if (metaApiStatus !== "connected" && !isConnecting) {
             logger.info("[Watchdog] MetaApi disconnected. Triggering reconnect...");
             await startMetaApiFeed();
         }
-    }, 15000);
+    }, 30000);
 }
 
 // ── Smart historical candle cache & rate-limit protector ──────────────────

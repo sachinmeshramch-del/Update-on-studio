@@ -45,16 +45,15 @@ export function setLatestPrice(price: LivePrice) {
     );
   }
 
-  // ── Simultaneous sources check ─────────────────────────────────────────────
-  // Flag if a different source wrote within the last 500ms (price conflict)
+  // ── Source transition / simultaneous check ───────────────────────────────
   const otherSources = Object.entries(_lastSourceTime).filter(
     ([src, ts]) => src !== price.source && now - ts < SIMULTANEOUS_WINDOW_MS
   );
   if (otherSources.length > 0) {
     const conflicting = otherSources.map(([src]) => src).join(", ");
-    logger.warn(
-      { activeSource: price.source, conflictingSources: conflicting, windowMs: SIMULTANEOUS_WINDOW_MS },
-      `ERROR: Multiple sources active simultaneously! Conflict: ${conflicting} vs ${price.source} — this causes price jumps`
+    logger.info(
+      { activeSource: price.source, previousSource: conflicting, windowMs: SIMULTANEOUS_WINDOW_MS },
+      `[PriceFeed] Active price source transition: ${conflicting} -> ${price.source}`
     );
   }
   _lastSourceTime[price.source] = now;
