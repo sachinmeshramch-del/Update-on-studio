@@ -478,8 +478,12 @@ export function SignalPanel() {
         )}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-black/30 border border-border rounded-xl p-3 flex flex-col items-center gap-1">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-              <ArrowRightCircle className="w-3.5 h-3.5" /> Entry
+            <div 
+              className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1 cursor-help"
+              title={signal === "LONG" ? "Buy orders enter at Ask price" : signal === "SHORT" ? "Sell orders enter at Bid price" : "Market entry price"}
+            >
+              <ArrowRightCircle className="w-3.5 h-3.5" /> 
+              <span>Entry {signal === "LONG" ? "(Ask)" : signal === "SHORT" ? "(Bid)" : ""}</span>
             </div>
             <span className="text-sm font-bold font-mono tabular-nums">{formatPrice(entryPrice)}</span>
           </div>

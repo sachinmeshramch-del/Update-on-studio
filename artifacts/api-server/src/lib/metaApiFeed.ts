@@ -745,17 +745,21 @@ export async function startMetaApiFeed() {
                         };
                         setLatestPrice(live);
                         updateLiveCandles(midPrice, lastPriceReceivedAt);
+                        logger.info({ midPrice, bid: initialPrice.bid, ask: initialPrice.ask, spread }, "Initialized live price from terminalState");
+                    } else {
                         try {
                             const candles = await account.getHistoricalCandles(SYMBOL, "1m", undefined, 1);
                             if (candles && candles.length > 0) {
                                 const c = candles[candles.length - 1];
                                 const midPrice = c.close;
+                                const spread = typeof c.spread === 'number' && c.spread > 0 ? Number((c.spread / 100).toFixed(2)) : 0.40;
+                                const halfSpread = +(spread / 2).toFixed(2);
                                 lastPriceReceivedAt = Date.now();
                                 const live = {
                                     price: midPrice,
-                                    bid: midPrice - (c.spread || 20)/100,
-                                    ask: midPrice + (c.spread || 20)/100,
-                                    spread: c.spread || 20,
+                                    bid: +(midPrice - halfSpread).toFixed(2),
+                                    ask: +(midPrice + halfSpread).toFixed(2),
+                                    spread,
                                     change: 0,
                                     changePercent: 0,
                                     high24h: c.high,

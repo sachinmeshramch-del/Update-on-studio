@@ -914,8 +914,11 @@ export function HistoryTable() {
               <PeriodDropdown value={period} onChange={setPeriod} />
 
               {currentPrice > 0 && (
-                <span className="hidden sm:inline-block text-xs font-mono font-normal text-muted-foreground">
-                  Live: <span className="text-foreground">{formatPrice(currentPrice)}</span>
+                <span 
+                  className="hidden sm:inline-block text-xs font-mono font-normal text-muted-foreground cursor-help"
+                  title={priceData ? `Live Mid Price: $${priceData.price.toFixed(2)} | Bid: $${priceData.bid.toFixed(2)} | Ask: $${priceData.ask.toFixed(2)}` : undefined}
+                >
+                  Live (Mid): <span className="text-foreground font-semibold">{formatPrice(currentPrice)}</span>
                 </span>
               )}
 

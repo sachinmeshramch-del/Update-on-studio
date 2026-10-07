@@ -58,6 +58,23 @@ export function setLatestPrice(price: LivePrice) {
   }
   _lastSourceTime[price.source] = now;
 
+  // Calculate real tick direction based on previous price
+  if (prevPrice !== null) {
+    if (price.price > prevPrice) {
+      price.direction = "up";
+    } else if (price.price < prevPrice) {
+      price.direction = "down";
+    } else if (_latestPrice?.direction) {
+      price.direction = _latestPrice.direction;
+    }
+  }
+
+  // Preserve 24h session high / low
+  if (_latestPrice) {
+    price.high24h = Math.max(price.price, _latestPrice.high24h || price.price);
+    price.low24h = Math.min(price.price, _latestPrice.low24h || price.price);
+  }
+
   _prevPrice = prevPrice;
   _latestPrice = price;
   _tickHistory.push(price);

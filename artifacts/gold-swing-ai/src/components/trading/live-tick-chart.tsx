@@ -264,12 +264,15 @@ export function LiveTickChart() {
           <div className="ml-auto flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
             <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 uppercase tracking-widest">
-              LIVE · {candleCount} candles
+              LIVE (MID) · {candleCount} candles
             </span>
-            <span className={cn(
-              "ml-2 font-mono text-[11px] font-bold",
-              isUp ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-            )}>
+            <span 
+              className={cn(
+                "ml-2 font-mono text-[11px] font-bold cursor-help",
+                isUp ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+              )}
+              title={data ? `Mid Price: $${data.price?.toFixed(2)} | Bid: $${data.bid?.toFixed(2)} | Ask: $${data.ask?.toFixed(2)} | Spread: $${data.spread?.toFixed(2)}` : undefined}
+            >
               {isUp ? "▲" : "▼"} {data.price?.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>

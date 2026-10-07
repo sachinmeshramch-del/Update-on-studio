@@ -340,12 +340,18 @@ export function Header() {
             </div>
           </div>
 
-          {/* ── Bid / Ask block ──────────────────────────────────────────── */}
-          <div className={cn("flex items-stretch gap-px rounded-xl overflow-hidden border border-border shrink-0", flashClass)}>
+          {/* ── Bid / Mid / Ask block ──────────────────────────────────────────── */}
+          <div className={cn("flex items-stretch gap-px rounded-xl overflow-hidden border border-border shrink-0 select-none", flashClass)}>
 
             {/* BID */}
-            <div className="flex flex-col items-center justify-center dark:bg-[#0a1a0f] bg-green-500/10 px-2 sm:px-4 py-1 sm:py-2 min-[400px]:min-w-[110px] min-w-[80px]">
-              <span className="text-[8px] sm:text-[9px] font-bold tracking-[0.2em] text-green-600/60 dark:text-green-400/60 uppercase mb-0.5">BID</span>
+            <div 
+              className="flex flex-col items-center justify-center dark:bg-[#0a1a0f] bg-green-500/10 px-2 sm:px-4 py-1 sm:py-2 min-[400px]:min-w-[110px] min-w-[80px] cursor-help"
+              title={data ? `BID ($${data.bid.toFixed(2)}): Price to SELL. Long trades exit here, Short trades open here.` : "BID (Sell Price)"}
+            >
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[8px] sm:text-[9px] font-bold tracking-[0.2em] text-green-600/70 dark:text-green-400/70 uppercase">BID</span>
+                <span className="text-[8px] font-mono text-green-600/50 dark:text-green-400/50 hidden min-[480px]:inline">(SELL)</span>
+              </div>
               {data ? (
                 <span className="font-mono font-bold leading-none tabular-nums text-green-600 dark:text-green-400">
                   <span className="text-lg sm:text-xl">{splitPrice(data.bid).int}.</span>
@@ -356,17 +362,31 @@ export function Header() {
               )}
             </div>
 
-            {/* Spread */}
-            <div className="flex flex-col items-center justify-center bg-card px-3 py-2">
+            {/* Spread + Live Mid Price */}
+            <div 
+              className="flex flex-col items-center justify-center bg-card px-2.5 sm:px-3 py-1 sm:py-2 min-w-[65px] cursor-help border-x border-border/50"
+              title={data ? `Live Mid Price: $${data.price.toFixed(2)} | Mid = (Bid + Ask) / 2 | Spread: $${data.spread.toFixed(2)}` : "Spread & Mid Price"}
+            >
               <span className="text-[8px] sm:text-[9px] font-bold tracking-[0.15em] text-muted-foreground/60 uppercase mb-0.5">SPREAD</span>
-              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 leading-tight">
                 {data ? data.spread.toFixed(2) : "0.35"}
               </span>
+              {data && (
+                <span className="text-[9px] font-mono text-muted-foreground/80 mt-0.5 whitespace-nowrap" title="Neutral Mid Price (Bid+Ask)/2 used for chart candles & signals">
+                  Mid <span className="font-semibold text-foreground">{splitPrice(data.price).int}.{splitPrice(data.price).dec}</span>
+                </span>
+              )}
             </div>
 
             {/* ASK */}
-            <div className="flex flex-col items-center justify-center dark:bg-[#1a0a0a] bg-red-500/10 px-2 sm:px-4 py-1 sm:py-2 min-[400px]:min-w-[110px] min-w-[80px]">
-              <span className="text-[8px] sm:text-[9px] font-bold tracking-[0.2em] text-red-600/60 dark:text-red-400/60 uppercase mb-0.5">ASK</span>
+            <div 
+              className="flex flex-col items-center justify-center dark:bg-[#1a0a0a] bg-red-500/10 px-2 sm:px-4 py-1 sm:py-2 min-[400px]:min-w-[110px] min-w-[80px] cursor-help"
+              title={data ? `ASK ($${data.ask.toFixed(2)}): Price to BUY. Long trades open here, Short trades exit here.` : "ASK (Buy Price)"}
+            >
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[8px] sm:text-[9px] font-bold tracking-[0.2em] text-red-600/70 dark:text-red-400/70 uppercase">ASK</span>
+                <span className="text-[8px] font-mono text-red-600/50 dark:text-red-400/50 hidden min-[480px]:inline">(BUY)</span>
+              </div>
               {data ? (
                 <span className="font-mono font-bold leading-none tabular-nums text-red-600 dark:text-red-400">
                   <span className="text-lg sm:text-xl">{splitPrice(data.ask).int}.</span>
