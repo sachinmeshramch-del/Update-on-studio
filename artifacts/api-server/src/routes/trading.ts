@@ -6,8 +6,8 @@ import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.j
 import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency } from "../lib/metaApiFeed.js";
-import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById } from "@workspace/db";
+import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo } from "../lib/metaApiFeed.js";
+import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById, getSystemSettings } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
 
@@ -185,13 +185,46 @@ router.get("/debug", (req, res) => {
         });
     });
 });
-router.get("/connections", (req, res) => {
+router.get("/connections", async (req, res) => {
+  let activeId = getActiveAccountId();
+  if (!activeId) {
+    const settings = await getSystemSettings().catch(() => null);
+    activeId = settings?.realAccountId || null;
+  }
+  let funds: any = null;
+  if (activeId) {
+    try {
+      const fundsInfo = await getAccountFundsInfo(activeId);
+      if (fundsInfo) {
+        const live = getLatestPrice();
+        const price = live?.price || 4110;
+        const leverage = fundsInfo.leverage || 1000;
+        // 0.01 lot of Gold (100 oz contract size) = 1 oz
+        const marginForMinLot = Number(((price * 100 * 0.01) / leverage).toFixed(2));
+        const freeMargin = Number(fundsInfo.freeMargin.toFixed(2));
+        const equity = Number(fundsInfo.equity.toFixed(2));
+        const canTrade = freeMargin >= marginForMinLot;
+        funds = {
+          equity,
+          freeMargin,
+          leverage,
+          marginForMinLot,
+          canTrade,
+          warning: !canTrade
+            ? `MT5 Free Margin ($${freeMargin}) is lower than required margin ($${marginForMinLot}) for minimum 0.01 lot.`
+            : undefined
+        };
+      }
+    } catch {}
+  }
+
   res.json({
     metaapi: getMetaApiStatus(),
     lastHeartbeat: getLastPriceTime(),
     latencyMs: getMetaApiLatency(),
     activeSource: getLatestPrice()?.source || "none",
-    activeAccountId: getActiveAccountId()
+    activeAccountId: activeId,
+    funds
   });
 });
 

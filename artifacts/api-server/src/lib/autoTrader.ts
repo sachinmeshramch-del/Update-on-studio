@@ -102,10 +102,28 @@ export async function executeTradeWithCapitalManagement(
         const actualRiskPct = (actualRiskWithMinVolume / actualEquity) * 100;
         
         if (actualRiskPct > (riskPerTrade * 2.5)) { // Tolerance buffer
+            const rejectMsg = `Account equity ($${actualEquity.toFixed(2)}) is too small for Stop Loss distance (${safeSlDistance.toFixed(1)}pt). Min lot (0.01) risks $${actualRiskWithMinVolume.toFixed(2)} (${actualRiskPct.toFixed(1)}% of equity, max allowed is ${(riskPerTrade * 2.5).toFixed(1)}%).`;
             logger.warn({
                 accountId, actualEquity, requestedRiskPct: riskPerTrade, actualRiskPct, minVolume, safeSlDistance
-            }, "[AutoTrader] TRADE REJECTED: Account too small for this Stop Loss width. Using minVolume would risk too much equity.");
-            return;
+            }, `[AutoTrader] TRADE REJECTED: ${rejectMsg}`);
+
+            sendTelegramNotification(
+                `⚠️ <b>AUTO-TRADER RISK PROTECTION BLOCKED</b>\n\n` +
+                `Account: <code>${accountType} (${accountId})</code>\n` +
+                `Direction: <b>${direction}</b> @ ${entryPrice.toFixed(2)}\n` +
+                `Stop Loss: <b>${stopLoss.toFixed(2)}</b> (${safeSlDistance.toFixed(1)} pts)\n\n` +
+                `<b>Reason:</b> ${rejectMsg}\n\n` +
+                `<i>Risk Shield prevented this trade to protect your account from losing over 500% of its equity on a single stop loss. Please deposit funds or adjust risk tolerance in Settings.</i>`
+            ).catch(console.error);
+
+            return {
+                executed: false,
+                reason: rejectMsg,
+                actualEquity,
+                actualRiskPct,
+                minVolume,
+                safeSlDistance
+            };
         }
         calculatedVolume = minVolume;
     }
@@ -134,6 +152,28 @@ export async function executeTradeWithCapitalManagement(
             const maxSafeNotional = (freeMargin * 0.85) * leverage;
             const maxSafeVolume = maxSafeNotional / (entryPrice * (symbolSpec?.contractSize || 100));
             calculatedVolume = Math.max(minVolume, Math.floor(maxSafeVolume / lotStep) * lotStep);
+        }
+
+        // Hard check: If even minVolume requires more margin than available free margin
+        const finalMarginRequired = (entryPrice * (symbolSpec?.contractSize || 100) * calculatedVolume) / leverage;
+        if (finalMarginRequired > freeMargin) {
+            const marginMsg = `MT5 Free Margin ($${freeMargin.toFixed(2)}) is less than required margin ($${finalMarginRequired.toFixed(2)}) for minimum ${calculatedVolume} lot. Broker would reject with error 10019 (TRADE_RETCODE_NO_MONEY).`;
+            logger.warn({ accountId, freeMargin, finalMarginRequired, calculatedVolume }, `[AutoTrader] TRADE REJECTED: ${marginMsg}`);
+
+            sendTelegramNotification(
+                `⚠️ <b>AUTO-TRADER MARGIN REJECTION</b>\n\n` +
+                `Account: <code>${accountType} (${accountId})</code>\n` +
+                `Direction: <b>${direction}</b> @ ${entryPrice.toFixed(2)}\n\n` +
+                `<b>Reason:</b> ${marginMsg}\n\n` +
+                `<i>Please deposit funds to your MT5 account to enable trade execution.</i>`
+            ).catch(console.error);
+
+            return {
+                executed: false,
+                reason: marginMsg,
+                freeMargin,
+                marginRequired: finalMarginRequired
+            };
         }
     }
 
@@ -169,7 +209,10 @@ export async function executeTradeWithCapitalManagement(
 
     if (dailyStats.tradingHalted) {
         logger.warn(`[AutoTrader] Trading is currently HALTED due to hitting daily limit.`);
-        return;
+        return {
+            executed: false,
+            reason: "Trading halted due to daily profit or drawdown limit."
+        };
     }
 
     // Circuit Breaker Guard is now handled entirely by the SignalEngine before execution!
@@ -197,7 +240,13 @@ export async function executeTradeWithCapitalManagement(
         );
         logger.info({ accountId, accountType, calculatedVolume, orderId: result?.orderId }, `[AutoTrader] Trade Executed successfully with risk-adjusted volume`);
         sendTelegramNotification(`🤖 *AUTO-TRADER EXECUTED*\nAccount: ${accountType}\nDirection: ${direction}\nSize: ${calculatedVolume} Lots\nEntry: ${entryPrice}\nSL: ${stopLoss}\nTP: ${takeProfit}`).catch(console.error);
-        return result;
+        return {
+            executed: true,
+            orderId: result?.orderId,
+            positionId: result?.positionId,
+            volume: calculatedVolume,
+            ...result
+        };
     } catch (e: any) {
         logger.error({ err: e.message || e, accountId, accountType }, `[AutoTrader] Execution failed.`);
         throw e;

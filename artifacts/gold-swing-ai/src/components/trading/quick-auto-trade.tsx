@@ -1,6 +1,7 @@
 import { useAutoTrade } from "@/hooks/useAutoTrade";
+import { useConnections } from "@/hooks/useConnections";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Zap, Shield, ArrowLeftRight, CheckCircle2, PauseCircle } from "lucide-react";
+import { Bot, Zap, Shield, ArrowLeftRight, CheckCircle2, PauseCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface QuickAutoTradeProps {
@@ -16,6 +17,7 @@ export function QuickAutoTrade({ variant = "panel", className }: QuickAutoTradeP
     toggleAutoTrade,
     toggleTradingMode,
   } = useAutoTrade();
+  const connections = useConnections();
 
   if (variant === "header") {
     return (
@@ -168,6 +170,29 @@ export function QuickAutoTrade({ variant = "panel", className }: QuickAutoTradeP
           />
         </div>
       </div>
+
+      {/* Live MT5 Funds & Execution Feasibility Status */}
+      {connections?.funds && (
+        <div className="mt-2.5 pt-2 border-t border-border/50 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <span>MT5 Equity: <strong className="text-foreground">${connections.funds.equity.toFixed(2)}</strong></span>
+            <span className="text-zinc-600">·</span>
+            <span>Free Margin: <strong className={cn(connections.funds.canTrade ? "text-emerald-500" : "text-amber-500")}>${connections.funds.freeMargin.toFixed(2)}</strong></span>
+          </div>
+
+          {!connections.funds.canTrade ? (
+            <div className="flex items-center gap-1 text-amber-500 font-sans text-[11px] font-medium" title={connections.funds.warning}>
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>Low Margin (Min 0.01 lot requires ~${connections.funds.marginForMinLot.toFixed(2)})</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-emerald-500 font-sans text-[11px] font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Margin Ready for 0.01 lot</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

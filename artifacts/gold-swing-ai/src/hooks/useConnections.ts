@@ -7,6 +7,14 @@ export interface ConnectionsState {
   activeSource: string;
   lastHeartbeat?: number;
   latencyMs?: number;
+  funds?: {
+    equity: number;
+    freeMargin: number;
+    leverage: number;
+    marginForMinLot: number;
+    canTrade: boolean;
+    warning?: string;
+  } | null;
 }
 
 export function useConnections() {

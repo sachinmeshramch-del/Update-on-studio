@@ -206,7 +206,8 @@ async function runScheduledSignal(): Promise<void> {
 
     // ── Auto-Trading MetaApi Order Execution (Ultra-Fast Concurrent Dispatch) ──────
     const tradePromises: Promise<any>[] = [];
-    let isRealTrade = false;
+    let isRealTradeExecuted = false;
+    let brokerPositionId: string | null = null;
     const signalDetectedAt = Date.now();
 
     try {
@@ -218,22 +219,35 @@ async function runScheduledSignal(): Promise<void> {
           logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Dispatching trade to REAL MT5 account immediately...");
           tradePromises.push(
             executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
-              .catch((realErr: any) => logger.error({ err: realErr?.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed"))
+              .catch((realErr: any) => {
+                logger.error({ err: realErr?.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed");
+                return { executed: false, error: realErr?.message || String(realErr) };
+              })
           );
         } else {
           logger.warn("[MetaApi Execution] Auto-trading (Real) is ON, but Real Account ID is not configured in settings.");
         }
       }
-
-      isRealTrade = isRealAuto;
     } catch (e: any) {
       logger.error({ err: e.message || e }, "Failed to evaluate auto-trade execution");
+    }
+
+    // Wait for broker dispatch to verify execution status (fast response from MT5)
+    if (tradePromises.length > 0) {
+      const results = await Promise.allSettled(tradePromises);
+      for (const res of results) {
+        if (res.status === "fulfilled" && res.value?.executed) {
+          isRealTradeExecuted = true;
+          brokerPositionId = res.value.positionId ? String(res.value.positionId) : (res.value.orderId ? String(res.value.orderId) : null);
+          break;
+        }
+      }
     }
 
     // Commit the signal to engine memory to reset cooldowns
     commitSignal(signal);
     
-    // Persist signal concurrently so database write latency doesn't delay broker execution
+    // Persist signal with verified real execution status
     const dbPersistPromise = insertSignal({
       signal:        signal.signal,
       confidence:    signal.confidence,
@@ -259,13 +273,14 @@ async function runScheduledSignal(): Promise<void> {
       signalType:    signal.signalType,
       candlePattern: null,
       candleScore: null,
-      isRealTrade: isRealTrade
+      isRealTrade: isRealTradeExecuted,
+      brokerPositionId: brokerPositionId
     }).catch((dbErr: any) => {
       logger.warn({ dbErr }, "Scheduler: failed to persist signal");
     });
 
-    // Await both broker orders and persistence
-    await Promise.allSettled([...tradePromises, dbPersistPromise]);
+    // Await persistence
+    await dbPersistPromise;
 
     const direction = signal.signal as "LONG" | "SHORT";
     const emoji     = direction === "LONG" ? "📈" : "📉";

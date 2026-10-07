@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { useConnections } from "@/hooks/useConnections";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
@@ -35,6 +36,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { changePasscode } = useAuth();
+  const connections = useConnections();
 
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -296,6 +298,29 @@ export default function SettingsPage() {
                     placeholder="e.g. 9b2c...1f"
                     className="font-mono text-xs sm:text-sm h-10 border-red-500/30 focus-visible:ring-red-500/30"
                   />
+                  {connections?.funds && (
+                    <div className="mt-2 p-3 rounded-lg border border-border bg-muted/20 space-y-1 text-xs font-mono">
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Connected MT5 Equity:</span>
+                        <span className="font-bold text-foreground">${connections.funds.equity.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Free Margin:</span>
+                        <span className={cn("font-bold", connections.funds.canTrade ? "text-emerald-500" : "text-amber-500")}>
+                          ${connections.funds.freeMargin.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Min Lot (0.01) Margin Req:</span>
+                        <span className="font-bold text-foreground">~${connections.funds.marginForMinLot.toFixed(2)}</span>
+                      </div>
+                      {!connections.funds.canTrade && (
+                        <p className="text-[11px] text-amber-500 font-sans pt-1 border-t border-border/50">
+                          ⚠️ Current Free Margin is below the minimum margin required to open 0.01 lot of Gold on your broker. Deposit at least $10-$20 to allow automated execution.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

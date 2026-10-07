@@ -336,6 +336,26 @@ export function Header() {
                   <span className="text-muted-foreground">Active Source</span>
                   <span className="text-amber-600 dark:text-amber-400 uppercase font-bold">{connections?.activeSource || "none"}</span>
                 </div>
+
+                {connections?.funds && (
+                  <div className="mt-1 pt-2 border-t border-border flex flex-col gap-1 text-[11px] font-mono">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>MT5 Equity</span>
+                      <span className="font-bold text-foreground">${connections.funds.equity.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Free Margin</span>
+                      <span className={cn("font-bold", connections.funds.canTrade ? "text-green-500" : "text-amber-500")}>
+                        ${connections.funds.freeMargin.toFixed(2)}
+                      </span>
+                    </div>
+                    {!connections.funds.canTrade && (
+                      <div className="text-[10px] text-amber-500 font-sans mt-0.5">
+                        ⚠️ Low margin (0.01 lot requires ~${connections.funds.marginForMinLot.toFixed(2)})
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

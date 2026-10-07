@@ -1988,14 +1988,14 @@ export async function getAccountFundsInfo(accountId: string): Promise<AccountFun
             return { equity: cached.equity, leverage: cached.leverage, freeMargin: cached.freeMargin };
         }
 
-        // 4. Fast RPC query with 2s timeout (NO waitSynchronized!)
+        // 4. Fast RPC query with 6s timeout (NO waitSynchronized!)
         try {
             const rpc = await getOrInitRpcConnection(trimmed);
             const info = await Promise.race([
                 rpc.getAccountInformation(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("RPC info timeout")), 2000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error("RPC info timeout")), 6000))
             ]) as any;
-            if (info && info.equity) {
+            if (info && info.equity !== undefined) {
                 const res = { equity: info.equity, leverage: info.leverage || 1000, freeMargin: info.freeMargin || info.equity };
                 accountFundsCache.set(trimmed, { ...res, updatedAt: Date.now() });
                 return res;
