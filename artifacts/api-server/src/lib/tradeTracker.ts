@@ -363,13 +363,18 @@ export async function checkRunningTrades(): Promise<void> {
         } else {
           // ── ASYMMETRIC TRAILING STOP CALCULATION ──
           let targetSl = stopLoss;
-          // Break-even price covers spread plus small buffer (+0.20 pts)
-          const breakEvenPrice = +(actualEntry + currentSpread + 0.20).toFixed(2);
-          const minProfitLockPrice = +(actualEntry + 2.00).toFixed(2);
+          // Break-even price covers spread plus small buffer (+0.30 pts)
+          const breakEvenPrice = +(actualEntry + currentSpread + 0.30).toFixed(2);
+          const minProfitLockPrice = +(actualEntry + 2.50).toFixed(2);
 
-          // Step A: Guaranteed +2.0 Points Profit Floor when Market is in Favor
-          if (peakProfit >= 2.00 || currentProfit >= 2.00) {
-            // Once market has moved in favor by >= 2.0 pts, SL floor is permanently locked to at least Entry + 2.0 pts
+          // Step A: Guaranteed Profit Floors when Market is in Favor
+          // On Gold (XAUUSD), sub-2pt movements are normal tick noise.
+          // Trigger Break-Even only after market has firmly established momentum (+4.5 pts or 40% of target).
+          const beActivationProfit = Math.max(4.50, distanceToInitialTarget * 0.40);
+          const profitLockActivation = Math.max(7.00, distanceToInitialTarget * 0.65);
+
+          if (peakProfit >= profitLockActivation || currentProfit >= profitLockActivation) {
+            // Once market has moved >= 7.0 pts in favor, lock at least +2.5 pts profit (giving 4.5+ pts breathing room)
             if (currentBid >= minProfitLockPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, minProfitLockPrice);
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
@@ -379,9 +384,9 @@ export async function checkRunningTrades(): Promise<void> {
               targetSl = Math.max(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
-          } else {
-            // Capital Protection / Break-Even before +2.0 pts (activates at >= 1.20 pts profit)
-            if (currentProfit >= 1.20 && currentBid >= breakEvenPrice + minStopBuffer) {
+          } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
+            // Capital Protection / Break-Even when firmly in profit (+4.5 pts)
+            if (currentBid >= breakEvenPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
@@ -389,32 +394,32 @@ export async function checkRunningTrades(): Promise<void> {
 
           // Step B: Asymmetric Trailing Logic
           if (trackerState.runnerActivated) {
-            // Floor guaranteed profit: lock at least +5.00 or 50% of initial target
-            const minLockedProfit = Math.max(5.00, +(distanceToInitialTarget * 0.50).toFixed(2));
+            // Floor guaranteed profit: lock at least +6.00 or 50% of initial target
+            const minLockedProfit = Math.max(6.00, +(distanceToInitialTarget * 0.50).toFixed(2));
             const floorProfitPrice = +(actualEntry + minLockedProfit).toFixed(2);
             targetSl = Math.max(targetSl, floorProfitPrice);
 
             // Progressive Asymmetric Tiers (with ample breathing space for Gold swings)
-            if (peakProfit >= 10.0 && peakProfit < 20.0) {
-              // Tier 1 Runner (+10 to +20 pts): Trail 6.0 pts behind peak price
-              const tier1Sl = +(trackerState.peakFavorablePrice - 6.00).toFixed(2);
+            if (peakProfit >= 12.0 && peakProfit < 22.0) {
+              // Tier 1 Runner (+12 to +22 pts): Trail 7.0 pts behind peak price
+              const tier1Sl = +(trackerState.peakFavorablePrice - 7.00).toFixed(2);
               targetSl = Math.max(targetSl, tier1Sl);
               trackerState.trailStage = "RUNNER_STAGE_1";
-            } else if (peakProfit >= 20.0 && peakProfit < 35.0) {
-              // Tier 2 Strong Runner (+20 to +35 pts): Trail 9.0 pts behind peak price
-              const tier2Sl = +(trackerState.peakFavorablePrice - 9.00).toFixed(2);
+            } else if (peakProfit >= 22.0 && peakProfit < 38.0) {
+              // Tier 2 Strong Runner (+22 to +38 pts): Trail 10.0 pts behind peak price
+              const tier2Sl = +(trackerState.peakFavorablePrice - 10.00).toFixed(2);
               targetSl = Math.max(targetSl, tier2Sl);
               trackerState.trailStage = "RUNNER_STAGE_2";
-            } else if (peakProfit >= 35.0) {
-              // Tier 3 Mega Runner (> +35 pts): Trail 15.0 pts behind peak price
+            } else if (peakProfit >= 38.0) {
+              // Tier 3 Mega Runner (> +38 pts): Trail 15.0 pts behind peak price
               const tier3Sl = +(trackerState.peakFavorablePrice - 15.00).toFixed(2);
               targetSl = Math.max(targetSl, tier3Sl);
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
           } else {
-            // Progressive locking between +2.0 pts and runner activation
-            if (peakProfit >= 5.0) {
-              // Lock at least 50% of peak profit once peak reaches 5+ pts
+            // Progressive locking between +7.0 pts and runner activation
+            if (peakProfit >= 10.0) {
+              // Lock at least 50% of peak profit once peak reaches 10+ pts
               const halfProfitSl = +(actualEntry + (peakProfit * 0.50)).toFixed(2);
               if (currentBid >= halfProfitSl + minStopBuffer) {
                 targetSl = Math.max(targetSl, halfProfitSl);
@@ -429,9 +434,9 @@ export async function checkRunningTrades(): Promise<void> {
             }
           }
 
-          // Guaranteed minimum profit floor: if market was in favor (peakProfit >= 2.0),
-          // targetSl can NEVER drop below actualEntry + 2.00
-          if (peakProfit >= 2.00 && currentBid >= minProfitLockPrice + minStopBuffer) {
+          // Guaranteed minimum profit floor: if market was in favor (peakProfit >= profitLockActivation),
+          // targetSl can NEVER drop below actualEntry + 2.50
+          if (peakProfit >= profitLockActivation && currentBid >= minProfitLockPrice + minStopBuffer) {
             targetSl = Math.max(targetSl, minProfitLockPrice);
           }
 
@@ -565,13 +570,18 @@ export async function checkRunningTrades(): Promise<void> {
         } else {
           // ── ASYMMETRIC TRAILING STOP CALCULATION ──
           let targetSl = stopLoss;
-          // Break-even price covers spread plus small buffer (+0.20 pts)
-          const breakEvenPrice = +(actualEntry - currentSpread - 0.20).toFixed(2);
-          const minProfitLockPrice = +(actualEntry - 2.00).toFixed(2);
+          // Break-even price covers spread plus small buffer (+0.30 pts)
+          const breakEvenPrice = +(actualEntry - currentSpread - 0.30).toFixed(2);
+          const minProfitLockPrice = +(actualEntry - 2.50).toFixed(2);
 
-          // Step A: Guaranteed +2.0 Points Profit Floor when Market is in Favor
-          if (peakProfit >= 2.00 || currentProfit >= 2.00) {
-            // Once market has moved in favor by >= 2.0 pts, SL floor is permanently locked to at least Entry - 2.0 pts
+          // Step A: Guaranteed Profit Floors when Market is in Favor
+          // On Gold (XAUUSD), sub-2pt movements are normal tick noise.
+          // Trigger Break-Even only after market has firmly established momentum (+4.5 pts or 40% of target).
+          const beActivationProfit = Math.max(4.50, distanceToInitialTarget * 0.40);
+          const profitLockActivation = Math.max(7.00, distanceToInitialTarget * 0.65);
+
+          if (peakProfit >= profitLockActivation || currentProfit >= profitLockActivation) {
+            // Once market has moved >= 7.0 pts in favor, lock at least +2.5 pts profit (giving 4.5+ pts breathing room)
             if (currentAsk <= minProfitLockPrice - minStopBuffer) {
               targetSl = Math.min(targetSl, minProfitLockPrice);
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
@@ -581,9 +591,9 @@ export async function checkRunningTrades(): Promise<void> {
               targetSl = Math.min(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
-          } else {
-            // Capital Protection / Break-Even before +2.0 pts (activates at >= 1.20 pts profit)
-            if (currentProfit >= 1.20 && currentAsk <= breakEvenPrice - minStopBuffer) {
+          } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
+            // Capital Protection / Break-Even when firmly in profit (+4.5 pts)
+            if (currentAsk <= breakEvenPrice - minStopBuffer) {
               targetSl = Math.min(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
@@ -591,32 +601,32 @@ export async function checkRunningTrades(): Promise<void> {
 
           // Step B: Asymmetric Trailing Logic
           if (trackerState.runnerActivated) {
-            // Floor guaranteed profit: lock at least +5.00 or 50% of initial target
-            const minLockedProfit = Math.max(5.00, +(distanceToInitialTarget * 0.50).toFixed(2));
+            // Floor guaranteed profit: lock at least +6.00 or 50% of initial target
+            const minLockedProfit = Math.max(6.00, +(distanceToInitialTarget * 0.50).toFixed(2));
             const floorProfitPrice = +(actualEntry - minLockedProfit).toFixed(2);
             targetSl = Math.min(targetSl, floorProfitPrice);
 
             // Progressive Asymmetric Tiers (with ample breathing space for Gold swings)
-            if (peakProfit >= 10.0 && peakProfit < 20.0) {
-              // Tier 1 Runner (+10 to +20 pts): Trail 6.0 pts behind peak price
-              const tier1Sl = +(trackerState.peakFavorablePrice + 6.00).toFixed(2);
+            if (peakProfit >= 12.0 && peakProfit < 22.0) {
+              // Tier 1 Runner (+12 to +22 pts): Trail 7.0 pts behind peak price
+              const tier1Sl = +(trackerState.peakFavorablePrice + 7.00).toFixed(2);
               targetSl = Math.min(targetSl, tier1Sl);
               trackerState.trailStage = "RUNNER_STAGE_1";
-            } else if (peakProfit >= 20.0 && peakProfit < 35.0) {
-              // Tier 2 Strong Runner (+20 to +35 pts): Trail 9.0 pts behind peak price
-              const tier2Sl = +(trackerState.peakFavorablePrice + 9.00).toFixed(2);
+            } else if (peakProfit >= 22.0 && peakProfit < 38.0) {
+              // Tier 2 Strong Runner (+22 to +38 pts): Trail 10.0 pts behind peak price
+              const tier2Sl = +(trackerState.peakFavorablePrice + 10.00).toFixed(2);
               targetSl = Math.min(targetSl, tier2Sl);
               trackerState.trailStage = "RUNNER_STAGE_2";
-            } else if (peakProfit >= 35.0) {
-              // Tier 3 Mega Runner (> +35 pts): Trail 15.0 pts behind peak price
+            } else if (peakProfit >= 38.0) {
+              // Tier 3 Mega Runner (> +38 pts): Trail 15.0 pts behind peak price
               const tier3Sl = +(trackerState.peakFavorablePrice + 15.00).toFixed(2);
               targetSl = Math.min(targetSl, tier3Sl);
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
           } else {
-            // Progressive locking between +2.0 pts and runner activation
-            if (peakProfit >= 5.0) {
-              // Lock at least 50% of peak profit once peak reaches 5+ pts
+            // Progressive locking between +7.0 pts and runner activation
+            if (peakProfit >= 10.0) {
+              // Lock at least 50% of peak profit once peak reaches 10+ pts
               const halfProfitSl = +(actualEntry - (peakProfit * 0.50)).toFixed(2);
               if (currentAsk <= halfProfitSl - minStopBuffer) {
                 targetSl = Math.min(targetSl, halfProfitSl);
@@ -631,9 +641,9 @@ export async function checkRunningTrades(): Promise<void> {
             }
           }
 
-          // Guaranteed minimum profit floor: if market was in favor (peakProfit >= 2.0),
-          // targetSl can NEVER rise above actualEntry - 2.00
-          if (peakProfit >= 2.00 && currentAsk <= minProfitLockPrice - minStopBuffer) {
+          // Guaranteed minimum profit floor: if market was in favor (peakProfit >= profitLockActivation),
+          // targetSl can NEVER rise above actualEntry - 2.50
+          if (peakProfit >= profitLockActivation && currentAsk <= minProfitLockPrice - minStopBuffer) {
             targetSl = Math.min(targetSl, minProfitLockPrice);
           }
 

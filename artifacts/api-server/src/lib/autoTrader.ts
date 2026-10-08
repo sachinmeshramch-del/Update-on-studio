@@ -52,9 +52,9 @@ export async function executeTradeWithCapitalManagement(
 
     // Risk amount = Equity * Risk%
     const riskAmount = actualEquity * (riskPerTrade / 100);
-    // 1. HARD SL FLOOR (Calibrated for High-Frequency Scalping)
-    // Prevents ultra-tight micro-stops (<1.5pt) from generating inflated lot sizes.
-    const safeSlDistance = Math.max(1.5, Math.abs(entryPrice - stopLoss));
+    // 1. HARD SL FLOOR (Calibrated for Gold Swings and Intraday)
+    // Prevents micro-stops from generating inflated lot sizes.
+    const safeSlDistance = Math.max(4.5, Math.abs(entryPrice - stopLoss));
     
     let calculatedVolume = 0.01;
     let lotStep = 0.01;
@@ -87,7 +87,7 @@ export async function executeTradeWithCapitalManagement(
         }
     } else {
         // Fallback to standard Gold logic (1 lot = 100 oz) if spec fails
-        const slDistanceFallback = Math.max(1.5, safeSlDistance);
+        const slDistanceFallback = Math.max(4.5, safeSlDistance);
         if (slDistanceFallback > 0) {
             riskPerLot = slDistanceFallback * 100;
             calculatedVolume = parseFloat((riskAmount / riskPerLot).toFixed(2));
@@ -95,13 +95,13 @@ export async function executeTradeWithCapitalManagement(
     }
     
     // 2. EXCESSIVE RISK REJECTOR (Vulnerability #3 Fix)
-    // If the account is so small that minVolume risks MORE than double our intended risk, reject the trade.
+    // If the account is so small that minVolume risks MORE than allowed tolerance, reject the trade.
     if (calculatedVolume < minVolume) {
         const actualRiskWithMinVolume = riskPerLot * minVolume;
         const actualRiskPct = (actualRiskWithMinVolume / actualEquity) * 100;
         
-        if (actualRiskPct > (riskPerTrade * 2.5)) { // Tolerance buffer
-            const rejectMsg = `Account equity ($${actualEquity.toFixed(2)}) is too small for Stop Loss distance (${safeSlDistance.toFixed(1)}pt). Min lot (0.01) risks $${actualRiskWithMinVolume.toFixed(2)} (${actualRiskPct.toFixed(1)}% of equity, max allowed is ${(riskPerTrade * 2.5).toFixed(1)}%).`;
+        if (actualRiskPct > Math.max(riskPerTrade * 3.5, 12.0) && actualRiskWithMinVolume > 20.0) { // Tolerance buffer
+            const rejectMsg = `Account equity ($${actualEquity.toFixed(2)}) is too small for Stop Loss distance (${safeSlDistance.toFixed(1)}pt). Min lot (0.01) risks $${actualRiskWithMinVolume.toFixed(2)} (${actualRiskPct.toFixed(1)}% of equity, max allowed is ${Math.max(riskPerTrade * 3.5, 12.0).toFixed(1)}%).`;
             logger.warn({
                 accountId, actualEquity, requestedRiskPct: riskPerTrade, actualRiskPct, minVolume, safeSlDistance
             }, `[AutoTrader] TRADE REJECTED: ${rejectMsg}`);

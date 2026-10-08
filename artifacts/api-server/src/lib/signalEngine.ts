@@ -458,8 +458,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       signal:               "HOLD",
       confidence:           0,
       entryPrice:           +currentPrice.toFixed(2),
-      stopLoss:             +(currentPrice - 3).toFixed(2),
-      takeProfit:           +(currentPrice + 4.5).toFixed(2),
+      stopLoss:             +(currentPrice - 6.0).toFixed(2),
+      takeProfit:           +(currentPrice + 12.0).toFixed(2),
       trend:                "NEUTRAL",
       reason:               "HOLD – Market closed (weekend) · Opens Sunday 22:00 UTC",
       timestamp:            new Date().toISOString(),
@@ -511,7 +511,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const spikeReason = `HOLD – Spike cooldown (${freshSpikeCooldownCandles} candle${freshSpikeCooldownCandles !== 1 ? "s" : ""} remaining) · Signals blocked until spike settles`;
     const base = cachedSignal ?? {
       confidence: 0, entryPrice: +currentPrice.toFixed(2),
-      stopLoss: +(currentPrice - 3).toFixed(2), takeProfit: +(currentPrice + 4.5).toFixed(2),
+      stopLoss: +(currentPrice - 6.0).toFixed(2), takeProfit: +(currentPrice + 12.0).toFixed(2),
       trend: "NEUTRAL" as const, tradeDuration: "3-15 mins (Scalp)",
       signalStrength: null, emaScore: 0, rsiScore: 0, macdScore: 0,
       momentumScore: 0, fvgScore: 0, sweepScore: 0, obScore: 0, candleScore: 0, candlePattern: null, signalType: "TREND_FOLLOW" as const,
@@ -1510,7 +1510,9 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     // ── Volatility Filter (Prevent "Death by a Thousand Cuts" in Choppy/Flat Markets) ──
     if (finalSignal !== "HOLD") {
       // 1. Extreme Spread Guard (Rollover/News Protection)
-      const MAX_ALLOWED_SPREAD = 0.40; // $0.40 spread on Gold is extreme (normal is 0.08 - 0.15)
+      // On standard MT5 retail accounts (like XM, IC Markets), Gold spread typically hovers around 0.30 - 0.65 points.
+      // Spread > 0.75 points indicates extreme illiquidity, daily market rollover, or high-impact news spikes.
+      const MAX_ALLOWED_SPREAD = 0.75;
       if (liveSpread > MAX_ALLOWED_SPREAD) {
         logger.warn({ finalSignal, liveSpread, MAX_ALLOWED_SPREAD }, "[SpreadGuard] Suppressed due to extreme broker spread.");
         finalSignal = "HOLD";
@@ -1518,7 +1520,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       } else {
         // 2. For XAUUSD, an ATR on 5m below 0.60 generally means a flat, lifeless market.
         // We will suppress entries to avoid being chopped up by the spread.
-        const minRequiredAtr = Math.max(0.40, liveSpread * 2.5);
+        const minRequiredAtr = Math.max(0.40, liveSpread * 2.0);
         if (atr < minRequiredAtr) {
           logger.warn({ finalSignal, atr, liveSpread, minRequiredAtr }, "[VolatilityFilter] Suppressed due to low volatility vs high spread");
           finalSignal = "HOLD";
@@ -1527,45 +1529,61 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       }
     }
 
-    // ── SL / TP: Structure-Based Dynamic Stops (ATR-backed, min 1.5:1 R:R) ──
+    // ── SL / TP: Volatility- & Structure-Calibrated Dynamic Stops for Gold ──
     const { nearestSwingHigh, nearestSwingLow } = getNearestSwingLevels(candlesPrimary, 25);
-    const minAtrPadding = atr * (signalType === "REVERSAL" ? 1.5 : 1.8);
-
     let slDist: number;
     const calcDir = finalSignal !== "HOLD" ? finalSignal : intendedSignal;
 
-    // ── High-Precision Scalp Stop Loss & Take Profit Calibration ────────────
-    // Scalp SL is anchored to micro-structure (1.5 to 3.0 points max risk on Gold)
-    const microSlFloor = 1.5; // 1.5 points hard floor ($1.50) to clear broker spread
-    const microSlCap = 3.0;   // 3.0 points maximum risk on Gold scalps ($3.00)
+    // Gold (XAUUSD) requires adequate breathing room outside broker spread & normal sub-minute tick noise.
+    // Minimum SL floor is 5.0 points ($5.00) so trades aren't prematurely choked by minor fluctuations.
+    // Maximum SL cap is 12.0 points ($12.00) to keep trade risk strictly bounded.
+    const goldSlFloor = 5.0; // $5.00 minimum breathing cushion
+    const goldSlCap   = 12.0; // $12.00 maximum risk cap for scalps / intraday
+    const spreadBuffer = Math.max(1.2, liveSpread * 2.2);
 
     if (calcDir === "LONG") {
-      const recent1mLow = candlesEntry && candlesEntry.length >= 4 
-        ? Math.min(...candlesEntry.slice(-4).map(c => c.low)) 
-        : (currentPrice - 2.0);
-      const microDist = (currentPrice > recent1mLow) ? (currentPrice - recent1mLow) + 0.35 : 2.0;
-      slDist = Number(Math.min(Math.max(microDist, microSlFloor), microSlCap).toFixed(2));
+      let rawDist: number;
+      if (nearestSwingLow && currentPrice > nearestSwingLow && (currentPrice - nearestSwingLow) <= goldSlCap) {
+        // Anchor safely below confirmed swing low + spread cushion
+        rawDist = (currentPrice - nearestSwingLow) + spreadBuffer;
+      } else {
+        // ATR-proportional stop (0.60x ATR) or recent 5m lows
+        const recentLow = candlesPrimary && candlesPrimary.length >= 6
+          ? Math.min(...candlesPrimary.slice(-6).map(c => c.low))
+          : (currentPrice - 6.0);
+        const candleDist = (currentPrice > recentLow) ? (currentPrice - recentLow) + spreadBuffer : 6.0;
+        rawDist = Math.max(candleDist, atr * 0.60);
+      }
+      slDist = Number(Math.min(Math.max(rawDist, goldSlFloor), goldSlCap).toFixed(2));
     } else if (calcDir === "SHORT") {
-      const recent1mHigh = candlesEntry && candlesEntry.length >= 4 
-        ? Math.max(...candlesEntry.slice(-4).map(c => c.high)) 
-        : (currentPrice + 2.0);
-      const microDist = (recent1mHigh > currentPrice) ? (recent1mHigh - currentPrice) + 0.35 : 2.0;
-      slDist = Number(Math.min(Math.max(microDist, microSlFloor), microSlCap).toFixed(2));
+      let rawDist: number;
+      if (nearestSwingHigh && nearestSwingHigh > currentPrice && (nearestSwingHigh - currentPrice) <= goldSlCap) {
+        // Anchor safely above confirmed swing high + spread cushion
+        rawDist = (nearestSwingHigh - currentPrice) + spreadBuffer;
+      } else {
+        // ATR-proportional stop (0.60x ATR) or recent 5m highs
+        const recentHigh = candlesPrimary && candlesPrimary.length >= 6
+          ? Math.max(...candlesPrimary.slice(-6).map(c => c.high))
+          : (currentPrice + 6.0);
+        const candleDist = (recentHigh > currentPrice) ? (recentHigh - currentPrice) + spreadBuffer : 6.0;
+        rawDist = Math.max(candleDist, atr * 0.60);
+      }
+      slDist = Number(Math.min(Math.max(rawDist, goldSlFloor), goldSlCap).toFixed(2));
     } else {
-      slDist = 2.0;
+      slDist = 6.0;
     }
 
-    // Scalp Take Profit: 1.3x to 1.8x SL (Target: +2.2 to +5.0 points)
-    const rrMultiplier = signalType === "REVERSAL" ? 1.4 : currentAdx > 25 ? 1.8 : 1.5;
-    let tpDist = Number(Math.min(Math.max(slDist * rrMultiplier, 2.2), 5.2).toFixed(2));
+    // Scalp Take Profit: Asymmetric 1.5x to 2.2x Risk-to-Reward (Target: +8.0 to +24.0 points)
+    const rrMultiplier = signalType === "REVERSAL" ? 1.5 : currentAdx > 25 ? 2.0 : 1.7;
+    let tpDist = Number(Math.min(Math.max(slDist * rrMultiplier, 8.0), 24.0).toFixed(2));
 
-    // For RANGE trades, tight boundaries for scalp entries
+    // For RANGE trades, calibrate to range boundaries with safety margin
     if (signalType === "RANGE") {
-      slDist = Number(Math.min(Math.max(atr * 0.8, 1.5), 2.8).toFixed(2));
+      slDist = Number(Math.min(Math.max(atr * 0.65, 5.0), 9.0).toFixed(2));
       const targetDist = calcDir === "LONG" 
-        ? Math.min(Math.max((rangeInfo.resistance - currentPrice) * 0.8, 2.0), 4.5) 
-        : Math.min(Math.max((currentPrice - rangeInfo.support) * 0.8, 2.0), 4.5);
-      tpDist = +targetDist.toFixed(2);
+        ? Math.max((rangeInfo.resistance - currentPrice) * 0.85, 7.5) 
+        : Math.max((currentPrice - rangeInfo.support) * 0.85, 7.5);
+      tpDist = Number(Math.min(Math.max(targetDist, slDist * 1.5), 20.0).toFixed(2));
     }
 
     const effectiveEntryPrice = calcDir === "LONG" ? +(currentPrice + liveSpread / 2).toFixed(2) : calcDir === "SHORT" ? +(currentPrice - liveSpread / 2).toFixed(2) : +currentPrice.toFixed(2);
@@ -1692,8 +1710,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       signal:     "HOLD",
       confidence: 0,
       entryPrice: +currentPrice.toFixed(2),
-      stopLoss:   +(currentPrice - 3).toFixed(2),
-      takeProfit: +(currentPrice + 4.5).toFixed(2),
+      stopLoss:   +(currentPrice - 6.0).toFixed(2),
+      takeProfit: +(currentPrice + 12.0).toFixed(2),
       trend:      "NEUTRAL",
       reason:     "HOLD – Signal generation failed; using safe defaults " + String(err.stack || err.message),
       timestamp:  new Date().toISOString(),
