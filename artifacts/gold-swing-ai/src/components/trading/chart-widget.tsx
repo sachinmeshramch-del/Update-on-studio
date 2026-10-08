@@ -30,9 +30,9 @@ const TIMEFRAMES = [
 
 export function ChartWidget() {
   const cardRef = useRef<HTMLDivElement>(null);
-  // Default to OHLC for intraday trading
+  // Default to OHLC for scalping execution (1m)
   const [tab, setTab]                     = useState<Tab>("ohlc");
-  const [interval, setInterval]           = useState("15");
+  const [interval, setInterval]           = useState("1");
   const [dismissed, setDismissed]         = useState(false);
   const [isFullscreen, setIsFullscreen]   = useState(false);
   const [isExpanded, setIsExpanded]       = useState(() => {

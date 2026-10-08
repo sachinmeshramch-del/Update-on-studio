@@ -513,13 +513,13 @@ export function SignalPanel() {
           </div>
         </div>
 
-        {/* ── Asymmetric Trailing Stop Badge ─────────────────────────────────── */}
-        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-400">
+        {/* ── Scalp Execution Engine Badge ─────────────────────────────────── */}
+        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-500">
           <div className="flex items-center gap-1.5 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Asymmetric Engine: Fast BE protection (+1.2p) &amp; Dynamic Runner Expansion (+25p)</span>
+            <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>High-Frequency Scalper: 1m Micro-Structure · Tight SL (1.5–3.0pt) · Fast BE (+1.2pt) · Quick TP (+2.2–5.0pt)</span>
           </div>
-          <span className="text-[10px] font-mono text-emerald-300/80 uppercase hidden sm:inline">Runners Pay For Losses</span>
+          <span className="text-[10px] font-mono text-amber-400/90 uppercase hidden sm:inline font-bold">1m Execution Active</span>
         </div>
 
         {/* ── Current Indicators Quick-View ─────────────────────────────────── */}

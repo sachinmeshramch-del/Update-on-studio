@@ -52,10 +52,9 @@ export async function executeTradeWithCapitalManagement(
 
     // Risk amount = Equity * Risk%
     const riskAmount = actualEquity * (riskPerTrade / 100);
-    // 1. HARD SL FLOOR (Vulnerability #1 Fix)
-    // Prevent ultra-tight stops from generating massively inflated lot sizes.
-    // E.g., if a bug passes a 0.20 SL, we calculate volume as if the SL was 2.50 to protect the account.
-    const safeSlDistance = Math.max(2.5, Math.abs(entryPrice - stopLoss));
+    // 1. HARD SL FLOOR (Calibrated for High-Frequency Scalping)
+    // Prevents ultra-tight micro-stops (<1.5pt) from generating inflated lot sizes.
+    const safeSlDistance = Math.max(1.5, Math.abs(entryPrice - stopLoss));
     
     let calculatedVolume = 0.01;
     let lotStep = 0.01;
@@ -88,7 +87,7 @@ export async function executeTradeWithCapitalManagement(
         }
     } else {
         // Fallback to standard Gold logic (1 lot = 100 oz) if spec fails
-        const slDistanceFallback = Math.max(2.5, safeSlDistance);
+        const slDistanceFallback = Math.max(1.5, safeSlDistance);
         if (slDistanceFallback > 0) {
             riskPerLot = slDistanceFallback * 100;
             calculatedVolume = parseFloat((riskAmount / riskPerLot).toFixed(2));

@@ -129,18 +129,18 @@ const SINGLE_CANDLE_PATTERNS = new Set(["Hammer", "Dragonfly Doji", "Shooting St
 let spikeDetectedAt = 0;
 let lastSpikeCandleTime = 0; // tracks which candle triggered the spike to avoid re-triggering on the same candle
 const SPIKE_ATR_MULT       = 2.5;   // body must exceed ATR × this
-const SPIKE_COOLDOWN_COUNT = 1;     // candles to block after a spike
-const CANDLE_PRIMARY_MS         = 900_000; // 15 min in ms
+const SPIKE_COOLDOWN_COUNT = 1;     // 1 candle to block after a spike
+const CANDLE_PRIMARY_MS         = 60_000;  // 1-minute execution candles for scalping (was 15 min)
 
-// ── Intraday constants ────────────────────────────────────────────────────
-const SIGNAL_CACHE_TTL        = 60_000;   // 1 minute
-const COOLDOWN_MS             = 900_000;  // 15 mins  // 1 hour between signals
-const MIN_SIGNAL_INTERVAL_MS  = 5 * 60_000; // 5-min hard floor // 5-min hard floor — no signal can fire within 5 min of the last, regardless of price move
+// ── Scalping constants (Ultra-Fast 1m Execution Engine) ─────────────────────
+const SIGNAL_CACHE_TTL        = 30_000;   // 30 seconds cache for rapid scalp responsiveness
+const COOLDOWN_MS             = 120_000;  // 2 minutes between scalp signals (was 15 min)
+const MIN_SIGNAL_INTERVAL_MS  = 60_000;   // 1-minute hard floor for scalping (was 5 min)
 const MIN_CONF_NORMAL         = 50;
 const MIN_CONF_STRONG         = 65;
 const MIN_CONF_REVERSAL       = 60;  // counter-trend trades need higher conviction
 const MIN_CONF_RANGE          = 55;  // range-bound / consolidation markets require high conviction
-const MIN_PRICE_MOVE_PCT      = 0.004;    // 0.2% to override standard cooldown (raised from 0.1% — $4→$8 on gold)
+const MIN_PRICE_MOVE_PCT      = 0.0015;   // 0.15% (~$3-$5 on gold) to override standard cooldown for fast scalps
 const MAX_RAW_SCORE           = 125;      // realistic max without all institutional factors aligning
 
 // ── Session detection ─────────────────────────────────────────────────────
@@ -512,7 +512,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const base = cachedSignal ?? {
       confidence: 0, entryPrice: +currentPrice.toFixed(2),
       stopLoss: +(currentPrice - 3).toFixed(2), takeProfit: +(currentPrice + 4.5).toFixed(2),
-      trend: "NEUTRAL" as const, tradeDuration: "2-8 hours",
+      trend: "NEUTRAL" as const, tradeDuration: "3-15 mins (Scalp)",
       signalStrength: null, emaScore: 0, rsiScore: 0, macdScore: 0,
       momentumScore: 0, fvgScore: 0, sweepScore: 0, obScore: 0, candleScore: 0, candlePattern: null, signalType: "TREND_FOLLOW" as const,
       patternDetected: null, patternStrength: 0, contextValid: false, confluenceMet: false, confirmationStatus: null,
@@ -1534,39 +1534,37 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     let slDist: number;
     const calcDir = finalSignal !== "HOLD" ? finalSignal : intendedSignal;
 
+    // ── High-Precision Scalp Stop Loss & Take Profit Calibration ────────────
+    // Scalp SL is anchored to micro-structure (1.5 to 3.0 points max risk on Gold)
+    const microSlFloor = 1.5; // 1.5 points hard floor ($1.50) to clear broker spread
+    const microSlCap = 3.0;   // 3.0 points maximum risk on Gold scalps ($3.00)
+
     if (calcDir === "LONG") {
-      const anchorLow = (sweepRej.detected && sweepRej.rejectionType === "BULLISH" && sweepRej.sweptLevel)
-        ? sweepRej.sweptLevel
-        : nearestSwingLow;
-      const structuralDist = anchorLow !== null
-        ? (currentPrice - anchorLow) + (atr * 0.5)
-        : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 4.0), 12.0); // Tightened initial risk cap
+      const recent1mLow = candlesEntry && candlesEntry.length >= 4 
+        ? Math.min(...candlesEntry.slice(-4).map(c => c.low)) 
+        : (currentPrice - 2.0);
+      const microDist = (currentPrice > recent1mLow) ? (currentPrice - recent1mLow) + 0.35 : 2.0;
+      slDist = Number(Math.min(Math.max(microDist, microSlFloor), microSlCap).toFixed(2));
     } else if (calcDir === "SHORT") {
-      const anchorHigh = (sweepRej.detected && sweepRej.rejectionType === "BEARISH" && sweepRej.sweptLevel)
-        ? sweepRej.sweptLevel
-        : nearestSwingHigh;
-      const structuralDist = anchorHigh !== null
-        ? (anchorHigh - currentPrice) + (atr * 0.5)
-        : minAtrPadding;
-      slDist = Math.min(Math.max(structuralDist, minAtrPadding, 4.0), 12.0); // Tightened initial risk cap
+      const recent1mHigh = candlesEntry && candlesEntry.length >= 4 
+        ? Math.max(...candlesEntry.slice(-4).map(c => c.high)) 
+        : (currentPrice + 2.0);
+      const microDist = (recent1mHigh > currentPrice) ? (recent1mHigh - currentPrice) + 0.35 : 2.0;
+      slDist = Number(Math.min(Math.max(microDist, microSlFloor), microSlCap).toFixed(2));
     } else {
-      slDist = Math.min(Math.max(minAtrPadding, 5.0), 15.0);
+      slDist = 2.0;
     }
 
-    // Reward to Risk: 1.6:1 baseline, tightly restricted to 1.2:1 for counter-trend reversals, up to 2.5:1 when ADX > 25 indicates strong trend
-    // Updated for $50-$100 day trading goal: minimum 1.5:1, baseline 2.0:1 R:R
-    // Dynamically scaled RR for scalping (much tighter targets to ensure high win rate)
-    const rrMultiplier = signalType === "REVERSAL" ? 1.5 : currentAdx > 25 ? 2.5 : 1.8;
-    
-    let tpDist = +(slDist * rrMultiplier).toFixed(2);
-    
-    // For RANGE trades, SL is placed tightly outside the box, and TP is placed near the opposite edge
+    // Scalp Take Profit: 1.3x to 1.8x SL (Target: +2.2 to +5.0 points)
+    const rrMultiplier = signalType === "REVERSAL" ? 1.4 : currentAdx > 25 ? 1.8 : 1.5;
+    let tpDist = Number(Math.min(Math.max(slDist * rrMultiplier, 2.2), 5.2).toFixed(2));
+
+    // For RANGE trades, tight boundaries for scalp entries
     if (signalType === "RANGE") {
-      slDist = Math.min(Math.max(atr * 1.5, 4.0), 10.0);
+      slDist = Number(Math.min(Math.max(atr * 0.8, 1.5), 2.8).toFixed(2));
       const targetDist = calcDir === "LONG" 
-        ? Math.max((rangeInfo.resistance - currentPrice) * 0.8, 5.0) 
-        : Math.max((currentPrice - rangeInfo.support) * 0.8, 5.0);
+        ? Math.min(Math.max((rangeInfo.resistance - currentPrice) * 0.8, 2.0), 4.5) 
+        : Math.min(Math.max((currentPrice - rangeInfo.support) * 0.8, 2.0), 4.5);
       tpDist = +targetDist.toFixed(2);
     }
 
@@ -1600,7 +1598,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       else if (macdScore >= 20) parts.push(`MACD ${finalSignal === "LONG" ? "bull" : "bear"}`);
       if (isTrueBreakout) parts.push("True Breakout Confirmed");
       if (isFalseBreakout) parts.push("False Breakout (Sweep) Confirmed");
-      if (momentumScore >= 15) parts.push("5m confirms");
+      if (momentumScore >= 15) parts.push("1m/5m confirms");
       if (fvgScore   > 0) parts.push("FVG entry zone");
       if (sweepScore > 0) parts.push("Liquidity swept");
       if (obScore    > 0) parts.push(`OB ×${dominant === "LONG" ? bullishOB?.strength : bearishOB?.strength}`);
@@ -1609,7 +1607,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       if (sweepRej.detected && sweepRej.rejectionType === (finalSignal === "LONG" ? "BULLISH" : "BEARISH") && signalType === "REVERSAL") parts.push(`Sweep reject @ ${sweepRej.sweptLevel}`);
       const typeTag = signalType === "REVERSAL" ? " ⟳REVERSAL" : "";
       const strPrefix = signalStrength ? `${signalStrength} ` : "";
-      reason = `${strPrefix}${finalSignal}${typeTag} ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
+      reason = `${strPrefix}${finalSignal}${typeTag} [Scalp] ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
     } else if (recentStops.inCircuitBreakerCooldown) {
       reason = `HOLD – Circuit Breaker (${recentStops.cooldownRemainingMinutes}m cooldown after ${recentStops.consecutiveLosses} consecutive losses) · Preserving capital during consolidation`;
     } else if (suppressionReason.length > 0) {
@@ -1630,25 +1628,6 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       reason = `HOLD – Waiting for confluence ${sessionNote} · Best: ${bestDir} ${bestConf}% (need ${reqConf}%)${rangeText}`;
     }
 
-    // EXPERIMENT: INVERT SIGNALS (SCALPING)
-    const EXPERIMENT_INVERT_SIGNALS = false;
-    if (EXPERIMENT_INVERT_SIGNALS && finalSignal !== "HOLD") {
-        finalSignal = finalSignal === "LONG" ? "SHORT" : "LONG";
-        
-        // Force tight SCALPING Stop Loss and Take Profit
-        slDist = Math.max(1.5, Math.min(slDist * 0.5, 3.0)); // Extremely tight SL (1.5 to 3.0 points)
-        tpDist = Math.max(2.5, Math.min(tpDist * 0.4, 6.0)); // Tight scalping TP (2.5 to 6.0 points)
-        
-        const newStopLoss = finalSignal === "LONG" ? currentPrice - slDist : currentPrice + slDist;
-        const newTakeProfit = finalSignal === "LONG" ? currentPrice + tpDist : currentPrice - tpDist;
-        
-        stopLoss = +newStopLoss.toFixed(2);
-        takeProfit = +newTakeProfit.toFixed(2);
-        reason = "[INVERSE SCALP EXPERIMENT] " + reason.replace(/LONG/g, "LONG_TEMP").replace(/SHORT/g, "LONG").replace(/LONG_TEMP/g, "SHORT");
-    }
-
-    // (Commit logic moved to commitSignal, called by scheduler upon successful dispatch)
-
     const result: SignalResult = {
       signal:            finalSignal,
       confidence,
@@ -1658,7 +1637,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       trend:             overallTrend(trendPrimary, trendEntry),
       reason,
       timestamp:         new Date().toISOString(),
-      tradeDuration:        EXPERIMENT_INVERT_SIGNALS ? "15-45 mins (Scalp)" : "2-8 hours",
+      tradeDuration:     "3-15 mins (Scalp)",
       cooldownRemaining: finalSignal !== "HOLD" ? 0 : cooldownRemaining,
       smartMode,
       session,

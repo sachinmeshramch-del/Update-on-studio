@@ -190,8 +190,8 @@ async function runScheduledSignal(): Promise<void> {
 
       if (latest && latest.signal === signal.signal) {
         const msSince = Date.now() - latest.createdAt.getTime();
-        if (msSince < 5 * 60 * 1000) {
-          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate signal (fired within 5 min)");
+        if (msSince < 2 * 60 * 1000) {
+          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate scalp signal (fired within 2 min)");
           return;
         }
       }
