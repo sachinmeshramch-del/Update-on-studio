@@ -341,6 +341,20 @@ async function getOrInitRpcConnection(accountId: string) {
 }
 
 /**
+ * Safely subscribe to symbol market data with timeout and broker connection check
+ */
+async function subscribeWithTimeout(conn: any, symbol: string, timeoutMs = 8000): Promise<void> {
+    if (!conn) return;
+    if (conn.terminalState && conn.terminalState.connectedToBroker === false) {
+        throw new Error(`Terminal not connected to broker for ${symbol}`);
+    }
+    await Promise.race([
+        conn.subscribeToMarketData(symbol),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`Subscription timed out after ${timeoutMs}ms for ${symbol}`)), timeoutMs))
+    ]);
+}
+
+/**
  * Main function to start and maintain MetaApi streaming feed
  */
 export async function startMetaApiFeed() {
@@ -565,10 +579,11 @@ export async function startMetaApiFeed() {
                                 return async () => {
                                     metaApiStatus = "connected";
                                     logger.info("MetaApi streaming connection restored.");
-                                    // Re-subscribe symbol to guarantee continuous streaming
-                                    try {
-                                        await streamingConn.subscribeToMarketData(SYMBOL);
-                                    } catch (e: any) {}
+                                    if (streamingConn.terminalState?.connectedToBroker) {
+                                        try {
+                                            await subscribeWithTimeout(streamingConn, SYMBOL, 8000);
+                                        } catch (e: any) {}
+                                    }
                                 };
                             }
                             return () => {};
@@ -585,22 +600,39 @@ export async function startMetaApiFeed() {
                 ];
                 let symbolsToTry = Array.from(new Set(standardCandidates.filter(Boolean)));
 
-                let lastSubError: any = null;
-                for (const sym of symbolsToTry) {
-                    try {
-                        await streamingConn.subscribeToMarketData(sym);
-                        SYMBOL = sym; 
-                        subscribed = true;
-                        logger.info(`Subscribed to Gold symbol: ${sym}`);
-                        break;
-                    } catch (err: any) {
-                        lastSubError = err;
-                        const msg = err?.message || String(err);
-                        if (msg.includes('timed out') || msg.includes('connected to broker') || msg.includes('Failed to execute a callable') || msg.includes('InternalError')) {
-                            logger.warn(`Broker subscription paused for ${sym} (${msg.split('\n')[0]}); terminal synchronizing or not ready. Aborting remaining candidate checks.`);
+                // Ensure streaming connection is synchronized & connected to broker before attempting subscriptions
+                let isBrokerConnected = streamingConn.terminalState?.connectedToBroker === true;
+                if (!isBrokerConnected) {
+                    logger.info("Waiting up to 15s for MetaTrader terminal to complete connection to broker...");
+                    for (let waitSec = 0; waitSec < 15; waitSec++) {
+                        if (streamingConn.terminalState?.connectedToBroker) {
+                            isBrokerConnected = true;
                             break;
                         }
-                        continue;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+
+                let lastSubError: any = null;
+                if (!isBrokerConnected) {
+                    logger.warn({ accountId }, "MetaTrader terminal is still synchronizing with broker; initial subscription will be handled once broker connection is confirmed.");
+                } else {
+                    for (const sym of symbolsToTry) {
+                        try {
+                            await subscribeWithTimeout(streamingConn, sym, 8000);
+                            SYMBOL = sym; 
+                            subscribed = true;
+                            logger.info(`Subscribed to Gold symbol: ${sym}`);
+                            break;
+                        } catch (err: any) {
+                            lastSubError = err;
+                            const msg = err?.message || String(err);
+                            if (msg.includes('timed out') || msg.includes('connected to broker') || msg.includes('Failed to execute a callable') || msg.includes('InternalError')) {
+                                logger.warn(`Broker subscription paused for ${sym} (${msg.split('\n')[0]}); terminal synchronizing or not ready. Aborting remaining candidate checks.`);
+                                break;
+                            }
+                            continue;
+                        }
                     }
                 }
 
@@ -647,7 +679,7 @@ export async function startMetaApiFeed() {
                             logger.info(`Discovered potential Gold symbols (ordered by priority): ${discovered.slice(0, 5).join(', ')}`);
                             for (const sym of discovered) {
                                 try {
-                                    await streamingConn.subscribeToMarketData(sym);
+                                    await subscribeWithTimeout(streamingConn, sym, 8000);
                                     SYMBOL = sym;
                                     subscribed = true;
                                     logger.info(`Dynamically subscribed to discovered symbol: ${sym}`);
@@ -682,12 +714,14 @@ export async function startMetaApiFeed() {
                     );
                     setTimeout(async () => {
                         if (connection && metaApiStatus === "connected" && !subscribed) {
-                            try {
-                                await connection.subscribeToMarketData(SYMBOL);
-                                subscribed = true;
-                                logger.info(`Delayed background subscription succeeded for ${SYMBOL}`);
-                            } catch (e: any) {
-                                logger.debug({ err: e?.message }, "Delayed background subscription retry notice");
+                            if (connection.terminalState?.connectedToBroker) {
+                                try {
+                                    await subscribeWithTimeout(connection, SYMBOL, 8000);
+                                    subscribed = true;
+                                    logger.info(`Delayed background subscription succeeded for ${SYMBOL}`);
+                                } catch (e: any) {
+                                    logger.debug({ err: e?.message }, "Delayed background subscription retry notice");
+                                }
                             }
                         }
                     }, 15000);
@@ -882,8 +916,8 @@ function startWatchdog() {
         if (metaApiStatus === "connected" && secondsSinceLastTick > 300 && !isConnecting) {
             logger.warn({ secondsSinceLastTick }, "[Watchdog] MetaApi tick stream inactive for >300s. Verifying connection state...");
             try {
-                if (connection && typeof connection.isSynchronized === 'function' && connection.isSynchronized()) {
-                    await connection.subscribeToMarketData(SYMBOL).catch(() => {});
+                if (connection && typeof connection.isSynchronized === 'function' && connection.isSynchronized() && connection.terminalState?.connectedToBroker) {
+                    await subscribeWithTimeout(connection, SYMBOL, 8000).catch(() => {});
                     return;
                 }
             } catch(e) {}
