@@ -531,6 +531,8 @@ export function HermesDiagnosticDashboard({
                         </Badge>
                       </div>
                     </div>
+                  </div>
+
                   {/* ── Hybrid Dual-Engine & Deterministic 3h NY ORB Architecture ── */}
                   <div className="border border-amber-500/30 rounded-xl p-4 bg-gradient-to-br from-amber-500/[0.08] via-zinc-950 to-orange-500/[0.04] space-y-4">
                     <div className="flex items-center justify-between gap-3 flex-wrap">

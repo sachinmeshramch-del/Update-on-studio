@@ -28,10 +28,11 @@ export async function executeTradeWithCapitalManagement(
     passedSettings?: any,
     signalTimestamp?: number
 ) {
-    const isOrbEngine = settings.engineMode === "HYBRID_DUAL" || settings.engineMode === "DETERMINISTIC_ORB";
-    const riskPerTrade = isOrbEngine ? (settings.orbRiskPerTrade ?? 2.0) : (settings.riskPerTradePercent ?? 1.0);
-    const dailyTarget = settings.dailyProfitTargetPercent || 3.0;
-    const dailyStop = settings.dailyStopLossPercent || 5.0;
+    const settings = passedSettings || (await getSystemSettings());
+    const isOrbEngine = settings?.engineMode === "HYBRID_DUAL" || settings?.engineMode === "DETERMINISTIC_ORB";
+    const riskPerTrade = isOrbEngine ? (settings?.orbRiskPerTrade ?? 2.0) : (settings?.riskPerTradePercent ?? 1.0);
+    const dailyTarget = settings?.dailyProfitTargetPercent || 3.0;
+    const dailyStop = settings?.dailyStopLossPercent || 5.0;
 
     logger.info({ accountId, accountType, riskPerTrade, dailyTarget, dailyStop }, `[AutoTrader] Evaluating trade with capital management...`);
 

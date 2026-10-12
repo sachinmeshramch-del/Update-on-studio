@@ -471,6 +471,8 @@ export function HermesCard() {
               Run Initial Baseline Audit
             </button>
           </div>
+        )}
+
         {/* ── HYBRID DUAL-ENGINE ARCHITECTURE & DETERMINISTIC ORB TELEMETRY ── */}
         <div className="p-4 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/[0.07] via-background to-orange-500/[0.03] space-y-3.5 shadow-sm">
           <div className="flex items-center justify-between gap-2 flex-wrap">
