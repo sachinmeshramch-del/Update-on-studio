@@ -314,10 +314,11 @@ export async function checkRunningTrades(): Promise<void> {
         }
 
         // ── 2-POINT PROFIT BOOKING WHEN MARKET WAS IN FAVOR (LONG) ──
-        // If market was in favor (peakProfit >= 2.00 pts) and price pulls back to or below entry + 2.0 pts:
-        // Book at least +2.0 points profit immediately (never let a winning trade become a loss or scratch)!
+        // For scalp trades: book profit if retracing.
+        // For 5R ORB Runner trades: strictly DO NOT cut winners early! Let the 5R runner run to target.
+        const is5rRunner = trade.tradeDuration?.includes("5R") || trade.signalType === "BREAKOUT" || (distanceToInitialTarget >= 14.0);
         const minGuaranteedProfitPrice = +(actualEntry + 2.00).toFixed(2);
-        if (peakProfit >= 2.00 && currentBid <= minGuaranteedProfitPrice) {
+        if (!is5rRunner && peakProfit >= 2.00 && currentBid <= minGuaranteedProfitPrice) {
           newStatus   = "TARGET_HIT";
           closedPrice = minGuaranteedProfitPrice;
           pnlPoints   = 2.00;
@@ -522,10 +523,11 @@ export async function checkRunningTrades(): Promise<void> {
         }
 
         // ── 2-POINT PROFIT BOOKING WHEN MARKET WAS IN FAVOR (SHORT) ──
-        // If market was in favor (peakProfit >= 2.00 pts) and price pulls back to or above entry - 2.0 pts:
-        // Book at least +2.0 points profit immediately (never let a winning trade become a loss or scratch)!
+        // For scalp trades: book profit if retracing.
+        // For 5R ORB Runner trades: strictly DO NOT cut winners early! Let the 5R runner run to target.
+        const is5rRunner = trade.tradeDuration?.includes("5R") || trade.signalType === "BREAKOUT" || (distanceToInitialTarget >= 14.0);
         const minGuaranteedProfitPrice = +(actualEntry - 2.00).toFixed(2);
-        if (peakProfit >= 2.00 && currentAsk >= minGuaranteedProfitPrice) {
+        if (!is5rRunner && peakProfit >= 2.00 && currentAsk >= minGuaranteedProfitPrice) {
           newStatus   = "TARGET_HIT";
           closedPrice = minGuaranteedProfitPrice;
           pnlPoints   = 2.00;

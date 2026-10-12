@@ -27,4 +27,10 @@ export interface SystemSettings {
     minAtrFilter: number;
     asianSessionMinConfidence: number;
   };
+  engineMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+  orbRiskPerTrade?: number;
+  orbTargetMultiple?: number;
+  orbStopAtrMultiplier?: number;
+  orbAllowLondonSession?: boolean;
+  orbNewsFilterEnabled?: boolean;
 }

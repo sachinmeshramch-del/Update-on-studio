@@ -58,6 +58,26 @@ function ReversalBadge() {
   );
 }
 
+// ── ORB Breakout badge ─────────────────────────────────────────────────────────
+function OrbBadge() {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40">
+      <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tracking-wide">ORB BREAKOUT</span>
+    </div>
+  );
+}
+
+// ── Dual Synergy badge ─────────────────────────────────────────────────────────
+function DualSynergyBadge() {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 animate-pulse">
+      <Zap className="w-3.5 h-3.5 text-amber-500" />
+      <span className="text-xs font-bold text-amber-500 tracking-wide">DUAL ENGINE SYNERGY</span>
+    </div>
+  );
+}
+
 // ── Strength badge ─────────────────────────────────────────────────────────────
 function StrengthBadge({ strength }: { strength: "STRONG" | "NORMAL" | null }) {
   if (strength === "STRONG") return (
@@ -307,8 +327,9 @@ export function SignalPanel() {
                   </div>
                 )}
                 {signalType === "RANGE" && <RangeBadge />}
-                
                 {signalType === "REVERSAL" && <ReversalBadge />}
+                {signalType === "ORB_BREAKOUT" && <OrbBadge />}
+                {signalData.dualEngine?.activeEngine === "DUAL_SYNERGY" && <DualSynergyBadge />}
                 {signalStrength && <StrengthBadge strength={signalStrength} />}
                 {cooldownRemaining > 0 && <CooldownTimer initialSeconds={cooldownRemaining} />}
                 {(spikeCooldownRemaining ?? 0) > 0 && (
@@ -494,10 +515,15 @@ export function SignalPanel() {
             "border-border bg-black/30"
           }`}>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-              <ShieldX className="w-3.5 h-3.5 text-red-600 dark:text-red-400" /> Stop Loss
+              <ShieldX className="w-3.5 h-3.5 text-red-600 dark:text-red-400" /> Dynamic SL
             </div>
             <span className="text-sm font-bold font-mono tabular-nums text-red-600 dark:text-red-400">{formatPrice(stopLoss)}</span>
-            <span className="text-[10px] text-muted-foreground font-mono">{slDist.toFixed(2)} pts</span>
+            <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+              <span>{slDist.toFixed(2)} pts</span>
+              {indicators?.atr ? (
+                <span className="text-[9px] text-amber-500 font-semibold">({(slDist / indicators.atr).toFixed(1)}x ATR)</span>
+              ) : null}
+            </span>
           </div>
 
           <div className={`border rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
@@ -513,13 +539,60 @@ export function SignalPanel() {
           </div>
         </div>
 
-        {/* ── Scalp Execution Engine Badge ─────────────────────────────────── */}
+        {/* ── Hybrid Dual-Engine Architecture Card ─────────────────────────── */}
+        <div className="rounded-xl border border-border/80 bg-black/40 p-3.5 flex flex-col gap-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 font-semibold text-foreground">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Hybrid Dual-Engine Status</span>
+            </div>
+            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+              signalData?.dualEngine?.activeEngine === "DUAL_SYNERGY"
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-500"
+                : signalData?.dualEngine?.activeEngine === "DETERMINISTIC_ORB"
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
+                : "bg-sky-500/15 border-sky-500/40 text-sky-400"
+            }`}>
+              {signalData?.dualEngine?.activeEngine === "DUAL_SYNERGY"
+                ? "DUAL SYNERGY ACTIVE"
+                : signalData?.dualEngine?.activeEngine === "DETERMINISTIC_ORB"
+                ? "ORB BREAKOUT ACTIVE"
+                : "ENGINE A: SMC CONFLUENCE"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="bg-black/30 rounded-lg p-2 border border-border/50">
+              <span className="text-[10px] text-muted-foreground block font-medium">Engine A (SMC Confluence)</span>
+              <span className="font-semibold text-foreground">Multi-Timeframe Structure & FVG</span>
+            </div>
+            <div className="bg-black/30 rounded-lg p-2 border border-border/50">
+              <span className="text-[10px] text-muted-foreground block font-medium">
+                Engine B (Deterministic ORB)
+              </span>
+              <span className="font-semibold text-foreground">
+                {signalData?.dualEngine?.orbStatus?.session || "Session"} {signalData?.dualEngine?.orbStatus?.stage ? `· ${String(signalData.dualEngine.orbStatus.stage).replace('_', ' ')}` : "· Active"}
+              </span>
+            </div>
+          </div>
+
+          {signalData?.dualEngine?.orbRange && (
+            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground bg-black/20 rounded-lg px-2.5 py-1.5 border border-border/30">
+              <span>ORB High: <strong className="text-foreground">{formatPrice(signalData.dualEngine.orbRange.high)}</strong></span>
+              <span>ORB Low: <strong className="text-foreground">{formatPrice(signalData.dualEngine.orbRange.low)}</strong></span>
+              <span>Width: <strong className="text-amber-400">{signalData.dualEngine.orbRange.range.toFixed(2)} pt</strong></span>
+              <span>Mid: <strong className="text-sky-400">{formatPrice(signalData.dualEngine.orbRange.mid)}</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Volatility Shield Execution Engine Badge ─────────────────────────────────── */}
         <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-500">
           <div className="flex items-center gap-1.5 font-medium">
             <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>High-Frequency Scalper: 1m Micro-Structure · Tight SL (1.5–3.0pt) · Fast BE (+1.2pt) · Quick TP (+2.2–5.0pt)</span>
+            <span>Dynamic ATR Volatility Shield: ATR-Anchored Stop Loss · Anti-Liquidation Cushion · Structure-Protected Levels</span>
           </div>
-          <span className="text-[10px] font-mono text-amber-400/90 uppercase hidden sm:inline font-bold">1m Execution Active</span>
+          <span className="text-[10px] font-mono text-amber-400/90 uppercase hidden sm:inline font-bold">ATR Protected</span>
         </div>
 
         {/* ── Current Indicators Quick-View ─────────────────────────────────── */}

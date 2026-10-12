@@ -8,7 +8,11 @@ import {
   Check, 
   X,
   Lock,
-  Sparkles
+  Sparkles,
+  Zap,
+  Target,
+  Brain,
+  Layers
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/firebase/auth-context";
@@ -28,9 +32,7 @@ import { cn } from "@/lib/utils";
 
 interface Settings {
   tradingMode?: "REAL";
-  
   realAccountId: string;
-  
   autoTradingRealEnabled: boolean;
   autoTradingEnabled?: boolean;
   metaApiSymbol?: string;
@@ -38,6 +40,12 @@ interface Settings {
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
   dashboardPasscode?: string;
+  engineMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+  orbRiskPerTrade?: number;
+  orbTargetMultiple?: number;
+  orbStopAtrMultiplier?: number;
+  orbAllowLondonSession?: boolean;
+  orbNewsFilterEnabled?: boolean;
 }
 
 export function SettingsDialog() {
@@ -61,15 +69,19 @@ export function SettingsDialog() {
 
   const [formData, setFormData] = useState<Settings>({
     tradingMode: "REAL",
-    
     realAccountId: "",
-    
     autoTradingRealEnabled: false,
     autoTradingEnabled: false,
     metaApiSymbol: "XAUUSD",
     riskPerTradePercent: 1.0,
     dailyProfitTargetPercent: 3.0,
-    dailyStopLossPercent: 5.0
+    dailyStopLossPercent: 5.0,
+    engineMode: "HYBRID_DUAL",
+    orbRiskPerTrade: 2.0,
+    orbTargetMultiple: 5.0,
+    orbStopAtrMultiplier: 1.5,
+    orbAllowLondonSession: false,
+    orbNewsFilterEnabled: true,
   });
 
   useEffect(() => {
@@ -232,6 +244,113 @@ export function SettingsDialog() {
                   placeholder="e.g. 9b2c...1f"
                   className="font-mono text-xs sm:text-sm h-9 border-red-500/30 focus-visible:ring-red-500/30"
                 />
+              </div>
+            </div>
+
+            {/* Engine Architecture & Strategy Mode */}
+            <div className="p-3 sm:p-3.5 bg-muted/30 rounded-xl border border-border/70 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Engine Architecture & Strategy</span>
+                </div>
+                <span className="text-[10px] font-mono text-amber-500">
+                  {formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, engineMode: "HYBRID_DUAL" })}
+                  className={cn(
+                    "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                    formData.engineMode === "HYBRID_DUAL"
+                      ? "bg-amber-500/10 border-amber-500/50 text-foreground"
+                      : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5" />
+                      Hybrid Dual-Engine (Recommended)
+                    </span>
+                    {formData.engineMode === "HYBRID_DUAL" && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Deterministic NY 3h ORB execution + Hermes AI Risk Guardian (2% sizing, 5R runner locked).
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, engineMode: "DETERMINISTIC_ORB" })}
+                  className={cn(
+                    "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                    formData.engineMode === "DETERMINISTIC_ORB"
+                      ? "bg-amber-500/10 border-amber-500/50 text-foreground"
+                      : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-sky-500" />
+                      Deterministic NY 3h ORB Engine
+                    </span>
+                    {formData.engineMode === "DETERMINISTIC_ORB" && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    100% deterministic rules: 16:00 UTC breakout + EMA50 trend filter + strict 5R target.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, engineMode: "HERMES_ADAPTIVE" })}
+                  className={cn(
+                    "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                    formData.engineMode === "HERMES_ADAPTIVE"
+                      ? "bg-amber-500/10 border-amber-500/50 text-foreground"
+                      : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <Brain className="w-3.5 h-3.5 text-purple-500" />
+                      Hermes Adaptive Confluence
+                    </span>
+                    {formData.engineMode === "HERMES_ADAPTIVE" && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Multi-indicator autonomous self-tuning swing & scalp engine.
+                  </p>
+                </button>
+              </div>
+
+              {/* Sizing & Targets */}
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
+                <div className="grid gap-1">
+                  <Label htmlFor="diag-orb-risk" className="text-[10px] text-muted-foreground">ORB Risk (%)</Label>
+                  <Input
+                    id="diag-orb-risk"
+                    type="number"
+                    step="0.1"
+                    value={formData.orbRiskPerTrade ?? 2.0}
+                    onChange={(e) => setFormData({ ...formData, orbRiskPerTrade: parseFloat(e.target.value) || 0 })}
+                    className="font-mono text-xs h-8 bg-background"
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="diag-orb-rr" className="text-[10px] text-muted-foreground">Target Multiple (R)</Label>
+                  <Input
+                    id="diag-orb-rr"
+                    type="number"
+                    step="0.5"
+                    value={formData.orbTargetMultiple ?? 5.0}
+                    onChange={(e) => setFormData({ ...formData, orbTargetMultiple: parseFloat(e.target.value) || 0 })}
+                    className="font-mono text-xs h-8 bg-background"
+                  />
+                </div>
               </div>
             </div>
 

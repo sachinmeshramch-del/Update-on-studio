@@ -33,19 +33,27 @@ export function IndicatorsRow() {
   const trendColor = (t: string) =>
     t === "BULLISH" ? "text-success" : t === "BEARISH" ? "text-destructive" : "text-muted-foreground";
 
-  const emaCross = indicators.ema9 > indicators.ema21;
+  const ema9Val = indicators.ema9 ?? 0;
+  const ema21Val = indicators.ema21 ?? 0;
+  const rsiVal = indicators.rsi ?? 50;
+  const atrVal = indicators.atr ?? 0;
+  const macdHistVal = indicators.macdHistogram ?? 0;
+  const trend5mVal = indicators.trend5m || (indicators as any).trendPrimary || "NEUTRAL";
+  const trend1mVal = indicators.trend1m || (indicators as any).trendEntry || "NEUTRAL";
+
+  const emaCross = ema9Val > ema21Val;
 
   const statCards = [
     {
       label: "EMA 9",
       sublabel: "5m fast",
-      value: indicators.ema9.toFixed(1),
+      value: ema9Val.toFixed(1),
       color: emaCross ? "text-success" : "text-destructive",
     },
     {
       label: "EMA 21",
       sublabel: "5m slow",
-      value: indicators.ema21.toFixed(1),
+      value: ema21Val.toFixed(1),
       color: emaCross ? "text-success" : "text-destructive",
     },
     {
@@ -57,36 +65,36 @@ export function IndicatorsRow() {
     {
       label: "RSI (14)",
       sublabel: "5m",
-      value: indicators.rsi.toFixed(1),
-      color: indicators.rsi > 65
+      value: rsiVal.toFixed(1),
+      color: rsiVal > 65
         ? "text-destructive"
-        : indicators.rsi < 35
+        : rsiVal < 35
         ? "text-success"
         : "text-foreground",
     },
     {
       label: "MACD",
       sublabel: "5m histogram",
-      value: indicators.macdHistogram > 0 ? "BULLISH" : "BEARISH",
-      color: indicators.macdHistogram > 0 ? "text-success" : "text-destructive",
+      value: macdHistVal > 0 ? "BULLISH" : "BEARISH",
+      color: macdHistVal > 0 ? "text-success" : "text-destructive",
     },
     {
       label: "ATR",
       sublabel: "5m volatility",
-      value: indicators.atr.toFixed(2),
+      value: atrVal.toFixed(2),
       color: "text-foreground",
     },
     {
       label: "5m Trend",
       sublabel: "context",
-      value: indicators.trend5m,
-      color: trendColor(indicators.trend5m),
+      value: trend5mVal,
+      color: trendColor(trend5mVal),
     },
     {
       label: "1m Trend",
       sublabel: "entry confirm",
-      value: indicators.trend1m,
-      color: trendColor(indicators.trend1m),
+      value: trend1mVal,
+      color: trendColor(trend1mVal),
     },
   ];
 

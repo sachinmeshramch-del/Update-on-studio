@@ -7,7 +7,11 @@ import {
   ArrowLeft, 
   Sliders, 
   ShieldAlert,
-  Check
+  Check,
+  Zap,
+  Brain,
+  Layers,
+  Target
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/firebase/auth-context";
@@ -22,14 +26,22 @@ import { motion } from "framer-motion";
 
 interface Settings {
   tradingMode: "REAL";
+  demoAccountId?: string;
   realAccountId: string;
   autoTradingRealEnabled: boolean;
+  autoTradingDemoEnabled?: boolean;
   autoTradingEnabled?: boolean;
   metaApiSymbol?: string;
   riskPerTradePercent?: number;
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
   dashboardPasscode?: string;
+  engineMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+  orbRiskPerTrade?: number;
+  orbTargetMultiple?: number;
+  orbStopAtrMultiplier?: number;
+  orbAllowLondonSession?: boolean;
+  orbNewsFilterEnabled?: boolean;
 }
 
 export default function SettingsPage() {
@@ -60,6 +72,12 @@ export default function SettingsPage() {
     riskPerTradePercent: 1.0,
     dailyProfitTargetPercent: 3.0,
     dailyStopLossPercent: 5.0,
+    engineMode: "HYBRID_DUAL",
+    orbRiskPerTrade: 2.0,
+    orbTargetMultiple: 5.0,
+    orbStopAtrMultiplier: 1.5,
+    orbAllowLondonSession: false,
+    orbNewsFilterEnabled: true,
   });
 
   useEffect(() => {
@@ -75,6 +93,12 @@ export default function SettingsPage() {
         riskPerTradePercent: settings.riskPerTradePercent ?? 1.0,
         dailyProfitTargetPercent: settings.dailyProfitTargetPercent ?? 3.0,
         dailyStopLossPercent: settings.dailyStopLossPercent ?? 5.0,
+        engineMode: settings.engineMode ?? "HYBRID_DUAL",
+        orbRiskPerTrade: settings.orbRiskPerTrade ?? 2.0,
+        orbTargetMultiple: settings.orbTargetMultiple ?? 5.0,
+        orbStopAtrMultiplier: settings.orbStopAtrMultiplier ?? 1.5,
+        orbAllowLondonSession: settings.orbAllowLondonSession ?? false,
+        orbNewsFilterEnabled: settings.orbNewsFilterEnabled ?? true,
       });
     }
   }, [settings]);
@@ -321,6 +345,142 @@ export default function SettingsPage() {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Engine Architecture & Strategy Mode */}
+              <div className="p-4 bg-muted/30 rounded-xl border border-border/70 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                    <Layers className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Engine Architecture & Strategy</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-amber-500">
+                    {formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, engineMode: "HYBRID_DUAL" })}
+                    className={cn(
+                      "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                      formData.engineMode === "HYBRID_DUAL"
+                        ? "bg-amber-500/10 border-amber-500/50 text-foreground shadow-sm"
+                        : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5" />
+                        Hybrid Dual-Engine (Recommended)
+                      </span>
+                      {formData.engineMode === "HYBRID_DUAL" && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Deterministic 3-Hour NY Opening Range Breakout (16:00 UTC) with EMA50 trend filter, verified through Hermes AI Risk Guardian (spread check, 2% lot sizing & strict 5R runner discipline).
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, engineMode: "DETERMINISTIC_ORB" })}
+                    className={cn(
+                      "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                      formData.engineMode === "DETERMINISTIC_ORB"
+                        ? "bg-amber-500/10 border-amber-500/50 text-foreground shadow-sm"
+                        : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold flex items-center gap-1.5">
+                        <Target className="w-3.5 h-3.5 text-sky-500" />
+                        Deterministic NY 3h ORB Engine
+                      </span>
+                      {formData.engineMode === "DETERMINISTIC_ORB" && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      100% deterministic mathematical execution. Fires at 16:00 UTC if price breaks out of the 13:00-15:00 UTC 3-hour window and aligns with EMA50. Strict 5R profit target.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, engineMode: "HERMES_ADAPTIVE" })}
+                    className={cn(
+                      "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                      formData.engineMode === "HERMES_ADAPTIVE"
+                        ? "bg-amber-500/10 border-amber-500/50 text-foreground shadow-sm"
+                        : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5 text-purple-500" />
+                        Hermes AI Adaptive Confluence
+                      </span>
+                      {formData.engineMode === "HERMES_ADAPTIVE" && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Multi-indicator adaptive confluence engine with autonomous hyper-parameter reflection across sessions and swing reversals.
+                    </p>
+                  </button>
+                </div>
+
+                {/* Quantitative ORB Parameters */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-border/50">
+                  <div className="space-y-1">
+                    <Label htmlFor="page-orb-risk" className="text-xs text-muted-foreground">ORB Risk / Trade (%)</Label>
+                    <Input
+                      id="page-orb-risk"
+                      type="number"
+                      step="0.1"
+                      value={formData.orbRiskPerTrade ?? 2.0}
+                      onChange={(e) => setFormData({ ...formData, orbRiskPerTrade: parseFloat(e.target.value) || 0 })}
+                      className="font-mono text-xs sm:text-sm h-10 bg-background"
+                    />
+                    <span className="text-[10px] text-muted-foreground">Article tested: 2.0%</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="page-orb-target" className="text-xs text-muted-foreground">Target Multiple (R)</Label>
+                    <Input
+                      id="page-orb-target"
+                      type="number"
+                      step="0.5"
+                      value={formData.orbTargetMultiple ?? 5.0}
+                      onChange={(e) => setFormData({ ...formData, orbTargetMultiple: parseFloat(e.target.value) || 0 })}
+                      className="font-mono text-xs sm:text-sm h-10 bg-background"
+                    />
+                    <span className="text-[10px] text-muted-foreground">Strict 5R asymmetric</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="page-orb-stop" className="text-xs text-muted-foreground">Stop Loss (x ATR)</Label>
+                    <Input
+                      id="page-orb-stop"
+                      type="number"
+                      step="0.1"
+                      value={formData.orbStopAtrMultiplier ?? 1.5}
+                      onChange={(e) => setFormData({ ...formData, orbStopAtrMultiplier: parseFloat(e.target.value) || 0 })}
+                      className="font-mono text-xs sm:text-sm h-10 bg-background"
+                    />
+                    <span className="text-[10px] text-muted-foreground">1.5x ATR14</span>
+                  </div>
+                </div>
+
+                {/* London Session ORB Extension */}
+                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="page-london-orb" className="text-xs font-semibold cursor-pointer">London Session ORB (07:00-09:00 UTC)</Label>
+                    <p className="text-[11px] text-muted-foreground">Run identical 3-hour breakout logic during London open to double trade frequency.</p>
+                  </div>
+                  <Switch
+                    id="page-london-orb"
+                    checked={formData.orbAllowLondonSession ?? false}
+                    onCheckedChange={(checked) => setFormData({ ...formData, orbAllowLondonSession: checked })}
+                  />
                 </div>
               </div>
 

@@ -154,6 +154,12 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       hermesMaxDrawdownLimit: 5.0,
       hermesStrategyVersion: 'v1.0.0',
       hermesParameters: { ...DEFAULT_HERMES_PARAMETERS },
+      engineMode: 'HYBRID_DUAL',
+      orbRiskPerTrade: 2.0,
+      orbTargetMultiple: 5.0,
+      orbStopAtrMultiplier: 1.5,
+      orbAllowLondonSession: false,
+      orbNewsFilterEnabled: true,
     };
     cachedSettings = defaultSettings;
     lastSettingsFetch = now;
@@ -172,6 +178,12 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       ...DEFAULT_HERMES_PARAMETERS,
       ...(raw.hermesParameters || {})
     },
+    engineMode: raw.engineMode ?? 'HYBRID_DUAL',
+    orbRiskPerTrade: raw.orbRiskPerTrade ?? 2.0,
+    orbTargetMultiple: raw.orbTargetMultiple ?? 5.0,
+    orbStopAtrMultiplier: raw.orbStopAtrMultiplier ?? 1.5,
+    orbAllowLondonSession: raw.orbAllowLondonSession ?? false,
+    orbNewsFilterEnabled: raw.orbNewsFilterEnabled ?? true,
     ...raw
   } as SystemSettings;
   cachedSettings = settings;

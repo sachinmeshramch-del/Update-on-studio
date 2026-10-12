@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { LogOut, Activity, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server , RefreshCw } from "lucide-react";
+import { LogOut, Activity, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server, RefreshCw, Brain } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePriceStream } from "@/hooks/usePriceStream";
@@ -433,6 +433,16 @@ export function Header() {
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>
+            <Link href="/diagnostics">
+              <button
+                title="Hermes AI Brain Telemetry & Diagnostics"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-amber-500/10 hover:text-amber-500 hover:border-amber-500/30 transition-all shrink-0 cursor-pointer"
+                id="header-diagnostics-button"
+              >
+                <Brain className="w-3.5 h-3.5 text-amber-500" />
+              </button>
+            </Link>
+
             <SettingsDialog />
     
             <ModeToggle />

@@ -10,6 +10,9 @@ import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal
 import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById, getSystemSettings } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
+import { calculateDynamicAtrStopLoss, type AtrRegimePreset } from "../lib/dynamicAtrStopLoss.js";
+import { calcATR } from "../lib/technicalIndicators.js";
+import { getMetaApiHistoricalOHLC } from "../lib/metaApiFeed.js";
 
 // Start background trade outcome tracker
 
@@ -272,6 +275,75 @@ router.get("/signal", async (req, res) => {
         req.log.warn({ err: err.message }, "Error generating signal");
         res.status(500).json({ error: "signal_error", message: "Failed to generate trading signal" });
     }
+  }
+});
+
+// ── Deterministic ORB Status endpoint (Hybrid Dual-Engine) ─────────────────
+router.get("/orb/status", async (req, res) => {
+  try {
+    const { getDeterministicOrbStatus } = await import("../lib/deterministicOrbEngine.js");
+    const live = getLatestPrice();
+    const status = await getDeterministicOrbStatus(live?.price);
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: "orb_status_error", message: err?.message || String(err) });
+  }
+});
+
+// ── Dynamic ATR Stop-Loss Calculator endpoint ──────────────────────────────
+router.all("/atr-calculator", async (req: Request, res: Response) => {
+  try {
+    const params = req.method === "POST" ? req.body : req.query;
+    const live = getLatestPrice();
+    const livePrice = live?.price ?? 2650.0;
+    const liveSpread = live?.spread ?? 0.50;
+
+    let candles: any[] = [];
+    try {
+      candles = await getMetaApiHistoricalOHLC("5m", 35);
+    } catch {}
+
+    let liveAtr = 2.65;
+    if (candles && candles.length >= 15) {
+      const atrs = calcATR(candles, 14);
+      liveAtr = atrs[atrs.length - 1] ?? 2.65;
+    }
+
+    const direction = (String(params.direction || "LONG").toUpperCase() === "SHORT" ? "SHORT" : "LONG") as "LONG" | "SHORT";
+    const currentPrice = params.entryPrice ? Number(params.entryPrice) : livePrice;
+    const atr = params.atr ? Number(params.atr) : liveAtr;
+    const spread = params.spread ? Number(params.spread) : liveSpread;
+    const preset = (params.preset as AtrRegimePreset) || "STANDARD";
+    const customMultiplier = params.multiplier ? Number(params.multiplier) : undefined;
+    const accountEquity = params.equity ? Number(params.equity) : 1000;
+    const riskPercent = params.riskPercent ? Number(params.riskPercent) : 1.0;
+    const contractSize = params.contractSize ? Number(params.contractSize) : 100;
+
+    const result = calculateDynamicAtrStopLoss({
+      currentPrice,
+      direction,
+      atr,
+      candlesPrimary: candles,
+      liveSpread: spread,
+      preset,
+      customMultiplier,
+      accountEquity,
+      riskPercent,
+      contractSize,
+    });
+
+    res.json({
+      success: true,
+      liveMarket: {
+        price: livePrice,
+        spread: liveSpread,
+        atr5m: Number(liveAtr.toFixed(2)),
+      },
+      ...result,
+    });
+  } catch (err: any) {
+    logger.error({ err: err.message }, "Error calculating dynamic ATR stop loss");
+    res.status(500).json({ success: false, error: err.message || "Failed to calculate dynamic stop loss" });
   }
 });
 

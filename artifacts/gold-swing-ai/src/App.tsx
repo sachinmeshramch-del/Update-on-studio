@@ -2,6 +2,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -51,12 +52,15 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import DiagnosticsPage from "@/pages/diagnostics";
+
 function Router() {
   return (
     <AuthGuard>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/diagnostics" component={DiagnosticsPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
@@ -75,6 +79,7 @@ function App() {
                 <Router />
               </WouterRouter>
               <Toaster />
+              <SonnerToaster />
             </TooltipProvider>
           </AuthProvider>
         </ThemeProvider>

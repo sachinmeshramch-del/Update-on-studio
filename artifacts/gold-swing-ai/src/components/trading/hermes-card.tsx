@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,11 @@ import {
   ArrowRight,
   Info,
   Layers,
+  Zap,
+  Target,
+  Shield,
+  Scale,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -85,6 +91,49 @@ export function HermesCard() {
       return res.json();
     },
     refetchInterval: 8000,
+  });
+
+  const { data: orbData } = useQuery<{
+    engineMode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+    orbRiskPerTrade: number;
+    orbTargetMultiple: number;
+    orbStopAtrMultiplier: number;
+    orbAllowLondonSession: boolean;
+    orbState: any;
+  }>({
+    queryKey: ["/api/hermes/orb-state"],
+    queryFn: async () => {
+      const res = await fetch("/api/hermes/orb-state");
+      if (!res.ok) throw new Error("Failed to load ORB state");
+      return res.json();
+    },
+    refetchInterval: 8000,
+  });
+
+  const setEngineModeMutation = useMutation({
+    mutationFn: async (mode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE") => {
+      const res = await fetch("/api/hermes/set-engine-mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engineMode: mode }),
+      });
+      if (!res.ok) throw new Error("Failed to update engine mode");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/hermes/orb-state"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/signal"] });
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success("Engine Mode Updated", {
+        description: `Active Mode: ${data.engineMode.replace(/_/g, " ")}`,
+        duration: 3000,
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Failed to update engine mode", {
+        description: err.message,
+      });
+    },
   });
 
   const reflectMutation = useMutation({
@@ -272,6 +321,17 @@ export function HermesCard() {
               <span>Guardrails</span>
             </button>
 
+            {/* View Full Diagnostics & Health Telemetry */}
+            <Link href="/diagnostics">
+              <button
+                className="text-xs font-medium flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer bg-black/5 dark:bg-white/5 border-border text-muted-foreground hover:text-amber-400 hover:border-amber-500/40"
+                title="View Full Diagnostics & Brain Health Telemetry"
+              >
+                <Activity className="w-3.5 h-3.5 text-amber-500" />
+                <span className="hidden sm:inline">Diagnostics</span>
+              </button>
+            </Link>
+
             {/* Auto-Tuning Switch */}
             <div className="flex items-center gap-2 pl-2 border-l border-border">
               <span className="text-xs font-semibold text-muted-foreground hidden sm:inline">Auto-Tuning</span>
@@ -411,9 +471,153 @@ export function HermesCard() {
               Run Initial Baseline Audit
             </button>
           </div>
-        )}
+        {/* ── HYBRID DUAL-ENGINE ARCHITECTURE & DETERMINISTIC ORB TELEMETRY ── */}
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/[0.07] via-background to-orange-500/[0.03] space-y-3.5 shadow-sm">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-amber-500" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold tracking-tight text-foreground uppercase">
+                    Execution Engine Architecture
+                  </span>
+                  <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/10 border-amber-500/40 text-amber-500">
+                    {orbData?.engineMode === "HYBRID_DUAL"
+                      ? "Hybrid Dual-Engine"
+                      : orbData?.engineMode === "DETERMINISTIC_ORB"
+                      ? "Deterministic ORB"
+                      : "Hermes Adaptive"}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  100% Deterministic 3h NY ORB Trigger (16:00 UTC) + Hermes AI Risk Guardian (5R Asymmetric Payoff)
+                </p>
+              </div>
+            </div>
 
-        {/* ── Active Calibrated Strategy Parameters (Real-time feeding into Signal Engine) ── */}
+            {/* Quick Engine Mode Switcher */}
+            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/20 dark:bg-white/5 border border-border">
+              {(
+                [
+                  { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
+                  { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
+                  { id: "HERMES_ADAPTIVE", label: "Adaptive", icon: Brain },
+                ] as const
+              ).map((mode) => {
+                const Icon = mode.icon;
+                const isSelected = (orbData?.engineMode || "HYBRID_DUAL") === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={() => setEngineModeMutation.mutate(mode.id)}
+                    disabled={setEngineModeMutation.isPending}
+                    className={cn(
+                      "px-2.5 py-1 rounded text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer",
+                      isSelected
+                        ? "bg-amber-500 text-black shadow-sm font-bold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10"
+                    )}
+                  >
+                    <Icon className="w-3 h-3" />
+                    <span>{mode.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Real-time ORB Session Telemetry Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
+            {/* NY 3-Hour Range */}
+            <div className="p-2.5 rounded-lg bg-card/80 border border-border space-y-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                <span>3h NY Range</span>
+                <span className="font-mono text-amber-500">
+                  {orbData?.orbState?.phase === "OBSERVING_RANGE"
+                    ? "Recording..."
+                    : orbData?.orbState?.phase === "ACTIVE_DECISION"
+                    ? "Active 16:00"
+                    : orbData?.orbState?.phase === "PRE_SESSION"
+                    ? "Pre-NY"
+                    : "Closed"}
+                </span>
+              </span>
+              <div className="font-mono font-bold text-foreground text-sm">
+                {orbData?.orbState?.nyRangeHigh && orbData?.orbState?.nyRangeLow
+                  ? `$${orbData.orbState.nyRangeLow.toFixed(1)} – $${orbData.orbState.nyRangeHigh.toFixed(1)}`
+                  : "$— – $—"}
+              </div>
+              <span className="text-[10px] text-muted-foreground block font-mono">
+                Span: {orbData?.orbState?.nyRangeSpan ? `${orbData.orbState.nyRangeSpan.toFixed(1)} pts` : "Observing"}
+              </span>
+            </div>
+
+            {/* 1h EMA50 Filter */}
+            <div className="p-2.5 rounded-lg bg-card/80 border border-border space-y-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                <span>1h EMA50 Filter</span>
+                <span className={cn(
+                  "font-mono font-bold",
+                  orbData?.orbState?.trendFilterStatus === "BULLISH"
+                    ? "text-emerald-500"
+                    : orbData?.orbState?.trendFilterStatus === "BEARISH"
+                    ? "text-red-500"
+                    : "text-muted-foreground"
+                )}>
+                  {orbData?.orbState?.trendFilterStatus || "NEUTRAL"}
+                </span>
+              </span>
+              <div className="font-mono font-bold text-foreground text-sm">
+                {orbData?.orbState?.ema50 ? `$${orbData.orbState.ema50.toFixed(1)}` : "$—"}
+              </div>
+              <span className="text-[10px] text-muted-foreground block font-mono">
+                Spot: ${orbData?.orbState?.currentPrice?.toFixed(1) || "—"}
+              </span>
+            </div>
+
+            {/* Asymmetric 5R Target */}
+            <div className="p-2.5 rounded-lg bg-card/80 border border-border space-y-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                <span>Asymmetric Target</span>
+                <span className="font-mono text-emerald-500 font-bold">5.0 R:R</span>
+              </span>
+              <div className="font-mono font-bold text-emerald-500 text-sm">
+                +{orbData?.orbState?.targetDistance ? `${orbData.orbState.targetDistance.toFixed(1)} pts` : "15.0 pts"}
+              </div>
+              <span className="text-[10px] text-muted-foreground block font-mono">
+                Stop: 1.5x ATR ({orbData?.orbState?.stopDistance ? `${orbData.orbState.stopDistance.toFixed(1)} pts` : "3.0 pts"})
+              </span>
+            </div>
+
+            {/* Empirical Edge & Runner Discipline */}
+            <div className="p-2.5 rounded-lg bg-card/80 border border-border space-y-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                <span>Backtest Edge</span>
+                <span className="font-mono text-emerald-500 font-bold">PF 2.71 OOS</span>
+              </span>
+              <div className="font-mono font-bold text-foreground text-sm">
+                44.4% WR · 2.38 R:R
+              </div>
+              <span className="text-[10px] text-emerald-500 block font-mono font-semibold">
+                ✓ 0 Partial TP (5R Runner)
+              </span>
+            </div>
+          </div>
+
+          {/* Current Trigger State Reason Banner */}
+          {orbData?.orbState?.reason && (
+            <div className="p-2.5 rounded-lg bg-black/25 border border-border/80 flex items-start gap-2 text-xs">
+              <Info className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                <strong className="text-foreground font-semibold">Engine Status:</strong>{" "}
+                {orbData.orbState.reason}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">

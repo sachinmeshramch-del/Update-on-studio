@@ -23,6 +23,15 @@ import { logger } from "./logger.js";
 import { sendTelegramNotification } from "./telegram.js";
 import { getLatestSignal, getRecentSignals, getRunningTrades, getSystemSettings } from "@workspace/db";
 import { getActiveHermesParameters } from "./hermesEngine.js";
+import { calculateDynamicAtrStopLoss, type DynamicAtrStopLossResult } from "./dynamicAtrStopLoss.js";
+import {
+  evaluateDeterministicOrb,
+  getDeterministicOrbStatus,
+  commitOrbSessionTrade,
+  type OrbStatus,
+  type OrbSignalResult
+} from "./deterministicOrbEngine.js";
+
 
 
 export interface SessionInfo {
@@ -59,7 +68,7 @@ export interface SignalResult {
   obScore:       number;  // 0-25
   candleScore:   number;  // -10 to +20, scaled by patternStrength
   candlePattern: string | null; // pattern name for display (null if none, "(pending)" suffix if awaiting confirmation)
-  signalType:    "TREND_FOLLOW" | "REVERSAL" | "RANGE";
+  signalType:    "TREND_FOLLOW" | "REVERSAL" | "RANGE" | "ORB_BREAKOUT";
   // ── Candlestick pattern confluence metadata ────────────────────────────
   patternDetected:      string | null;   // raw pattern name without status suffix
   patternStrength:      number;          // 0-100 wick-to-body quality score
@@ -74,13 +83,26 @@ export interface SignalResult {
     macdSignal:    number;
     macdHistogram: number;
     atr:           number;
-    trendPrimary: "BULLISH" | "BEARISH" | "NEUTRAL";
-    trendEntry: "BULLISH" | "BEARISH" | "NEUTRAL";
-    trend1h?: "BULLISH" | "BEARISH" | "NEUTRAL";
+    trend5m:       "BULLISH" | "BEARISH" | "NEUTRAL";
+    trend1m:       "BULLISH" | "BEARISH" | "NEUTRAL";
+    trendPrimary:  "BULLISH" | "BEARISH" | "NEUTRAL";
+    trendEntry:    "BULLISH" | "BEARISH" | "NEUTRAL";
+    trend1h?:      "BULLISH" | "BEARISH" | "NEUTRAL";
   };
   circuitBreakerActive: boolean;
   circuitBreakerRemainingMinutes: number;
   consecutiveLosses: number;
+  dynamicAtrStop?: DynamicAtrStopLossResult;
+  dualEngine?: {
+    activeEngine: "SMC_CONFLUENCE" | "DETERMINISTIC_ORB" | "DUAL_SYNERGY";
+    orbStatus: OrbStatus;
+    orbRange?: {
+      high: number;
+      low: number;
+      range: number;
+      mid: number;
+    } | null;
+  };
 }
 
 interface LastSignalState {
@@ -488,6 +510,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       indicators: {
         rsi: 50, ema9: currentPrice, ema21: currentPrice,
         macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
+        trend5m: "NEUTRAL", trend1m: "NEUTRAL",
         trendPrimary: "NEUTRAL", trendEntry: "NEUTRAL",
       },
       circuitBreakerActive: false,
@@ -516,7 +539,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       signalStrength: null, emaScore: 0, rsiScore: 0, macdScore: 0,
       momentumScore: 0, fvgScore: 0, sweepScore: 0, obScore: 0, candleScore: 0, candlePattern: null, signalType: "TREND_FOLLOW" as const,
       patternDetected: null, patternStrength: 0, contextValid: false, confluenceMet: false, confirmationStatus: null,
-      indicators: { rsi: 50, ema9: currentPrice, ema21: currentPrice, macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3, trendPrimary: "NEUTRAL" as const, trendEntry: "NEUTRAL" as const },
+      indicators: { rsi: 50, ema9: currentPrice, ema21: currentPrice, macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3, trend5m: "NEUTRAL" as const, trend1m: "NEUTRAL" as const, trendPrimary: "NEUTRAL" as const, trendEntry: "NEUTRAL" as const },
     };
     return {
       ...base,
@@ -1529,77 +1552,33 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       }
     }
 
-    // ── SL / TP: Volatility- & Structure-Calibrated Dynamic Stops for Gold ──
-    const { nearestSwingHigh, nearestSwingLow } = getNearestSwingLevels(candlesPrimary, 25);
-    let slDist: number;
+    // ── SL / TP: Dynamic ATR Stop-Loss Calculator for Gold (Anti-Liquidation Engine) ──
     const calcDir = finalSignal !== "HOLD" ? finalSignal : intendedSignal;
 
-    // Gold (XAUUSD) requires adequate breathing room outside broker spread & normal sub-minute tick noise.
-    // Minimum SL floor is 5.0 points ($5.00) so trades aren't prematurely choked by minor fluctuations.
-    // Maximum SL cap is 12.0 points ($12.00) to keep trade risk strictly bounded.
-    const goldSlFloor = 5.0; // $5.00 minimum breathing cushion
-    const goldSlCap   = 12.0; // $12.00 maximum risk cap for scalps / intraday
-    const spreadBuffer = Math.max(1.2, liveSpread * 2.2);
+    const dynamicAtrStop = calculateDynamicAtrStopLoss({
+      currentPrice,
+      direction: calcDir === "SHORT" ? "SHORT" : "LONG",
+      atr,
+      candlesPrimary,
+      liveSpread,
+      preset: signalType === "RANGE" ? "STANDARD" : "STANDARD",
+      signalType,
+      currentAdx,
+    });
 
-    if (calcDir === "LONG") {
-      let rawDist: number;
-      if (nearestSwingLow && currentPrice > nearestSwingLow && (currentPrice - nearestSwingLow) <= goldSlCap) {
-        // Anchor safely below confirmed swing low + spread cushion
-        rawDist = (currentPrice - nearestSwingLow) + spreadBuffer;
-      } else {
-        // ATR-proportional stop (0.60x ATR) or recent 5m lows
-        const recentLow = candlesPrimary && candlesPrimary.length >= 6
-          ? Math.min(...candlesPrimary.slice(-6).map(c => c.low))
-          : (currentPrice - 6.0);
-        const candleDist = (currentPrice > recentLow) ? (currentPrice - recentLow) + spreadBuffer : 6.0;
-        rawDist = Math.max(candleDist, atr * 0.60);
-      }
-      slDist = Number(Math.min(Math.max(rawDist, goldSlFloor), goldSlCap).toFixed(2));
-    } else if (calcDir === "SHORT") {
-      let rawDist: number;
-      if (nearestSwingHigh && nearestSwingHigh > currentPrice && (nearestSwingHigh - currentPrice) <= goldSlCap) {
-        // Anchor safely above confirmed swing high + spread cushion
-        rawDist = (nearestSwingHigh - currentPrice) + spreadBuffer;
-      } else {
-        // ATR-proportional stop (0.60x ATR) or recent 5m highs
-        const recentHigh = candlesPrimary && candlesPrimary.length >= 6
-          ? Math.max(...candlesPrimary.slice(-6).map(c => c.high))
-          : (currentPrice + 6.0);
-        const candleDist = (recentHigh > currentPrice) ? (recentHigh - currentPrice) + spreadBuffer : 6.0;
-        rawDist = Math.max(candleDist, atr * 0.60);
-      }
-      slDist = Number(Math.min(Math.max(rawDist, goldSlFloor), goldSlCap).toFixed(2));
-    } else {
-      slDist = 6.0;
-    }
+    let stopLoss: number = dynamicAtrStop.stopLossPrice;
+    let takeProfit: number = dynamicAtrStop.takeProfitTargets.tp2.price;
+    let slDist: number = dynamicAtrStop.stopLossDistance;
+    let tpDist: number = dynamicAtrStop.takeProfitTargets.tp2.distance;
 
-    // Scalp Take Profit: Asymmetric 1.5x to 2.2x Risk-to-Reward (Target: +8.0 to +24.0 points)
-    const rrMultiplier = signalType === "REVERSAL" ? 1.5 : currentAdx > 25 ? 2.0 : 1.7;
-    let tpDist = Number(Math.min(Math.max(slDist * rrMultiplier, 8.0), 24.0).toFixed(2));
-
-    // For RANGE trades, calibrate to range boundaries with safety margin
+    // For RANGE trades, calibrate take profit to range boundaries with safety margin
     if (signalType === "RANGE") {
-      slDist = Number(Math.min(Math.max(atr * 0.65, 5.0), 9.0).toFixed(2));
       const targetDist = calcDir === "LONG" 
         ? Math.max((rangeInfo.resistance - currentPrice) * 0.85, 7.5) 
         : Math.max((currentPrice - rangeInfo.support) * 0.85, 7.5);
       tpDist = Number(Math.min(Math.max(targetDist, slDist * 1.5), 20.0).toFixed(2));
-    }
-
-    const effectiveEntryPrice = calcDir === "LONG" ? +(currentPrice + liveSpread / 2).toFixed(2) : calcDir === "SHORT" ? +(currentPrice - liveSpread / 2).toFixed(2) : +currentPrice.toFixed(2);
-
-    let stopLoss:   number;
-    let takeProfit: number;
-
-    if (calcDir === "LONG") {
-      stopLoss   = +(effectiveEntryPrice - slDist).toFixed(2);
-      takeProfit = +(effectiveEntryPrice + tpDist).toFixed(2);
-    } else if (calcDir === "SHORT") {
-      stopLoss   = +(effectiveEntryPrice + slDist).toFixed(2);
-      takeProfit = +(effectiveEntryPrice - tpDist).toFixed(2);
-    } else {
-      stopLoss   = +(effectiveEntryPrice - slDist).toFixed(2);
-      takeProfit = +(effectiveEntryPrice + tpDist).toFixed(2);
+      const effectiveEntryPrice = calcDir === "LONG" ? +(currentPrice + liveSpread / 2).toFixed(2) : calcDir === "SHORT" ? +(currentPrice - liveSpread / 2).toFixed(2) : +currentPrice.toFixed(2);
+      takeProfit = calcDir === "LONG" ? +(effectiveEntryPrice + tpDist).toFixed(2) : +(effectiveEntryPrice - tpDist).toFixed(2);
     }
 
     // ── Reason string ─────────────────────────────────────────────────────
@@ -1685,6 +1664,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         macdSignal:    +macdSig.toFixed(4),
         macdHistogram: +macdHist.toFixed(4),
         atr:           +atr.toFixed(2),
+        trend5m:       trendPrimary,
+        trend1m:       trendEntry,
         trendPrimary,
         trendEntry,
         trend1h:       macro1hState,
@@ -1692,7 +1673,51 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       circuitBreakerActive:            recentStops.inCircuitBreakerCooldown,
       circuitBreakerRemainingMinutes:  recentStops.cooldownRemainingMinutes,
       consecutiveLosses:               recentStops.consecutiveLosses,
+      dynamicAtrStop,
     };
+
+    // ── Hybrid Dual-Engine: Evaluate Deterministic ORB Breakout Engine ──────
+    const orbStatus = await getDeterministicOrbStatus(currentPrice);
+    const orbSignal = await evaluateDeterministicOrb(currentPrice, liveSpread);
+
+    if (orbSignal) {
+      const isSynergy = (orbSignal.signal === "LONG" && (trendPrimary === "BULLISH" || result.signal === "LONG")) ||
+                        (orbSignal.signal === "SHORT" && (trendPrimary === "BEARISH" || result.signal === "SHORT"));
+
+      result.signal = orbSignal.signal;
+      result.entryPrice = orbSignal.entryPrice;
+      result.stopLoss = orbSignal.stopLoss;
+      result.takeProfit = orbSignal.takeProfit;
+      result.trend = orbSignal.trend;
+      result.tradeDuration = orbSignal.tradeDuration;
+      result.signalType = "ORB_BREAKOUT";
+
+      if (isSynergy) {
+        result.confidence = 96;
+        result.signalStrength = "STRONG";
+        result.reason = `[HYBRID DUAL-ENGINE: DUAL SYNERGY] ${orbSignal.reason} · Supported by SMC Multi-Timeframe Trend ✓`;
+        result.dualEngine = {
+          activeEngine: "DUAL_SYNERGY",
+          orbStatus,
+          orbRange: orbSignal.orbRange
+        };
+      } else {
+        result.confidence = orbSignal.confidence;
+        result.signalStrength = "STRONG";
+        result.reason = orbSignal.reason;
+        result.dualEngine = {
+          activeEngine: "DETERMINISTIC_ORB",
+          orbStatus,
+          orbRange: orbSignal.orbRange
+        };
+      }
+    } else {
+      result.dualEngine = {
+        activeEngine: "SMC_CONFLUENCE",
+        orbStatus,
+        orbRange: orbStatus.currentRange
+      };
+    }
 
     cachedSignal = result;
     return result;
@@ -1740,6 +1765,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       indicators: {
         rsi: 50, ema9: currentPrice, ema21: currentPrice,
         macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
+        trend5m: "NEUTRAL", trend1m: "NEUTRAL",
         trendPrimary: "NEUTRAL", trendEntry: "NEUTRAL",
       },
       circuitBreakerActive: false,
@@ -1776,5 +1802,12 @@ export function commitSignal(signal: SignalResult) {
     if (signal.signal !== "HOLD") {
         lastSignalState = { signal: signal.signal, price: signal.entryPrice, timestamp: Date.now() };
         lastSignalTime = Date.now();
+        if (signal.signalType === "ORB_BREAKOUT" && signal.dualEngine?.orbStatus?.session) {
+            commitOrbSessionTrade(signal.dualEngine.orbStatus.session);
+        }
     }
+}
+
+export function getLatestCachedSignal(): SignalResult | null {
+    return cachedSignal;
 }
