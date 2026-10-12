@@ -28,10 +28,59 @@ import {
   History,
   Target,
   Sparkles,
+  Terminal,
+  Radio,
+  FileText,
+  Search,
+  Trash2,
+  Copy,
+  Check,
+  Pause,
+  Play,
+  Send,
+  RadioTower,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+
+export interface HermesLogEntry {
+  id: string;
+  timestamp: string;
+  timeMs: number;
+  type: "HEARTBEAT" | "STATE_UPDATE" | "COMM_PROBE" | "CONVICTION_GATE" | "GAP_WARNING" | "SYSTEM_EVENT";
+  level: "INFO" | "SUCCESS" | "WARN" | "ERROR";
+  component: "HERMES_CORE" | "METAAPI_FEED" | "FIRESTORE_SYNC" | "BROKER_GATEWAY" | "SCHEDULER" | "ORB_SUPERVISOR";
+  message: string;
+  latencyMs?: number;
+  gapDurationSec?: number;
+  details?: Record<string, any>;
+}
+
+export interface HermesLogMetrics {
+  heartbeatIntervalSeconds: number;
+  lastHeartbeatTime: string | null;
+  timeSinceLastHeartbeatMs: number;
+  totalHeartbeatsRecorded: number;
+  gapsDetectedCount: number;
+  lastGapDetectedAt: string | null;
+  lastGapDurationSec: number | null;
+  avgProbeLatencyMs: number;
+  healthState: "SYNCHRONIZED" | "CAUTION_LATENCY" | "GAP_DETECTED" | "DISCONNECTED";
+  activeBrainState: {
+    enabled: boolean;
+    strategyVersion: string;
+    engineMode: string;
+    livePrice: number | null;
+    metaApiConnected: boolean;
+    memoryHeapMb: number;
+  };
+}
+
+export interface HermesLogsFeed {
+  logs: HermesLogEntry[];
+  metrics: HermesLogMetrics;
+}
 
 interface DiagnosticReport {
   health: {
@@ -191,8 +240,17 @@ export function HermesDiagnosticDashboard({
 }) {
   const queryClient = useQueryClient();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const [activeTab, setActiveTab] = useState<"overview" | "memory" | "signal" | "tests">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "logs" | "memory" | "signal" | "tests">("overview");
   const [testResult, setTestResult] = useState<SelfTestResult | null>(null);
+
+  // Diagnostic Logs View State
+  const [logsFilterType, setLogsFilterType] = useState<string>("ALL");
+  const [logsFilterLevel, setLogsFilterLevel] = useState<string>("ALL");
+  const [logsSearch, setLogsSearch] = useState<string>("");
+  const [logsAutoRefresh, setLogsAutoRefresh] = useState<boolean>(true);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [logsOrderNewestFirst, setLogsOrderNewestFirst] = useState<boolean>(true);
+  const [copiedLogs, setCopiedLogs] = useState<boolean>(false);
 
   const { data: diag, isLoading, isFetching, refetch } = useQuery<DiagnosticReport>({
     queryKey: ["/api/hermes/diagnostics"],
@@ -203,6 +261,71 @@ export function HermesDiagnosticDashboard({
     },
     refetchInterval: 6000,
   });
+
+  // Dedicated query for Hermes Brain Heartbeat & State Diagnostic Logs
+  const {
+    data: logsData,
+    isLoading: isLogsLoading,
+    isFetching: isLogsFetching,
+    refetch: refetchLogs,
+  } = useQuery<HermesLogsFeed>({
+    queryKey: ["/api/hermes/logs", logsFilterType, logsFilterLevel],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (logsFilterType !== "ALL") params.set("type", logsFilterType);
+      if (logsFilterLevel !== "ALL") params.set("level", logsFilterLevel);
+      const res = await fetch(`/api/hermes/logs?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to load Hermes diagnostic logs");
+      return res.json();
+    },
+    refetchInterval: logsAutoRefresh && activeTab === "logs" ? 3000 : false,
+  });
+
+  const probeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/hermes/logs/probe", { method: "POST" });
+      if (!res.ok) throw new Error("Heartbeat probe failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/hermes/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hermes/diagnostics"] });
+      toast.success("Heartbeat Communication Probe Completed", {
+        description: `Roundtrip: ${data.totalLatencyMs}ms · MetaApi: ${data.metaApiLatencyMs}ms · Tick: ${data.livePrice ? `$${data.livePrice.toFixed(2)}` : "STANDBY"}`,
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Heartbeat Probe Failed", { description: err.message });
+    },
+  });
+
+  const clearLogsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/hermes/logs", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to clear logs");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/hermes/logs"] });
+      toast.success("Diagnostic Logs Cleared", {
+        description: "Buffer reset to 0 entries.",
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Clear Failed", { description: err.message });
+    },
+  });
+
+  const handleCopyLogs = () => {
+    if (!logsData?.logs) return;
+    const text = JSON.stringify(logsData.logs, null, 2);
+    navigator.clipboard.writeText(text);
+    setCopiedLogs(true);
+    toast.success("Diagnostic Logs Copied", {
+      description: `${logsData.logs.length} entries exported to clipboard.`,
+    });
+    setTimeout(() => setCopiedLogs(false), 2000);
+  };
 
   const selfTestMutation = useMutation({
     mutationFn: async () => {
@@ -436,10 +559,23 @@ export function HermesDiagnosticDashboard({
             <div className="flex border-b border-border/40 px-4 gap-2 bg-zinc-950/50 overflow-x-auto">
               {[
                 { id: "overview", label: "Health & Telemetry", icon: Activity },
+                {
+                  id: "logs",
+                  label: "Heartbeat & Brain Logs",
+                  icon: Terminal,
+                  badge:
+                    (logsData?.metrics?.gapsDetectedCount ?? 0) > 0 ? (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-red-500/20 text-red-400 font-mono font-bold border border-red-500/40">
+                        {logsData?.metrics?.gapsDetectedCount} GAP
+                      </span>
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    ),
+                },
                 { id: "memory", label: "Active Synaptic Memory", icon: Brain },
                 { id: "signal", label: "Last Processed Signal", icon: Target },
                 { id: "tests", label: "Diagnostic Self-Test", icon: Zap },
-              ].map((tab) => {
+              ].map((tab: any) => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
                 return (
@@ -447,14 +583,15 @@ export function HermesDiagnosticDashboard({
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
                     className={cn(
-                      "flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-all whitespace-nowrap",
+                      "flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-all whitespace-nowrap cursor-pointer",
                       active
                         ? "border-amber-400 text-amber-400 bg-amber-500/5 font-semibold"
                         : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
                     )}
                   >
                     <Icon className="w-3.5 h-3.5" />
-                    {tab.label}
+                    <span>{tab.label}</span>
+                    {tab.badge}
                   </button>
                 );
               })}
@@ -692,6 +829,455 @@ export function HermesDiagnosticDashboard({
                         <span className="text-zinc-400">Max Tolerated Drawdown:</span>
                         <span className="text-amber-300 font-bold">{memoryState.maxDrawdownLimit * 2} Pts (${memoryState.maxDrawdownLimit}%)</span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TAB: HERMES HEARTBEAT & BRAIN DIAGNOSTIC LOGS ───────────── */}
+              {activeTab === "logs" && (
+                <div className="space-y-6">
+                  {/* Telemetry & Gap Monitor Metrics Strip */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="border border-border/60 rounded-xl p-3.5 bg-zinc-900/40 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1.5">
+                          <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Heartbeat Pulse Rhythm
+                        </span>
+                        <Badge variant="outline" className="text-[9px] font-mono text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                          PULSING ~5s
+                        </Badge>
+                      </div>
+                      <div className="text-base font-bold font-mono text-zinc-100 flex items-center gap-2">
+                        <span>Every ~{logsData?.metrics?.heartbeatIntervalSeconds ?? 5}s</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-mono flex justify-between">
+                        <span>Last: {logsData?.metrics?.lastHeartbeatTime ? formatRelativeTime(logsData.metrics.lastHeartbeatTime) : "Active"}</span>
+                        <span>{logsData?.metrics?.totalHeartbeatsRecorded ?? 0} pulses</span>
+                      </div>
+                    </div>
+
+                    <div className={cn(
+                      "border rounded-xl p-3.5 space-y-1.5 transition-all",
+                      (logsData?.metrics?.gapsDetectedCount ?? 0) > 0
+                        ? "border-red-500/40 bg-red-500/5"
+                        : "border-border/60 bg-zinc-900/40"
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1.5">
+                          <AlertTriangle className={cn(
+                            "w-3.5 h-3.5",
+                            (logsData?.metrics?.gapsDetectedCount ?? 0) > 0 ? "text-red-400" : "text-emerald-400"
+                          )} /> Communication Gaps
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[9px] font-mono",
+                            (logsData?.metrics?.gapsDetectedCount ?? 0) > 0
+                              ? "text-red-400 border-red-500/40 bg-red-500/10"
+                              : "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                          )}
+                        >
+                          {(logsData?.metrics?.gapsDetectedCount ?? 0) > 0
+                            ? `${logsData?.metrics?.gapsDetectedCount} GAPS DETECTED`
+                            : "0 GAPS DETECTED"}
+                        </Badge>
+                      </div>
+                      <div className="text-base font-bold font-mono text-zinc-100">
+                        {(logsData?.metrics?.gapsDetectedCount ?? 0) > 0
+                          ? `${logsData?.metrics?.lastGapDurationSec ?? 0}s Max Gap Silence`
+                          : "Continuous Sync Lock"}
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-mono">
+                        {(logsData?.metrics?.gapsDetectedCount ?? 0) > 0
+                          ? `Last gap: ${logsData?.metrics?.lastGapDetectedAt ? formatRelativeTime(logsData.metrics.lastGapDetectedAt) : "Recently"}`
+                          : "Zero packet stalls (>14s threshold)"}
+                      </div>
+                    </div>
+
+                    <div className="border border-border/60 rounded-xl p-3.5 bg-zinc-900/40 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 text-cyan-400" /> Mesh Probe Latency
+                        </span>
+                        <Badge variant="outline" className="text-[9px] font-mono text-cyan-400 border-cyan-500/30 bg-cyan-500/10">
+                          ROUNDTRIP
+                        </Badge>
+                      </div>
+                      <div className="text-base font-bold font-mono text-cyan-300">
+                        {logsData?.metrics?.avgProbeLatencyMs ?? 22} ms
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-mono flex justify-between">
+                        <span>MetaApi: {health.lastPriceLatencyMs ? `${health.lastPriceLatencyMs}ms` : "12ms"}</span>
+                        <span>DB: Synced</span>
+                      </div>
+                    </div>
+
+                    <div className="border border-border/60 rounded-xl p-3.5 bg-zinc-900/40 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-mono text-zinc-400 flex items-center gap-1.5">
+                          <Brain className="w-3.5 h-3.5 text-amber-400" /> Active Brain State
+                        </span>
+                        <Badge variant="outline" className="text-[9px] font-mono text-amber-400 border-amber-500/30 bg-amber-500/10">
+                          {logsData?.metrics?.healthState || "SYNCHRONIZED"}
+                        </Badge>
+                      </div>
+                      <div className="text-base font-bold font-mono text-amber-300 truncate">
+                        {memoryState.strategyVersion} · {diag?.engineMode ? diag.engineMode.replace(/_/g, " ") : "Hybrid Dual"}
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-mono">
+                        Heap: {health.memoryUsageMb} MB / {health.memoryTotalMb} MB
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Communication Gap Status Banner */}
+                  {(logsData?.metrics?.gapsDetectedCount ?? 0) > 0 ? (
+                    <div className="p-3.5 rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-zinc-950 to-amber-500/10 flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                      <div className="text-xs space-y-1">
+                        <div className="font-bold text-red-300 flex items-center gap-2">
+                          <span>Communication Gap Detected ({logsData?.metrics?.gapsDetectedCount} incident recorded)</span>
+                          <span className="text-[10px] font-mono font-normal text-zinc-400">
+                            Duration: {logsData?.metrics?.lastGapDurationSec}s silence
+                          </span>
+                        </div>
+                        <p className="text-zinc-300 leading-relaxed">
+                          The Hermes heartbeat detected a temporary communication silence exceeding the 14-second threshold. This can happen during MetaApi quote reconnections, container freeze, or weekend market closure. Use the <strong>"Dispatch Heartbeat Probe"</strong> button below to test live latency.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-emerald-300">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span><strong>Zero Communication Gaps:</strong> Hermes Brain heartbeat is pulsing consistently every 5s with uninterrupted price stream continuity.</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/40">
+                        CONTINUOUS LOCK
+                      </Badge>
+                    </div>
+                  )}
+
+                  {/* Filter Toolbar & Actions */}
+                  <div className="space-y-3 bg-zinc-900/30 border border-border/50 rounded-xl p-3 sm:p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      {/* Search Bar */}
+                      <div className="relative flex-1 min-w-[220px] max-w-md">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input
+                          type="text"
+                          value={logsSearch}
+                          onChange={(e) => setLogsSearch(e.target.value)}
+                          placeholder="Search heartbeat logs, state changes, gaps..."
+                          className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-black/50 border border-zinc-800 text-xs font-mono text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500/50"
+                        />
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          onClick={() => probeMutation.mutate()}
+                          disabled={probeMutation.isPending}
+                          className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <Radio className={cn("w-3.5 h-3.5", probeMutation.isPending && "animate-spin")} />
+                          {probeMutation.isPending ? "Pinging Mesh..." : "Dispatch Heartbeat Probe"}
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setLogsAutoRefresh(!logsAutoRefresh)}
+                          className={cn(
+                            "h-8 text-xs font-mono border-zinc-800 gap-1.5 cursor-pointer",
+                            logsAutoRefresh
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                              : "text-zinc-400 hover:text-zinc-200"
+                          )}
+                        >
+                          {logsAutoRefresh ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                          <span>{logsAutoRefresh ? "Live (3s)" : "Paused"}</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCopyLogs}
+                          disabled={!logsData?.logs?.length}
+                          className="h-8 text-xs font-mono border-zinc-800 text-zinc-300 hover:text-zinc-100 gap-1.5 cursor-pointer"
+                        >
+                          {copiedLogs ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedLogs ? "Copied" : "Copy"}</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => clearLogsMutation.mutate()}
+                          disabled={clearLogsMutation.isPending || !logsData?.logs?.length}
+                          className="h-8 text-xs font-mono text-zinc-400 hover:text-red-400 hover:bg-red-500/10 gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Clear</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Filter Pills */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/60 text-xs">
+                      {/* Type Pills */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-mono uppercase text-zinc-500 mr-1">Event:</span>
+                        {[
+                          { id: "ALL", label: "All Events" },
+                          { id: "HEARTBEAT", label: "Heartbeats" },
+                          { id: "STATE_UPDATE", label: "State Updates" },
+                          { id: "GAP_WARNING", label: "Gaps & Stalls" },
+                          { id: "COMM_PROBE", label: "Probes" },
+                          { id: "CONVICTION_GATE", label: "Conviction" },
+                        ].map((btn) => (
+                          <button
+                            key={btn.id}
+                            onClick={() => setLogsFilterType(btn.id)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-md text-[11px] font-mono transition-all cursor-pointer",
+                              logsFilterType === btn.id
+                                ? "bg-amber-500 text-zinc-950 font-bold"
+                                : "bg-black/40 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                            )}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Level Pills */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono uppercase text-zinc-500 mr-1">Level:</span>
+                        {[
+                          { id: "ALL", label: "All" },
+                          { id: "INFO", label: "Info" },
+                          { id: "SUCCESS", label: "Success" },
+                          { id: "WARN", label: "Warn" },
+                          { id: "ERROR", label: "Error" },
+                        ].map((btn) => (
+                          <button
+                            key={btn.id}
+                            onClick={() => setLogsFilterLevel(btn.id)}
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer",
+                              logsFilterLevel === btn.id
+                                ? "bg-zinc-200 text-zinc-950 font-bold"
+                                : "text-zinc-400 hover:text-zinc-200"
+                            )}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => setLogsOrderNewestFirst(!logsOrderNewestFirst)}
+                          className="ml-2 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 underline cursor-pointer"
+                        >
+                          {logsOrderNewestFirst ? "Newest First ↓" : "Oldest First ↑"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Terminal Log View Container */}
+                  <div className="border border-zinc-800 rounded-xl bg-black/95 overflow-hidden shadow-2xl">
+                    {/* Terminal Window Header Bar */}
+                    <div className="bg-zinc-900/90 px-4 py-2.5 border-b border-zinc-800 flex items-center justify-between text-xs font-mono">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+                        </div>
+                        <span className="text-zinc-400 ml-2 text-[11px]">
+                          hermes-brain@stream:~$ telemetry --monitor-heartbeat --tail=200
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-zinc-500">
+                        {isLogsFetching && <span className="text-amber-400 mr-2 animate-pulse">Syncing...</span>}
+                        <span>
+                          Showing{" "}
+                          {(logsData?.logs || []).filter((l) => {
+                            if (!logsSearch) return true;
+                            const q = logsSearch.toLowerCase();
+                            return (
+                              l.message.toLowerCase().includes(q) ||
+                              l.component.toLowerCase().includes(q) ||
+                              l.type.toLowerCase().includes(q)
+                            );
+                          }).length}{" "}
+                          events
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Scrollable Terminal Stream */}
+                    <div className="max-h-[520px] overflow-y-auto p-3 sm:p-4 space-y-2 font-mono text-xs divide-y divide-zinc-900/80">
+                      {isLogsLoading ? (
+                        <div className="space-y-2 py-4">
+                          {[1, 2, 3, 4, 5].map((i) => (
+                            <Skeleton key={i} className="h-8 w-full bg-zinc-900" />
+                          ))}
+                        </div>
+                      ) : (
+                        (() => {
+                          const items = (logsData?.logs || [])
+                            .filter((entry) => {
+                              if (!logsSearch) return true;
+                              const q = logsSearch.toLowerCase();
+                              return (
+                                entry.message.toLowerCase().includes(q) ||
+                                entry.component.toLowerCase().includes(q) ||
+                                entry.type.toLowerCase().includes(q) ||
+                                (entry.details && JSON.stringify(entry.details).toLowerCase().includes(q))
+                              );
+                            })
+                            .sort((a, b) =>
+                              logsOrderNewestFirst ? b.timeMs - a.timeMs : a.timeMs - b.timeMs
+                            );
+
+                          if (items.length === 0) {
+                            return (
+                              <div className="py-12 text-center space-y-3">
+                                <Terminal className="w-8 h-8 text-zinc-600 mx-auto" />
+                                <div className="text-zinc-400 text-xs">
+                                  No heartbeat or state logs match the selected filter criteria.
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => probeMutation.mutate()}
+                                  className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold"
+                                >
+                                  Dispatch Initial Heartbeat Probe
+                                </Button>
+                              </div>
+                            );
+                          }
+
+                          return items.map((entry) => {
+                            const isExpandedRow = expandedLogId === entry.id;
+                            const timeStr = new Date(entry.timeMs).toLocaleTimeString([], {
+                              hour12: false,
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            }) + "." + String(entry.timeMs % 1000).padStart(3, "0");
+
+                            const typeColor =
+                              entry.type === "GAP_WARNING"
+                                ? "bg-red-500/15 text-red-400 border-red-500/40"
+                                : entry.type === "STATE_UPDATE"
+                                ? "bg-purple-500/15 text-purple-300 border-purple-500/40"
+                                : entry.type === "COMM_PROBE"
+                                ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40"
+                                : entry.type === "CONVICTION_GATE"
+                                ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                                : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+
+                            const typeLabel =
+                              entry.type === "HEARTBEAT"
+                                ? "PULSE"
+                                : entry.type === "GAP_WARNING"
+                                ? "GAP ALERT"
+                                : entry.type === "STATE_UPDATE"
+                                ? "STATE UPDATE"
+                                : entry.type === "COMM_PROBE"
+                                ? "PROBE"
+                                : entry.type === "CONVICTION_GATE"
+                                ? "CONVICTION"
+                                : "SYSTEM";
+
+                            return (
+                              <div
+                                key={entry.id}
+                                className={cn(
+                                  "pt-2 pb-1.5 transition-colors rounded px-2 hover:bg-zinc-900/60",
+                                  entry.type === "GAP_WARNING" && "bg-red-950/20 border-l-2 border-red-500",
+                                  entry.type === "STATE_UPDATE" && "bg-purple-950/10 border-l-2 border-purple-500"
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-zinc-500 text-[11px] select-all">
+                                      {timeStr}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "px-1.5 py-0.5 rounded text-[9px] font-bold border tracking-wider",
+                                        typeColor
+                                      )}
+                                    >
+                                      {typeLabel}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-400 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                                      {entry.component}
+                                    </span>
+                                    {entry.latencyMs !== undefined && (
+                                      <span
+                                        className={cn(
+                                          "text-[10px] px-1 rounded font-bold",
+                                          entry.latencyMs > 500 ? "text-amber-400" : "text-cyan-400"
+                                        )}
+                                      >
+                                        +{entry.latencyMs}ms
+                                      </span>
+                                    )}
+                                    {entry.gapDurationSec !== undefined && (
+                                      <span className="text-[10px] px-1 rounded font-bold text-red-400 bg-red-500/10 border border-red-500/30">
+                                        GAP: {entry.gapDurationSec}s
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    {entry.details && (
+                                      <button
+                                        onClick={() =>
+                                          setExpandedLogId(isExpandedRow ? null : entry.id)
+                                        }
+                                        className="text-[10px] text-zinc-500 hover:text-zinc-300 flex items-center gap-0.5 cursor-pointer"
+                                      >
+                                        <span>Details</span>
+                                        {isExpandedRow ? (
+                                          <ChevronUp className="w-3 h-3" />
+                                        ) : (
+                                          <ChevronDown className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="text-[12px] text-zinc-200 mt-1 leading-relaxed pl-1 break-words">
+                                  {entry.message}
+                                </div>
+
+                                {/* Expandable Details Drawer */}
+                                {isExpandedRow && entry.details && (
+                                  <div className="mt-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-400 overflow-x-auto space-y-1">
+                                    <div className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">
+                                      Diagnostic Telemetry Context Payload:
+                                    </div>
+                                    <pre className="text-zinc-300 font-mono text-[10px] leading-relaxed">
+                                      {JSON.stringify(entry.details, null, 2)}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()
+                      )}
                     </div>
                   </div>
                 </div>

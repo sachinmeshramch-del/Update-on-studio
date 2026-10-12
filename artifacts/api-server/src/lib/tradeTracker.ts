@@ -313,12 +313,13 @@ export async function checkRunningTrades(): Promise<void> {
           );
         }
 
-        // ── 2-POINT PROFIT BOOKING WHEN MARKET WAS IN FAVOR (LONG) ──
-        // For scalp trades: book profit if retracing.
-        // For 5R ORB Runner trades: strictly DO NOT cut winners early! Let the 5R runner run to target.
+        // ── GUARANTEED PROFIT RETRACE SAFEGUARD WHEN MARKET WAS IN FAVOR (LONG) ──
+        // Only trigger market close if the trade ALREADY moved firmly into favor (peak >= +3.50 pts)
+        // AND subsequently retraced back down to the +2.00 pt guarantee level.
+        // Never trigger on initial arrival at +2.00 pts so runners can run!
         const is5rRunner = trade.tradeDuration?.includes("5R") || trade.signalType === "BREAKOUT" || (distanceToInitialTarget >= 14.0);
         const minGuaranteedProfitPrice = +(actualEntry + 2.00).toFixed(2);
-        if (!is5rRunner && peakProfit >= 2.00 && currentBid <= minGuaranteedProfitPrice) {
+        if (!is5rRunner && peakProfit >= 3.50 && currentBid <= minGuaranteedProfitPrice) {
           newStatus   = "TARGET_HIT";
           closedPrice = minGuaranteedProfitPrice;
           pnlPoints   = 2.00;
@@ -330,7 +331,7 @@ export async function checkRunningTrades(): Promise<void> {
           activeTradeStates.delete(id as string);
           logger.info(
             { id, signal, entryPrice: actualEntry, peakProfit, closedPrice, pnlPoints },
-            `🎯 [Favorable Market Exit] Trade moved in favor (peak: +${peakProfit} pts) and retraced to guarantee level. Booked +2.00 points profit!`
+            `🎯 [Favorable Market Exit] Trade moved firmly in favor (peak: +${peakProfit} pts) and retraced to guarantee level. Booked +2.00 points profit!`
           );
         } else if (!matchingOpenPos && !trade.isRealTrade && currentBid <= stopLoss) {
           newStatus   = "STOP_HIT";
@@ -366,16 +367,17 @@ export async function checkRunningTrades(): Promise<void> {
           let targetSl = stopLoss;
           // Break-even price covers spread plus small buffer (+0.30 pts)
           const breakEvenPrice = +(actualEntry + currentSpread + 0.30).toFixed(2);
-          const minProfitLockPrice = +(actualEntry + 2.50).toFixed(2);
+          // Fixed 2-point profit lock price: Entry + 2.00 pts
+          const minProfitLockPrice = +(actualEntry + 2.00).toFixed(2);
 
           // Step A: Guaranteed Profit Floors when Market is in Favor
-          // On Gold (XAUUSD), sub-2pt movements are normal tick noise.
-          // Trigger Break-Even only after market has firmly established momentum (+4.5 pts or 40% of target).
-          const beActivationProfit = Math.max(4.50, distanceToInitialTarget * 0.40);
-          const profitLockActivation = Math.max(7.00, distanceToInitialTarget * 0.65);
+          // Trigger Break-Even after market moves +2.2 pts (or 25% of target)
+          // Trigger Fixed +2.0 pt Profit Lock once market moves >= +3.2 pts (allowing 1.2+ pt buffer above minStopBuffer)
+          const beActivationProfit = Math.max(2.20, +(distanceToInitialTarget * 0.25).toFixed(2));
+          const profitLockActivation = Math.max(3.20, +(distanceToInitialTarget * 0.35).toFixed(2));
 
-          if (peakProfit >= profitLockActivation || currentProfit >= profitLockActivation) {
-            // Once market has moved >= 7.0 pts in favor, lock at least +2.5 pts profit (giving 4.5+ pts breathing room)
+          if (currentProfit >= profitLockActivation || peakProfit >= profitLockActivation) {
+            // Once market has moved >= 3.2 pts in favor, lock fixed +2.0 pts profit (giving breathing room above minStopBuffer)
             if (currentBid >= minProfitLockPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, minProfitLockPrice);
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
@@ -386,7 +388,7 @@ export async function checkRunningTrades(): Promise<void> {
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
           } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
-            // Capital Protection / Break-Even when firmly in profit (+4.5 pts)
+            // Capital Protection / Break-Even when in profit (+2.2 pts)
             if (currentBid >= breakEvenPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
@@ -436,7 +438,7 @@ export async function checkRunningTrades(): Promise<void> {
           }
 
           // Guaranteed minimum profit floor: if market was in favor (peakProfit >= profitLockActivation),
-          // targetSl can NEVER drop below actualEntry + 2.50
+          // targetSl can NEVER drop below actualEntry + 2.00
           if (peakProfit >= profitLockActivation && currentBid >= minProfitLockPrice + minStopBuffer) {
             targetSl = Math.max(targetSl, minProfitLockPrice);
           }
@@ -522,12 +524,13 @@ export async function checkRunningTrades(): Promise<void> {
           );
         }
 
-        // ── 2-POINT PROFIT BOOKING WHEN MARKET WAS IN FAVOR (SHORT) ──
-        // For scalp trades: book profit if retracing.
-        // For 5R ORB Runner trades: strictly DO NOT cut winners early! Let the 5R runner run to target.
+        // ── GUARANTEED PROFIT RETRACE SAFEGUARD WHEN MARKET WAS IN FAVOR (SHORT) ──
+        // Only trigger market close if the trade ALREADY moved firmly into favor (peak >= +3.50 pts)
+        // AND subsequently retraced back up to the -2.00 pt guarantee level.
+        // Never trigger on initial arrival at -2.00 pts so runners can run!
         const is5rRunner = trade.tradeDuration?.includes("5R") || trade.signalType === "BREAKOUT" || (distanceToInitialTarget >= 14.0);
         const minGuaranteedProfitPrice = +(actualEntry - 2.00).toFixed(2);
-        if (!is5rRunner && peakProfit >= 2.00 && currentAsk >= minGuaranteedProfitPrice) {
+        if (!is5rRunner && peakProfit >= 3.50 && currentAsk >= minGuaranteedProfitPrice) {
           newStatus   = "TARGET_HIT";
           closedPrice = minGuaranteedProfitPrice;
           pnlPoints   = 2.00;
@@ -539,7 +542,7 @@ export async function checkRunningTrades(): Promise<void> {
           activeTradeStates.delete(id as string);
           logger.info(
             { id, signal, entryPrice: actualEntry, peakProfit, closedPrice, pnlPoints },
-            `🎯 [Favorable Market Exit] Trade moved in favor (peak: +${peakProfit} pts) and retraced to guarantee level. Booked +2.00 points profit!`
+            `🎯 [Favorable Market Exit] Trade moved firmly in favor (peak: +${peakProfit} pts) and retraced to guarantee level. Booked +2.00 points profit!`
           );
         } else if (!matchingOpenPos && !trade.isRealTrade && currentAsk >= stopLoss) {
           newStatus   = "STOP_HIT";
@@ -574,16 +577,17 @@ export async function checkRunningTrades(): Promise<void> {
           let targetSl = stopLoss;
           // Break-even price covers spread plus small buffer (+0.30 pts)
           const breakEvenPrice = +(actualEntry - currentSpread - 0.30).toFixed(2);
-          const minProfitLockPrice = +(actualEntry - 2.50).toFixed(2);
+          // Fixed 2-point profit lock price: Entry - 2.00 pts
+          const minProfitLockPrice = +(actualEntry - 2.00).toFixed(2);
 
           // Step A: Guaranteed Profit Floors when Market is in Favor
-          // On Gold (XAUUSD), sub-2pt movements are normal tick noise.
-          // Trigger Break-Even only after market has firmly established momentum (+4.5 pts or 40% of target).
-          const beActivationProfit = Math.max(4.50, distanceToInitialTarget * 0.40);
-          const profitLockActivation = Math.max(7.00, distanceToInitialTarget * 0.65);
+          // Trigger Break-Even after market moves +2.2 pts (or 25% of target)
+          // Trigger Fixed +2.0 pt Profit Lock once market moves >= +3.2 pts (allowing 1.2+ pt buffer below minStopBuffer)
+          const beActivationProfit = Math.max(2.20, +(distanceToInitialTarget * 0.25).toFixed(2));
+          const profitLockActivation = Math.max(3.20, +(distanceToInitialTarget * 0.35).toFixed(2));
 
-          if (peakProfit >= profitLockActivation || currentProfit >= profitLockActivation) {
-            // Once market has moved >= 7.0 pts in favor, lock at least +2.5 pts profit (giving 4.5+ pts breathing room)
+          if (currentProfit >= profitLockActivation || peakProfit >= profitLockActivation) {
+            // Once market has moved >= 3.2 pts in favor, lock fixed +2.0 pts profit (giving breathing room below minStopBuffer)
             if (currentAsk <= minProfitLockPrice - minStopBuffer) {
               targetSl = Math.min(targetSl, minProfitLockPrice);
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
@@ -594,7 +598,7 @@ export async function checkRunningTrades(): Promise<void> {
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
           } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
-            // Capital Protection / Break-Even when firmly in profit (+4.5 pts)
+            // Capital Protection / Break-Even when in profit (+2.2 pts)
             if (currentAsk <= breakEvenPrice - minStopBuffer) {
               targetSl = Math.min(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
@@ -644,7 +648,7 @@ export async function checkRunningTrades(): Promise<void> {
           }
 
           // Guaranteed minimum profit floor: if market was in favor (peakProfit >= profitLockActivation),
-          // targetSl can NEVER rise above actualEntry - 2.50
+          // targetSl can NEVER rise above actualEntry - 2.00
           if (peakProfit >= profitLockActivation && currentAsk <= minProfitLockPrice - minStopBuffer) {
             targetSl = Math.min(targetSl, minProfitLockPrice);
           }

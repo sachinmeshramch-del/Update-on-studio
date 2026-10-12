@@ -7,8 +7,60 @@ import { sendTelegramNotification } from "../lib/telegram.js";
 import { getMetaApiStatus, getActiveAccountId, getLastPriceTime } from "../lib/metaApiFeed.js";
 import { getLatestCachedSignal } from "../lib/signalEngine.js";
 import { logger } from "../lib/logger.js";
+import {
+  getHermesLogFeed,
+  runHermesCommProbe,
+  clearHermesLogBuffer,
+  recordHermesStateUpdate,
+  type HermesLogType,
+  type HermesLogLevel,
+} from "../lib/hermesLogger.js";
 
 export const hermesRouter = Router();
+
+/**
+ * GET /api/hermes/logs
+ * Diagnostic logs specifically monitoring Hermes AI Brain heartbeats, state updates, and communication gaps
+ */
+hermesRouter.get("/logs", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const type = req.query.type as HermesLogType | undefined;
+    const level = req.query.level as HermesLogLevel | undefined;
+    const feed = await getHermesLogFeed(limit, type, level);
+    res.json(feed);
+  } catch (err: any) {
+    logger.error({ err }, "[Hermes Router] Failed to fetch diagnostic logs");
+    res.status(500).json({ error: "Failed to fetch diagnostic logs", message: err?.message });
+  }
+});
+
+/**
+ * POST /api/hermes/logs/probe
+ * On-demand communication ping probe across the Hermes Brain service mesh
+ */
+hermesRouter.post("/logs/probe", async (req, res) => {
+  try {
+    const probeResult = await runHermesCommProbe();
+    res.json(probeResult);
+  } catch (err: any) {
+    logger.error({ err }, "[Hermes Router] Probe execution failed");
+    res.status(500).json({ error: "Probe execution failed", message: err?.message });
+  }
+});
+
+/**
+ * DELETE /api/hermes/logs
+ * Reset/clear the diagnostic logs buffer
+ */
+hermesRouter.delete("/logs", async (req, res) => {
+  try {
+    clearHermesLogBuffer();
+    res.json({ success: true, message: "Hermes diagnostic log buffer cleared." });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to clear logs", message: err?.message });
+  }
+});
 
 /**
  * GET /api/hermes/diagnostics
@@ -197,6 +249,14 @@ hermesRouter.post("/reflect", async (req, res) => {
     logger.info("[Hermes Router] Manual reflection requested via API");
     const hypothesis = await runHermesReflection(true);
     const summary = await getHermesStateSummary();
+    recordHermesStateUpdate(
+      hypothesis ? `Hermes reflection cycle completed: Version ${summary.strategyVersion}` : "Hermes reflection cycle evaluated (no trades eligible)",
+      {
+        newState: summary.strategyVersion,
+        reason: hypothesis?.rationale || "Manual reflection trigger",
+        component: "HERMES_CORE"
+      }
+    );
     res.json({
       success: true,
       message: hypothesis ? "Reflection cycle completed" : "No closed trades available to evaluate",
@@ -217,6 +277,11 @@ hermesRouter.post("/reset", async (req, res) => {
   try {
     logger.info("[Hermes Router] Factory reset requested via API");
     const summary = await resetHermesToDefault();
+    recordHermesStateUpdate("Hermes Brain parameters reset to factory baseline defaults", {
+      newState: "v1.0.0",
+      reason: "Administrator factory reset command",
+      component: "HERMES_CORE"
+    });
     res.json({
       success: true,
       message: "Hermes parameters restored to baseline factory defaults",
@@ -302,6 +367,11 @@ hermesRouter.post("/set-engine-mode", async (req, res) => {
     }
     const { updateSystemSettings } = await import("@workspace/db");
     const updated = await updateSystemSettings({ engineMode });
+    recordHermesStateUpdate(`Execution Engine switched to ${engineMode.replace(/_/g, " ")}`, {
+      newState: engineMode,
+      engineMode,
+      component: "HERMES_CORE",
+    });
     logger.info({ engineMode }, "[Hermes AI Brain] Engine mode successfully updated");
     res.json({ success: true, engineMode: updated.engineMode });
   } catch (err: any) {

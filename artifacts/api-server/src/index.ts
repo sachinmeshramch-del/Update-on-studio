@@ -30,6 +30,7 @@ import { initWebPush } from "./lib/pushNotifications.js";
 import { startSignalScheduler } from "./lib/signalScheduler.js";
 import { startTradeTracker } from "./lib/tradeTracker.js";
 import { startDiagnosticMonitor } from "./lib/tradeMonitor.js";
+import { startHermesHeartbeatDaemon } from "./lib/hermesLogger.js";
 
 // Port selection:
 // 1. Google AI Studio preview environment defines CONTROL_PLANE_PORT (8000) or DEFAULT_APP_PORT (3000).
@@ -67,6 +68,9 @@ function initBackgroundServices(serverInstance: any) {
 
   // Start backend diagnostic monitor
   startDiagnosticMonitor();
+
+  // Start Hermes AI Brain heartbeat & communication gap monitor daemon
+  startHermesHeartbeatDaemon();
 }
 
 function startServer(retries = 5, delayMs = 1000) {
