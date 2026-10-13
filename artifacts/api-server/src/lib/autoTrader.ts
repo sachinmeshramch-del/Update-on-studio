@@ -13,6 +13,16 @@ let dailyStats = {
     tradingHalted: false,
 };
 
+export function resetDailyTradingHalt() {
+    dailyStats.tradingHalted = false;
+    dailyStats.startEquity = 0;
+    logger.info("[AutoTrader] Daily trading halt reset");
+}
+
+export function getDailyTradingStats() {
+    return { ...dailyStats };
+}
+
 function getMetaApiConnection(accountId: string) {
     // This is a pseudo-function for the context of this example, we will inject the actual metaapi feed
 }
@@ -195,15 +205,21 @@ export async function executeTradeWithCapitalManagement(
     dailyStats.currentEquity = actualEquity;
 
     if (actualEquity && dailyStats.startEquity > 0) {
-        const drawdownPct = ((dailyStats.startEquity - actualEquity) / dailyStats.startEquity) * 100;
-        const profitPct = ((actualEquity - dailyStats.startEquity) / dailyStats.startEquity) * 100;
+        const drawdownAmount = dailyStats.startEquity - actualEquity;
+        const drawdownPct = (drawdownAmount / dailyStats.startEquity) * 100;
+        const profitAmount = actualEquity - dailyStats.startEquity;
+        const profitPct = (profitAmount / dailyStats.startEquity) * 100;
 
-        if (drawdownPct >= dailyStop) {
+        // Small account safety buffer: Avoid halting on tiny dollar shifts (< $10 on small accounts)
+        // A single 0.01 lot Gold scalp moves $1-$3 naturally.
+        const minDollarThreshold = actualEquity < 300 ? 10.0 : 25.0;
+
+        if (drawdownPct >= dailyStop && drawdownAmount >= minDollarThreshold) {
             dailyStats.tradingHalted = true;
-            logger.warn({ drawdownPct, dailyStop, startEquity: dailyStats.startEquity, actualEquity }, `[AutoTrader] Trading HALTED: Hit daily stop loss (${dailyStop}% max drawdown).`);
-        } else if (dailyTarget > 0 && profitPct >= dailyTarget) {
+            logger.warn({ drawdownPct, dailyStop, drawdownAmount, startEquity: dailyStats.startEquity, actualEquity }, `[AutoTrader] Trading HALTED: Hit daily stop loss (${dailyStop}% max drawdown, -$${drawdownAmount.toFixed(2)}).`);
+        } else if (dailyTarget > 0 && profitPct >= dailyTarget && profitAmount >= minDollarThreshold) {
             dailyStats.tradingHalted = true;
-            logger.info({ profitPct, dailyTarget, startEquity: dailyStats.startEquity, actualEquity }, `[AutoTrader] Trading HALTED: Hit daily profit target (+${dailyTarget}%).`);
+            logger.info({ profitPct, dailyTarget, profitAmount, startEquity: dailyStats.startEquity, actualEquity }, `[AutoTrader] Trading HALTED: Hit daily profit target (+${dailyTarget}%, +$${profitAmount.toFixed(2)}).`);
         }
     }
 

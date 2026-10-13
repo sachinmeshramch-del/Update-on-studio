@@ -652,6 +652,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       }
     }
     const recentStops = await getRecentStopCounts();
+    const settings = await getSystemSettings().catch(() => null);
 
     // Override the most recent candle's close with the real-time live price
     // This allows us to cache MetaApi historical requests for longer without losing live precision
@@ -1128,57 +1129,61 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     let finalSignal = direction;
     let suppressionReason = "";
 
-    if (finalSignal !== "HOLD" && hardFloorActive) {
-      logger.info(
-        { msSinceLast: sinceLastSignal, floorMs: MIN_SIGNAL_INTERVAL_MS },
-        "[Cooldown] Hard 5-min floor active — signal suppressed"
-      );
-      finalSignal = "HOLD";
-      suppressionReason = "Hard 5-min floor active";
-    } else if (finalSignal !== "HOLD" && inCooldown && !(priceMoved && oppositeSignal)) {
-      finalSignal = "HOLD";
-      suppressionReason = "Cooldown active";
-    }
-    // Post-spike cooldown overrides all — no signals until spike settles
-    if (finalSignal !== "HOLD" && inSpikeCooldown) {
-      finalSignal = "HOLD";
-      suppressionReason = "Spike cooldown active";
-    }
+    const bypassCooldowns = Boolean(settings?.disableCooldowns);
 
-    // ── Global Circuit Breaker Protection (45-min window after 2+ losses) ──
-    // Uncompromising capital preservation: Absolutely ZERO signals allowed during circuit breaker cooldown
-    if (recentStops.inCircuitBreakerCooldown) {
-      if (finalSignal !== "HOLD") {
-        logger.warn(
-          { consecutiveLosses: recentStops.consecutiveLosses, cooldownMins: recentStops.cooldownRemainingMinutes, suppressedSignal: finalSignal },
-          "[CircuitBreaker] Hard Halt: Signal strictly suppressed by circuit breaker cooldown"
+    if (!bypassCooldowns) {
+      if (finalSignal !== "HOLD" && hardFloorActive) {
+        logger.info(
+          { msSinceLast: sinceLastSignal, floorMs: MIN_SIGNAL_INTERVAL_MS },
+          "[Cooldown] Hard 5-min floor active — signal suppressed"
         );
+        finalSignal = "HOLD";
+        suppressionReason = "Hard 5-min floor active";
+      } else if (finalSignal !== "HOLD" && inCooldown && !(priceMoved && oppositeSignal)) {
+        finalSignal = "HOLD";
+        suppressionReason = "Cooldown active";
       }
-      finalSignal = "HOLD";
-      confidence = 0;
-      signalStrength = null;
-      suppressionReason = `Circuit Breaker active (${recentStops.cooldownRemainingMinutes}m left)`;
-    }
+      // Post-spike cooldown overrides all — no signals until spike settles
+      if (finalSignal !== "HOLD" && inSpikeCooldown) {
+        finalSignal = "HOLD";
+        suppressionReason = "Spike cooldown active";
+      }
 
-    // ── Directional Circuit Breaker Protection (Halt buying in dumps or selling in rallies) ──
-    if (finalSignal === "LONG" && recentStops.longDirectionCooldown) {
-      logger.warn(
-        { longLosses2h: recentStops.longLosses2h, longNetPnl2h: recentStops.longNetPnl2h, cooldownMins: recentStops.directionalCooldownRemainingMinutes },
-        "[CircuitBreaker] Directional Halt: LONG entries suppressed due to repetitive LONG losses"
-      );
-      finalSignal = "HOLD";
-      confidence = 0;
-      signalStrength = null;
-      suppressionReason = `Directional Circuit Breaker: LONG entries halted (${recentStops.directionalCooldownRemainingMinutes}m left after losses)`;
-    } else if (finalSignal === "SHORT" && recentStops.shortDirectionCooldown) {
-      logger.warn(
-        { shortLosses2h: recentStops.shortLosses2h, shortNetPnl2h: recentStops.shortNetPnl2h, cooldownMins: recentStops.directionalCooldownRemainingMinutes },
-        "[CircuitBreaker] Directional Halt: SHORT entries suppressed due to repetitive SHORT losses"
-      );
-      finalSignal = "HOLD";
-      confidence = 0;
-      signalStrength = null;
-      suppressionReason = `Directional Circuit Breaker: SHORT entries halted (${recentStops.directionalCooldownRemainingMinutes}m left after losses)`;
+      // ── Global Circuit Breaker Protection (45-min window after 2+ losses) ──
+      // Uncompromising capital preservation: Absolutely ZERO signals allowed during circuit breaker cooldown
+      if (recentStops.inCircuitBreakerCooldown) {
+        if (finalSignal !== "HOLD") {
+          logger.warn(
+            { consecutiveLosses: recentStops.consecutiveLosses, cooldownMins: recentStops.cooldownRemainingMinutes, suppressedSignal: finalSignal },
+            "[CircuitBreaker] Hard Halt: Signal strictly suppressed by circuit breaker cooldown"
+          );
+        }
+        finalSignal = "HOLD";
+        confidence = 0;
+        signalStrength = null;
+        suppressionReason = `Circuit Breaker active (${recentStops.cooldownRemainingMinutes}m left)`;
+      }
+
+      // ── Directional Circuit Breaker Protection (Halt buying in dumps or selling in rallies) ──
+      if (finalSignal === "LONG" && recentStops.longDirectionCooldown) {
+        logger.warn(
+          { longLosses2h: recentStops.longLosses2h, longNetPnl2h: recentStops.longNetPnl2h, cooldownMins: recentStops.directionalCooldownRemainingMinutes },
+          "[CircuitBreaker] Directional Halt: LONG entries suppressed due to repetitive LONG losses"
+        );
+        finalSignal = "HOLD";
+        confidence = 0;
+        signalStrength = null;
+        suppressionReason = `Directional Circuit Breaker: LONG entries halted (${recentStops.directionalCooldownRemainingMinutes}m left after losses)`;
+      } else if (finalSignal === "SHORT" && recentStops.shortDirectionCooldown) {
+        logger.warn(
+          { shortLosses2h: recentStops.shortLosses2h, shortNetPnl2h: recentStops.shortNetPnl2h, cooldownMins: recentStops.directionalCooldownRemainingMinutes },
+          "[CircuitBreaker] Directional Halt: SHORT entries suppressed due to repetitive SHORT losses"
+        );
+        finalSignal = "HOLD";
+        confidence = 0;
+        signalStrength = null;
+        suppressionReason = `Directional Circuit Breaker: SHORT entries halted (${recentStops.directionalCooldownRemainingMinutes}m left after losses)`;
+      }
     }
 
     // ── DB Deduplication Guard (Prevents redundant signals if trade is already running) ──
@@ -1679,7 +1684,6 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     // ── Engine Mode & Hybrid Dual-Engine Architecture Evaluation ───────────
     const orbStatus = await getDeterministicOrbStatus(currentPrice);
     const orbSignal = await evaluateDeterministicOrb(currentPrice, liveSpread);
-    const settings = await getSystemSettings().catch(() => null);
     const engineMode = settings?.engineMode || "HYBRID_DUAL";
 
     if (engineMode === "HERMES_ADAPTIVE") {

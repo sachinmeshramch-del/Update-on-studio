@@ -84,41 +84,44 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   // 1. Sanitize & enforce sane ATR baseline for Gold (minimum 5m ATR is ~1.20 even in Asian dead zone)
   const atr = Math.max(req.atr && !isNaN(req.atr) ? req.atr : 2.50, 1.0);
 
-  // 2. Select appropriate ATR multiplier
+  // 2. Select appropriate ATR multiplier for Gold Scalping
   let multiplier: number;
   if (customMultiplier && customMultiplier > 0) {
     multiplier = customMultiplier;
   } else {
     switch (preset) {
       case "SCALP":
-        multiplier = 3.0;
+        multiplier = 1.8;
         break;
       case "SWING":
-        multiplier = 5.5;
+        multiplier = 2.4;
         break;
       case "VOLATILE_NEWS":
-        multiplier = 6.5;
+        multiplier = 2.8;
         break;
       case "STANDARD":
       default:
-        // Adapt multiplier based on signal type and ADX volatility
+        // Adapt multiplier based on signal type and ADX volatility for gold scalping
         if (signalType === "REVERSAL") {
-          multiplier = 3.5;
+          multiplier = 1.9;
         } else if (signalType === "RANGE") {
-          multiplier = 3.2;
+          multiplier = 1.7;
         } else if (currentAdx > 32) {
-          multiplier = 5.0; // High momentum expansion requires extra breathing space
+          multiplier = 2.2; // High momentum expansion
         } else {
-          multiplier = 4.5;
+          multiplier = 2.0;
         }
         break;
     }
   }
 
-  // 3. Dynamic Floor & Spread Buffer (Widdened to prevent instant SL triggering)
-  const spreadBuffer = Number(Math.max(2.0, liveSpread * 3.0).toFixed(2));
-  const dynamicFloor = Number(Math.max(14.0, atr * 3.0, liveSpread * 10.0).toFixed(2));
-  const dynamicCap   = Number(Math.max(35.0, atr * 7.5).toFixed(2));
+  // 3. Dynamic Floor & Spread Buffer (Tailored for Gold Volatility & Scalping)
+  // Gold 5m ATR ranges between 1.5 - 3.5 pts. Broker spreads fluctuate 0.35 - 0.75 pts.
+  // Dynamic floor of 4.80 - 5.50 pts avoids instant wick stop-outs while keeping risk tight.
+  // Dynamic cap of 7.50 - 8.50 pts prevents single-trade drawdowns.
+  const spreadBuffer = Number(Math.max(0.60, liveSpread * 1.5).toFixed(2));
+  const dynamicFloor = Number(Math.max(4.80, Math.min(atr * 1.8, 5.80), liveSpread * 3.5).toFixed(2));
+  const dynamicCap   = Number(Math.max(7.50, atr * 2.8).toFixed(2));
 
   // 4. Structural Swing High/Low Anchor Check
   let anchoredToStructure = false;
@@ -130,7 +133,7 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   if (direction === "LONG") {
     const swingLow = swingLevels.nearestSwingLow;
     if (swingLow && currentPrice > swingLow && (currentPrice - swingLow) <= dynamicCap) {
-      const rawDistance = (currentPrice - swingLow) + (atr * 0.9) + spreadBuffer;
+      const rawDistance = (currentPrice - swingLow) + (atr * 0.45) + spreadBuffer;
       computedSlDist = Math.max(rawDistance, dynamicFloor);
       anchoredToStructure = true;
       structureLevel = swingLow;
@@ -141,7 +144,7 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   } else {
     const swingHigh = swingLevels.nearestSwingHigh;
     if (swingHigh && swingHigh > currentPrice && (swingHigh - currentPrice) <= dynamicCap) {
-      const rawDistance = (swingHigh - currentPrice) + (atr * 0.9) + spreadBuffer;
+      const rawDistance = (swingHigh - currentPrice) + (atr * 0.45) + spreadBuffer;
       computedSlDist = Math.max(rawDistance, dynamicFloor);
       anchoredToStructure = true;
       structureLevel = swingHigh;
@@ -165,23 +168,24 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   const noiseClearanceAtr = Number((stopLossDistance / atr).toFixed(2));
   const spreadImpactPercent = Number(((liveSpread / stopLossDistance) * 100).toFixed(1));
 
-  let safetyStatus: DynamicAtrStopLossResult["liquidationSafety"]["status"] = "WIDE_SWING_PROTECTED";
-  let safetyLabel: string = "Maximum Anti-Liquidation Protection";
-  let safetyDescription: string = `Generous ${stopLossDistance} pt wide stop loss calibrated to prevent micro-wick liquidations and spread hunting on real money accounts.`;
+  let safetyStatus: DynamicAtrStopLossResult["liquidationSafety"]["status"] = "OPTIMAL";
+  let safetyLabel: string = "Optimal Scalping Clearance (1:2 R:R)";
+  let safetyDescription: string = `Calibrated with ${noiseClearanceAtr}x ATR (${stopLossDistance} pts SL). Provides clean clearance past 5m market wicks with strict positive risk-to-reward to steadily grow account balance.`;
 
-  // 6. Multi-Target Dynamic Take Profits (DO NOT CHANGE TAKE PROFIT — kept at fixed sensible target distances)
-  const tp1Dist = 10.0;
-  const tp2Dist = 15.0;
-  const tp3Dist = 24.0;
+  // 6. Multi-Target Dynamic Take Profits: Strict Asymmetric Risk-Reward (1:1.5 to 1:2.8)
+  // For Gold scalping account growth: TP1 = 1.5R, TP2 (primary) = 2.0R, TP3 = 2.8R
+  const tp1Dist = Number((stopLossDistance * 1.5).toFixed(2));
+  const tp2Dist = Number((stopLossDistance * 2.0).toFixed(2));
+  const tp3Dist = Number((stopLossDistance * 2.8).toFixed(2));
 
   const tp1Price = direction === "LONG" ? +(entryPrice + tp1Dist).toFixed(2) : +(entryPrice - tp1Dist).toFixed(2);
   const tp2Price = direction === "LONG" ? +(entryPrice + tp2Dist).toFixed(2) : +(entryPrice - tp2Dist).toFixed(2);
   const tp3Price = direction === "LONG" ? +(entryPrice + tp3Dist).toFixed(2) : +(entryPrice - tp3Dist).toFixed(2);
 
   const takeProfitTargets = {
-    tp1: { price: tp1Price, distance: tp1Dist, rrRatio: Number((tp1Dist / stopLossDistance).toFixed(2)), label: "TP1 (Scalp Lock 1.4R)" },
-    tp2: { price: tp2Price, distance: tp2Dist, rrRatio: Number((tp2Dist / stopLossDistance).toFixed(2)), label: "TP2 (Standard Target 2.0R)" },
-    tp3: { price: tp3Price, distance: tp3Dist, rrRatio: Number((tp3Dist / stopLossDistance).toFixed(2)), label: "TP3 (Runner Expansion 3.0R)" },
+    tp1: { price: tp1Price, distance: tp1Dist, rrRatio: 1.5, label: "TP1 (Quick Scalp 1.5R)" },
+    tp2: { price: tp2Price, distance: tp2Dist, rrRatio: 2.0, label: "TP2 (Standard Target 2.0R)" },
+    tp3: { price: tp3Price, distance: tp3Dist, rrRatio: 2.8, label: "TP3 (Runner Expansion 2.8R)" },
   };
 
   // 7. Chandelier Trailing Stop Level

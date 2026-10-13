@@ -379,12 +379,12 @@ export async function evaluateDeterministicOrb(
 
   // ── LONG BREAKOUT ──────────────────────────────────────────────────────────
   if (currentPrice >= longBreakoutPrice) {
-    // Widen Stop Loss Distance (preventing instant SL triggers from spreads/wicks)
-    const stopLossDistance = Math.min(Math.max(currentPrice - orb.mid, 14.0), 28.0);
+    // Dynamic Stop Loss for Gold Scalping: 4.80 to 6.80 pts (clears noise wicks without excessive risk)
+    const stopLossDistance = Math.min(Math.max(currentPrice - orb.mid, 4.8), 6.8);
     const stopLoss = +(currentPrice - stopLossDistance).toFixed(2);
 
-    // Keep Take Profit unchanged / fixed (do not expand with wider SL)
-    const targetExpansion = Math.max(orb.range * 1.0, 12.0);
+    // 1:2.0 Risk-to-Reward Ratio: 2x SL distance expansion for steady account balance growth
+    const targetExpansion = Number(Math.max(stopLossDistance * 2.0, orb.range * 1.5).toFixed(2));
     const takeProfit = +(currentPrice + targetExpansion).toFixed(2);
 
     logger.info(
@@ -406,7 +406,7 @@ export async function evaluateDeterministicOrb(
       stopLoss,
       takeProfit,
       trend: "BULLISH",
-      reason: `[HYBRID DUAL-ENGINE: ${orb.session} ORB BREAKOUT] Price ${currentPrice.toFixed(2)} broke above ${orb.session} Range High ${orb.high.toFixed(2)} (+${breakoutBuffer}pt buffer) · Range: ${orb.range.toFixed(2)}pt`,
+      reason: `[HYBRID DUAL-ENGINE: ${orb.session} ORB BREAKOUT] Price ${currentPrice.toFixed(2)} broke above ${orb.session} Range High ${orb.high.toFixed(2)} (+${breakoutBuffer}pt buffer) · Range: ${orb.range.toFixed(2)}pt · 1:2 R:R`,
       tradeDuration: "15-60 mins (ORB Session Expansion)",
       signalType: "ORB_BREAKOUT",
       engine: "DETERMINISTIC_ORB",
@@ -422,12 +422,12 @@ export async function evaluateDeterministicOrb(
 
   // ── SHORT BREAKOUT ─────────────────────────────────────────────────────────
   if (currentPrice <= shortBreakoutPrice) {
-    // Widen Stop Loss Distance (preventing instant SL triggers from spreads/wicks)
-    const stopLossDistance = Math.min(Math.max(orb.mid - currentPrice, 14.0), 28.0);
+    // Dynamic Stop Loss for Gold Scalping: 4.80 to 6.80 pts (clears noise wicks without excessive risk)
+    const stopLossDistance = Math.min(Math.max(orb.mid - currentPrice, 4.8), 6.8);
     const stopLoss = +(currentPrice + stopLossDistance).toFixed(2);
 
-    // Keep Take Profit unchanged / fixed (do not expand with wider SL)
-    const targetExpansion = Math.max(orb.range * 1.0, 12.0);
+    // 1:2.0 Risk-to-Reward Ratio: 2x SL distance expansion for steady account balance growth
+    const targetExpansion = Number(Math.max(stopLossDistance * 2.0, orb.range * 1.5).toFixed(2));
     const takeProfit = +(currentPrice - targetExpansion).toFixed(2);
 
     logger.info(

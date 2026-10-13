@@ -15,12 +15,17 @@ router.get("/", async (req, res) => {
   }
 });
 
+import { resetDailyTradingHalt, getDailyTradingStats } from "../lib/autoTrader.js";
+
 router.put("/", async (req, res) => {
   try {
     const newSettings = req.body;
     const oldSettings = await getSystemSettings();
     const settings = await updateSystemSettings(newSettings);
     
+    // Always reset any daily trading halt when settings are refreshed/updated
+    resetDailyTradingHalt();
+
     // If trading mode or account ID changed, reconnect MetaApi
     if (
         oldSettings.tradingMode !== settings.tradingMode || 
@@ -37,6 +42,11 @@ router.put("/", async (req, res) => {
     logger.error({ err }, "Error updating settings");
     return res.status(500).json({ error: "Failed to update settings" });
   }
+});
+
+router.post("/reset-halt", (_req, res) => {
+  resetDailyTradingHalt();
+  return res.json({ success: true, stats: getDailyTradingStats() });
 });
 
 router.post("/verify-passcode", async (req, res) => {

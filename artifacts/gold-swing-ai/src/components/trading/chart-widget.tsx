@@ -30,9 +30,15 @@ const TIMEFRAMES = [
 
 export function ChartWidget() {
   const cardRef = useRef<HTMLDivElement>(null);
-  // Default to OHLC for scalping execution (1m)
+  // Default to OHLC on 15-minute timeframe (15m)
   const [tab, setTab]                     = useState<Tab>("ohlc");
-  const [interval, setInterval]           = useState("1");
+  const [interval, setInterval]           = useState(() => {
+    try {
+      return localStorage.getItem("gold_chart_timeframe") || "15";
+    } catch {
+      return "15";
+    }
+  });
   const [dismissed, setDismissed]         = useState(false);
   const [isFullscreen, setIsFullscreen]   = useState(false);
   const [isExpanded, setIsExpanded]       = useState(() => {
@@ -64,6 +70,9 @@ export function ChartWidget() {
 
   const handleTimeframe = useCallback((val: string) => {
     setInterval(val);
+    try {
+      localStorage.setItem("gold_chart_timeframe", val);
+    } catch {}
   }, []);
 
   const toggleHeight = useCallback(() => {
