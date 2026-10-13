@@ -6,7 +6,15 @@ import { Toaster as Sonner } from "sonner"
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  let theme = "system"
+  try {
+    const themeContext = useTheme()
+    if (themeContext?.theme) {
+      theme = themeContext.theme
+    }
+  } catch {
+    // Fallback if next-themes context is unavailable
+  }
 
   return (
     <Sonner
@@ -20,7 +28,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           actionButton:
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
           cancelButton:
-            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+            "group-[.toast]:bg-muted group-[.toaster]:text-muted-foreground",
         },
       }}
       {...props}

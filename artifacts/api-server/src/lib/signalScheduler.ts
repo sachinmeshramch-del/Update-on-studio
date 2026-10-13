@@ -232,15 +232,33 @@ async function runScheduledSignal(): Promise<void> {
       logger.error({ err: e.message || e }, "Failed to evaluate auto-trade execution");
     }
 
+    let executionReason: string = "Simulated / Signal only (Auto-trading disabled)";
+    let executionStatus: "EXECUTED" | "NOT_EXECUTED" = "NOT_EXECUTED";
+    let executionType: "REAL_MT5" | "SIMULATED" = "SIMULATED";
+
     // Wait for broker dispatch to verify execution status (fast response from MT5)
     if (tradePromises.length > 0) {
       const results = await Promise.allSettled(tradePromises);
       for (const res of results) {
         if (res.status === "fulfilled" && res.value?.executed) {
           isRealTradeExecuted = true;
+          executionStatus = "EXECUTED";
+          executionType = "REAL_MT5";
           brokerPositionId = res.value.positionId ? String(res.value.positionId) : (res.value.orderId ? String(res.value.orderId) : null);
+          executionReason = `Executed on MT5 Account (Ticket #${brokerPositionId || 'LIVE'})`;
           break;
+        } else if (res.status === "fulfilled" && !res.value?.executed) {
+          executionReason = res.value?.reason || "Execution rejected by risk shield or broker margin check";
+        } else if (res.status === "rejected") {
+          executionReason = res.reason?.message || "Execution request failed";
         }
+      }
+    } else {
+      const isRealAuto = settings ? Boolean(settings.autoTradingRealEnabled || settings.autoTradingEnabled) : false;
+      if (isRealAuto && !settings?.realAccountId?.trim()) {
+        executionReason = "Real Auto-Trading is enabled, but Real Account ID is not configured in settings.";
+      } else if (!isRealAuto) {
+        executionReason = "Auto-Trading on Real MT5 is OFF in Settings (Signal Only).";
       }
     }
 
@@ -274,7 +292,10 @@ async function runScheduledSignal(): Promise<void> {
       candlePattern: null,
       candleScore: null,
       isRealTrade: isRealTradeExecuted,
-      brokerPositionId: brokerPositionId
+      brokerPositionId: brokerPositionId,
+      executionStatus: executionStatus,
+      executionReason: executionReason,
+      executionType: executionType
     }).catch((dbErr: any) => {
       logger.warn({ dbErr }, "Scheduler: failed to persist signal");
     });

@@ -379,12 +379,12 @@ export async function evaluateDeterministicOrb(
 
   // ── LONG BREAKOUT ──────────────────────────────────────────────────────────
   if (currentPrice >= longBreakoutPrice) {
-    // Deterministic Stop Loss: Range Midpoint or entry minus max 5.5 pt (tight defined risk)
-    const stopLossDistance = Math.min(Math.max(currentPrice - orb.mid, 3.5), 6.5);
+    // Widen Stop Loss Distance (preventing instant SL triggers from spreads/wicks)
+    const stopLossDistance = Math.min(Math.max(currentPrice - orb.mid, 14.0), 28.0);
     const stopLoss = +(currentPrice - stopLossDistance).toFixed(2);
 
-    // Deterministic Take Profit: 1.5R to 2.0R expansion of the opening range
-    const targetExpansion = Math.max(orb.range * 1.5, stopLossDistance * 2.0);
+    // Keep Take Profit unchanged / fixed (do not expand with wider SL)
+    const targetExpansion = Math.max(orb.range * 1.0, 12.0);
     const takeProfit = +(currentPrice + targetExpansion).toFixed(2);
 
     logger.info(
@@ -422,12 +422,12 @@ export async function evaluateDeterministicOrb(
 
   // ── SHORT BREAKOUT ─────────────────────────────────────────────────────────
   if (currentPrice <= shortBreakoutPrice) {
-    // Deterministic Stop Loss: Range Midpoint or entry plus max 5.5 pt
-    const stopLossDistance = Math.min(Math.max(orb.mid - currentPrice, 3.5), 6.5);
+    // Widen Stop Loss Distance (preventing instant SL triggers from spreads/wicks)
+    const stopLossDistance = Math.min(Math.max(orb.mid - currentPrice, 14.0), 28.0);
     const stopLoss = +(currentPrice + stopLossDistance).toFixed(2);
 
-    // Deterministic Take Profit: 1.5R to 2.0R expansion of the opening range
-    const targetExpansion = Math.max(orb.range * 1.5, stopLossDistance * 2.0);
+    // Keep Take Profit unchanged / fixed (do not expand with wider SL)
+    const targetExpansion = Math.max(orb.range * 1.0, 12.0);
     const takeProfit = +(currentPrice - targetExpansion).toFixed(2);
 
     logger.info(

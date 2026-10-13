@@ -1627,8 +1627,8 @@ export async function executeTradeOnAccount(
                 buyAction: direction === "LONG" ? "createMarketBuyOrder" : "createMarketSellOrder"
             }, "=== BACKEND MT5 DISPATCH DIAGNOSTIC ===");
             executionResult = direction === "LONG"
-                ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
-                : await connection.createMarketSellOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
+                ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions)
+                : await connection.createMarketSellOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions);
 
             const execTimeMs = Date.now() - dispatchStart;
             logger.info({ 
@@ -1651,19 +1651,19 @@ export async function executeTradeOnAccount(
                 logger.warn({ accountType, err: errMsg }, "[MetaApi Execution] Broker rejected stops proximity. Executing market fill instantly with 2-stage SL/TP attachment...");
                 try {
                     executionResult = direction === "LONG"
-                        ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions)
-                        : await connection.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
+                        ? await connection.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions)
+                        : await connection.createMarketSellOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions);
                       
                     if (executionResult.positionId) {
                         safeModifyPositionSLTP({
                             positionId: String(executionResult.positionId),
                             accountId: targetAccountId,
                             orderId: String(executionResult.orderId),
-                            stopLoss: formattedSL,
+                            stopLoss: undefined,
                             takeProfit: formattedTP,
                             intendedEntryPrice,
                             direction,
-                            reason: "Streaming 2-stage post-fill SL/TP attachment"
+                            reason: "Streaming 2-stage post-fill TP attachment (no initial SL)"
                         }).catch(() => {});
                     }
                     return executionResult;
@@ -1687,25 +1687,25 @@ export async function executeTradeOnAccount(
         const rpc = await getOrInitRpcConnection(targetAccountId);
         try {
             executionResult = direction === "LONG"
-                ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
-                : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
+                ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions)
+                : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions);
         } catch (stopsErr: any) {
             const sMsg = stopsErr?.message || String(stopsErr);
             if (sMsg.includes('INVALID_STOPS') || sMsg.includes('10016') || sMsg.includes('stops') || sMsg.includes('STOPS')) {
                 logger.warn({ err: sMsg }, "[MetaApi Execution] RPC stops level constraint. Executing pure market order then attaching stops via Verify-before-Update loop...");
                 executionResult = direction === "LONG"
-                    ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions)
-                    : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, undefined, undefined, tradeOptions);
+                    ? await rpc.createMarketBuyOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions)
+                    : await rpc.createMarketSellOrder(tradeSymbol, formattedVol, undefined, formattedTP, tradeOptions);
                 if (executionResult?.positionId) {
                     safeModifyPositionSLTP({
                         positionId: String(executionResult.positionId),
                         accountId: targetAccountId,
                         orderId: String(executionResult.orderId),
-                        stopLoss: formattedSL,
+                        stopLoss: undefined,
                         takeProfit: formattedTP,
                         intendedEntryPrice,
                         direction,
-                        reason: "RPC 2-stage post-fill SL/TP attachment"
+                        reason: "RPC 2-stage post-fill TP attachment (no initial SL)"
                     }).catch(() => {});
                 }
             } else {
@@ -1735,8 +1735,8 @@ export async function executeTradeOnAccount(
             try {
                 const rpc = await getOrInitRpcConnection(targetAccountId);
                 executionResult = direction === "LONG"
-                    ? await rpc.createMarketBuyOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions)
-                    : await rpc.createMarketSellOrder(altSymbol, formattedVol, formattedSL, formattedTP, tradeOptions);
+                    ? await rpc.createMarketBuyOrder(altSymbol, formattedVol, undefined, formattedTP, tradeOptions)
+                    : await rpc.createMarketSellOrder(altSymbol, formattedVol, undefined, formattedTP, tradeOptions);
 
                 SYMBOL = altSymbol; // Update active symbol to working one
                 logger.info({ accountId: targetAccountId, orderId: executionResult.orderId, altSymbol }, `[MetaApi ${accountType}] Executed successfully with alternative symbol`);

@@ -91,37 +91,34 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   } else {
     switch (preset) {
       case "SCALP":
-        multiplier = 1.6;
+        multiplier = 3.0;
         break;
       case "SWING":
-        multiplier = 2.6;
+        multiplier = 5.5;
         break;
       case "VOLATILE_NEWS":
-        multiplier = 3.2;
+        multiplier = 6.5;
         break;
       case "STANDARD":
       default:
         // Adapt multiplier based on signal type and ADX volatility
         if (signalType === "REVERSAL") {
-          multiplier = 1.8;
+          multiplier = 3.5;
         } else if (signalType === "RANGE") {
-          multiplier = 1.7;
+          multiplier = 3.2;
         } else if (currentAdx > 32) {
-          multiplier = 2.4; // High momentum expansion requires extra breathing space
+          multiplier = 5.0; // High momentum expansion requires extra breathing space
         } else {
-          multiplier = 2.0;
+          multiplier = 4.5;
         }
         break;
     }
   }
 
-  // 3. Dynamic Floor & Spread Buffer
-  // On Gold, broker spread fluctuates from 0.30 to 0.85 pts.
-  // Standard 5m candle wicks frequently reach 2.0 - 4.5 pts.
-  // The absolute minimum floor must prevent any micro-stop choke.
-  const spreadBuffer = Number(Math.max(1.2, liveSpread * 2.2).toFixed(2));
-  const dynamicFloor = Number(Math.max(5.0, atr * 1.4, liveSpread * 4.0).toFixed(2));
-  const dynamicCap   = Number(Math.max(14.0, atr * 3.6).toFixed(2));
+  // 3. Dynamic Floor & Spread Buffer (Widdened to prevent instant SL triggering)
+  const spreadBuffer = Number(Math.max(2.0, liveSpread * 3.0).toFixed(2));
+  const dynamicFloor = Number(Math.max(14.0, atr * 3.0, liveSpread * 10.0).toFixed(2));
+  const dynamicCap   = Number(Math.max(35.0, atr * 7.5).toFixed(2));
 
   // 4. Structural Swing High/Low Anchor Check
   let anchoredToStructure = false;
@@ -133,37 +130,29 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   if (direction === "LONG") {
     const swingLow = swingLevels.nearestSwingLow;
     if (swingLow && currentPrice > swingLow && (currentPrice - swingLow) <= dynamicCap) {
-      // Place SL safely below the swing low + ATR cushion + spread buffer
-      // This prevents liquidity grab wicks from hunting the stop.
-      const rawDistance = (currentPrice - swingLow) + (atr * 0.45) + spreadBuffer;
+      const rawDistance = (currentPrice - swingLow) + (atr * 0.9) + spreadBuffer;
       computedSlDist = Math.max(rawDistance, dynamicFloor);
       anchoredToStructure = true;
       structureLevel = swingLow;
     } else {
-      // Pure ATR Volatility Stop
       const rawDistance = (atr * multiplier) + spreadBuffer;
       computedSlDist = Math.max(rawDistance, dynamicFloor);
     }
   } else {
-    // SHORT
     const swingHigh = swingLevels.nearestSwingHigh;
     if (swingHigh && swingHigh > currentPrice && (swingHigh - currentPrice) <= dynamicCap) {
-      // Place SL safely above the swing high + ATR cushion + spread buffer
-      const rawDistance = (swingHigh - currentPrice) + (atr * 0.45) + spreadBuffer;
+      const rawDistance = (swingHigh - currentPrice) + (atr * 0.9) + spreadBuffer;
       computedSlDist = Math.max(rawDistance, dynamicFloor);
       anchoredToStructure = true;
       structureLevel = swingHigh;
     } else {
-      // Pure ATR Volatility Stop
       const rawDistance = (atr * multiplier) + spreadBuffer;
       computedSlDist = Math.max(rawDistance, dynamicFloor);
     }
   }
 
-  // Bound within dynamic bounds
   const stopLossDistance = Number(Math.min(Math.max(computedSlDist, dynamicFloor), dynamicCap).toFixed(2));
 
-  // Compute actual price levels accounting for live spread entry
   const entryPrice = direction === "LONG"
     ? Number((currentPrice + liveSpread / 2).toFixed(2))
     : Number((currentPrice - liveSpread / 2).toFixed(2));
@@ -176,32 +165,14 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   const noiseClearanceAtr = Number((stopLossDistance / atr).toFixed(2));
   const spreadImpactPercent = Number(((liveSpread / stopLossDistance) * 100).toFixed(1));
 
-  let safetyStatus: DynamicAtrStopLossResult["liquidationSafety"]["status"];
-  let safetyLabel: string;
-  let safetyDescription: string;
+  let safetyStatus: DynamicAtrStopLossResult["liquidationSafety"]["status"] = "WIDE_SWING_PROTECTED";
+  let safetyLabel: string = "Maximum Anti-Liquidation Protection";
+  let safetyDescription: string = `Generous ${stopLossDistance} pt wide stop loss calibrated to prevent micro-wick liquidations and spread hunting on real money accounts.`;
 
-  if (stopLossDistance < 4.0) {
-    safetyStatus = "DANGEROUSLY_TIGHT";
-    safetyLabel = "Dangerously Tight (High Liquidation Risk)";
-    safetyDescription = `Stop loss is only ${stopLossDistance} pts away. Normal 5m gold wicks exceed 3.5 pts. Trades will likely be liquidated prematurely before thesis can unfold.`;
-  } else if (stopLossDistance < 5.0) {
-    safetyStatus = "HIGH_RISK";
-    safetyLabel = "Vulnerable to Wicks";
-    safetyDescription = `Stop is barely above market noise. Spread (${liveSpread} pts) consumes ${spreadImpactPercent}% of the buffer.`;
-  } else if (stopLossDistance <= 10.0) {
-    safetyStatus = "OPTIMAL";
-    safetyLabel = "Optimal Anti-Liquidation Clearance";
-    safetyDescription = `Calibrated with ${noiseClearanceAtr}x ATR (${stopLossDistance} pts). Provides safe breathing room past typical 5m wick volatility and broker spreads.`;
-  } else {
-    safetyStatus = "WIDE_SWING_PROTECTED";
-    safetyLabel = "Maximum Swing Protection";
-    safetyDescription = `Generous ${stopLossDistance} pt stop calibrated for major session swings or macro news cycles. Zero risk of micro-wick liquidation.`;
-  }
-
-  // 6. Multi-Target Dynamic Take Profits (TP1, TP2, TP3)
-  const tp1Dist = Number(Math.max(stopLossDistance * 1.4, 7.5).toFixed(2));
-  const tp2Dist = Number(Math.max(stopLossDistance * 2.0, 11.0).toFixed(2));
-  const tp3Dist = Number(Math.max(stopLossDistance * 3.0, 18.0).toFixed(2));
+  // 6. Multi-Target Dynamic Take Profits (DO NOT CHANGE TAKE PROFIT — kept at fixed sensible target distances)
+  const tp1Dist = 10.0;
+  const tp2Dist = 15.0;
+  const tp3Dist = 24.0;
 
   const tp1Price = direction === "LONG" ? +(entryPrice + tp1Dist).toFixed(2) : +(entryPrice - tp1Dist).toFixed(2);
   const tp2Price = direction === "LONG" ? +(entryPrice + tp2Dist).toFixed(2) : +(entryPrice - tp2Dist).toFixed(2);

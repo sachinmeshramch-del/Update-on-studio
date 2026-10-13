@@ -16,7 +16,7 @@ import {
   History, TrendingUp, TrendingDown, Clock, Trash2,
   RotateCcw, Repeat, Repeat2, ChevronDown, Check,
   ChevronLeft, ChevronRight, Calendar, Eye, Copy, CheckCheck,
-  Activity, ExternalLink, Filter,
+  Activity, ExternalLink, Filter, CheckCircle2, AlertTriangle, ShieldCheck,
 } from "lucide-react";
 import { formatDistanceStrict } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -33,13 +33,21 @@ function toLocalTime(ts: string) {
   }
 }
 
-type TradeStatus  = "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD" | "MANUALLY_CLOSED" | "CLOSED";
-type SignalFilter = "ALL" | "TREND_FOLLOW" | "REVERSAL";
-type OutcomeFilter = "ALL" | "WINNING" | "LOSING";
+type TradeStatus    = "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD" | "MANUALLY_CLOSED" | "CLOSED";
+type SignalFilter   = "ALL" | "TREND_FOLLOW" | "REVERSAL";
+type OutcomeFilter  = "ALL" | "WINNING" | "LOSING";
+type ExecutionFilter = "ALL" | "EXECUTED" | "NOT_EXECUTED";
+
 const OUTCOME_LABELS: Record<OutcomeFilter, string> = {
   ALL: "All Outcomes",
   WINNING: "Winning",
   LOSING: "Losing",
+};
+
+const EXECUTION_LABELS: Record<ExecutionFilter, string> = {
+  ALL: "All Executions",
+  EXECUTED: "MT5 Executed",
+  NOT_EXECUTED: "Signal Only",
 };
 type Period       = "ALL" | "TODAY" | "7D" | "30D";
 
@@ -237,6 +245,59 @@ function TypeBadge({ type }: { type?: string | null }) {
   );
 }
 
+function ExecutionBadge({
+  isRealTrade,
+  executionStatus,
+  brokerPositionId,
+  executionReason,
+  tradeStatus,
+}: {
+  isRealTrade?: boolean | null;
+  executionStatus?: "EXECUTED" | "NOT_EXECUTED" | "SIMULATED" | string | null;
+  brokerPositionId?: string | null;
+  executionReason?: string | null;
+  tradeStatus?: string;
+}) {
+  const executed = Boolean(isRealTrade || executionStatus === "EXECUTED" || brokerPositionId);
+
+  if (executed) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 whitespace-nowrap shadow-sm cursor-help"
+        title={executionReason || `Executed on real MT5 broker account${brokerPositionId ? ` (Ticket: #${brokerPositionId})` : ""}`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+        <span className="tracking-wide">MT5 LIVE</span>
+        {brokerPositionId && (
+          <span className="font-mono text-[9px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-500/30">
+            #{brokerPositionId}
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  const isRunning = tradeStatus === "RUNNING";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap border cursor-help ${
+        isRunning
+          ? "bg-amber-500/15 text-amber-500 border-amber-500/35 font-bold animate-pulse"
+          : "bg-zinc-500/15 text-zinc-400 border-zinc-500/25 font-semibold"
+      }`}
+      title={
+        executionReason ||
+        (isRunning
+          ? "Running in app as Signal Only — NOT placed on real MT5 account (Risk shield protected or auto-trading disabled)"
+          : "Simulated signal only — not executed on MT5 account")
+      }
+    >
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRunning ? "bg-amber-400" : "bg-zinc-400"}`} />
+      <span>{isRunning ? "NOT ON MT5" : "SIGNAL ONLY"}</span>
+    </span>
+  );
+}
+
 // ── Period dropdown ───────────────────────────────────────────────────────────
 
 function PeriodDropdown({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
@@ -291,6 +352,9 @@ interface SigRow {
   tradeStatus?: string;
   pnlPoints?: number;
   entryPrice: number;
+  isRealTrade?: boolean;
+  executionStatus?: string;
+  brokerPositionId?: string | null;
 }
 
 function PnlSummary({ signals, currentPrice, period }: {
@@ -306,6 +370,10 @@ function PnlSummary({ signals, currentPrice, period }: {
   const breakEven = closed.filter(s => s.tradeStatus === "STOP_HIT" && (s.pnlPoints ?? 0) === 0).length;
   const losses    = closed.filter(s => (s.pnlPoints ?? 0) < 0).length;
   const winRate   = closed.length > 0 ? Math.round((wins / closed.length) * 100) : null;
+
+  // Execution breakdown
+  const executedCount = tradeable.filter(s => Boolean(s.isRealTrade || s.executionStatus === "EXECUTED" || s.brokerPositionId)).length;
+  const signalOnlyCount = tradeable.length - executedCount;
 
   // Sum all closed P&L + live P&L for running trades
   let totalPnl = 0;
@@ -332,6 +400,21 @@ function PnlSummary({ signals, currentPrice, period }: {
       <div className="flex items-center gap-1.5">
         <span className="text-muted-foreground">Trades</span>
         <span className="font-mono font-bold text-foreground">{tradeable.length}</span>
+      </div>
+
+      <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
+
+      {/* Execution breakdown pills */}
+      <div className="flex items-center gap-1.5" title="Execution status breakdown across real MT5 broker vs simulated signal">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          {executedCount} MT5 Live
+        </span>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-zinc-500/15 text-zinc-400 border border-zinc-500/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+          {signalOnlyCount} Signal Only
+        </span>
       </div>
 
       <div className="w-px h-4 bg-black/10 dark:bg-white/10" />
@@ -389,8 +472,56 @@ function PnlSummary({ signals, currentPrice, period }: {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Dropdowns ─────────────────────────────────────────────────────────────────
 
+function ExecutionDropdown({ value, onChange }: { value: ExecutionFilter; onChange: (e: ExecutionFilter) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 hover:border-border transition-all text-foreground"
+      >
+        <span className="flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${value === "EXECUTED" ? "bg-emerald-400" : value === "NOT_EXECUTED" ? "bg-zinc-400" : "bg-amber-400"}`} />
+          <span>{EXECUTION_LABELS[value]}</span>
+        </span>
+        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
+          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 border-b border-border">
+            Execution Filter
+          </div>
+          {(["ALL", "EXECUTED", "NOT_EXECUTED"] as ExecutionFilter[]).map(e => (
+            <button
+              key={e}
+              onClick={() => { onChange(e); setOpen(false); }}
+              className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            >
+              <span className={`flex items-center gap-2 ${value === e ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${e === "EXECUTED" ? "bg-emerald-400" : e === "NOT_EXECUTED" ? "bg-zinc-400" : "bg-amber-400"}`} />
+                {EXECUTION_LABELS[e]}
+              </span>
+              {value === e && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OutcomeDropdown({ value, onChange }: { value: OutcomeFilter; onChange: (o: OutcomeFilter) => void }) {
   const [open, setOpen] = useState(false);
@@ -453,7 +584,7 @@ function TodayTradesModal({
   onDelete,
   onRefetch,
 }: TodayTradesModalProps) {
-  const [filter, setFilter] = useState<"ALL" | "LONG" | "SHORT" | "WINNERS" | "LOSERS" | "RUNNING">("ALL");
+  const [filter, setFilter] = useState<"ALL" | "LONG" | "SHORT" | "WINNERS" | "LOSERS" | "RUNNING" | "MT5_EXECUTED" | "SIGNAL_ONLY">("ALL");
   const [copied, setCopied] = useState(false);
 
   const todayDateStr = useMemo(() => {
@@ -474,6 +605,9 @@ function TodayTradesModal({
   const runnerPts = closed.filter(t => (t.pnlPoints ?? 0) >= 4.0).reduce((acc, t) => acc + (t.pnlPoints ?? 0), 0);
   const winRate = closed.length > 0 ? Math.round((wins / closed.length) * 100) : null;
 
+  const executedCount = trades.filter(t => Boolean(t.isRealTrade || t.executionStatus === "EXECUTED" || t.brokerPositionId)).length;
+  const signalOnlyCount = trades.length - executedCount;
+
   let totalPnl = 0;
   for (const t of trades) {
     if (t.tradeStatus === "TARGET_HIT" || t.tradeStatus === "STOP_HIT") {
@@ -490,6 +624,8 @@ function TodayTradesModal({
   // Filtered trade list
   const filteredTrades = useMemo(() => {
     return trades.filter(t => {
+      if (filter === "MT5_EXECUTED") return Boolean(t.isRealTrade || t.executionStatus === "EXECUTED" || t.brokerPositionId);
+      if (filter === "SIGNAL_ONLY") return !Boolean(t.isRealTrade || t.executionStatus === "EXECUTED" || t.brokerPositionId);
       if (filter === "LONG") return t.signal === "LONG";
       if (filter === "SHORT") return t.signal === "SHORT";
       if (filter === "RUNNING") return t.tradeStatus === "RUNNING";
@@ -513,6 +649,7 @@ function TodayTradesModal({
     const lines = [
       `📊 XAUUSD Gold Intraday – Today's Trading Activity (${todayDateStr})`,
       `Total Trades Triggered: ${trades.length} (${longCount} Long / ${shortCount} Short)`,
+      `Execution Breakdown: ${executedCount} MT5 Live / ${signalOnlyCount} Signal Only`,
       `Performance: ${wins}W / ${losses}L / ${breakEven}BE ${winRate !== null ? `(${winRate}% Win Rate)` : ""}`,
       `Net Realized / Live P&L: ${pnlPositive ? "+" : ""}${totalPnl.toFixed(2)} pts`,
       runners > 0 ? `Runners Banked: ${runners} trade(s) (+${runnerPts.toFixed(1)} pts)` : "",
@@ -524,7 +661,10 @@ function TodayTradesModal({
           pts = t.signal === "LONG" ? currentPrice - t.entryPrice : t.entryPrice - currentPrice;
         }
         const ptsStr = pts >= 0 ? `+${pts.toFixed(2)}` : pts.toFixed(2);
-        return `#${idx + 1} [${time}] ${t.signal} (${t.signalType ?? "TREND"}) | Entry: ${formatPrice(t.entryPrice)} | SL: ${formatPrice(t.stopLoss)} | TP: ${formatPrice(t.takeProfit)} | PnL: ${ptsStr} pts | Status: ${t.tradeStatus ?? "RUNNING"}`;
+        const execLabel = Boolean(t.isRealTrade || t.executionStatus === "EXECUTED" || t.brokerPositionId)
+          ? `[MT5: EXECUTED ${t.brokerPositionId ? `#${t.brokerPositionId}` : 'LIVE'}]`
+          : `[MT5: NOT EXECUTED (Signal Only)]`;
+        return `#${idx + 1} [${time}] ${t.signal} (${t.signalType ?? "TREND"}) ${execLabel} | Entry: ${formatPrice(t.entryPrice)} | SL: ${formatPrice(t.stopLoss)} | TP: ${formatPrice(t.takeProfit)} | PnL: ${ptsStr} pts | Status: ${t.tradeStatus ?? "RUNNING"}`;
       }),
     ].filter(Boolean);
 
@@ -622,6 +762,8 @@ function TodayTradesModal({
               {(
                 [
                   { id: "ALL", label: `All (${trades.length})` },
+                  { id: "MT5_EXECUTED", label: `🟢 MT5 Live (${executedCount})` },
+                  { id: "SIGNAL_ONLY", label: `⚪ Signal Only (${signalOnlyCount})` },
                   { id: "LONG", label: `Longs (${longCount})` },
                   { id: "SHORT", label: `Shorts (${shortCount})` },
                   { id: "WINNERS", label: `Winners (${wins})` },
@@ -675,7 +817,7 @@ function TodayTradesModal({
                   key={row.id || idx}
                   className="p-3.5 rounded-xl border border-border bg-black/20 hover:bg-black/30 transition-all flex flex-col gap-2.5 group"
                 >
-                  {/* Top line: Time, Signal, Type, Status, PnL */}
+                  {/* Top line: Time, Signal, Type, Status, Execution, PnL */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-mono font-semibold text-foreground">
@@ -689,6 +831,13 @@ function TodayTradesModal({
                       </Badge>
                       <TypeBadge type={(row as any).signalType} />
                       <StatusBadge status={status} pnlPoints={row.pnlPoints} />
+                      <ExecutionBadge
+                        isRealTrade={row.isRealTrade}
+                        executionStatus={row.executionStatus}
+                        brokerPositionId={row.brokerPositionId}
+                        executionReason={row.executionReason}
+                        tradeStatus={status}
+                      />
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -778,6 +927,7 @@ export function HistoryTable() {
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
   const [period, setPeriod]             = useState<Period>("TODAY");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
+  const [executionFilter, setExecutionFilter] = useState<ExecutionFilter>("ALL");
 
   // Compact pagination state (Default 5 trades at a time)
   const [pageSize, setPageSize]       = useState<number>(5);
@@ -787,7 +937,7 @@ export function HistoryTable() {
   // Reset page to 1 when filters or page size change
   useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter, period, outcomeFilter, pageSize]);
+  }, [typeFilter, period, outcomeFilter, executionFilter, pageSize]);
 
   function handleDelete(id: string) {
     deleteSignal(
@@ -823,6 +973,14 @@ export function HistoryTable() {
   let signals = typeFilter === "ALL"
     ? periodSignals
     : periodSignals.filter((s: any) => (s as any).signalType === typeFilter);
+
+  // Execution filter
+  if (executionFilter !== "ALL") {
+    signals = signals.filter((s: any) => {
+      const isExecuted = Boolean(s.isRealTrade || s.executionStatus === "EXECUTED" || s.brokerPositionId);
+      return executionFilter === "EXECUTED" ? isExecuted : !isExecuted;
+    });
+  }
 
   // Outcome filter
   if (outcomeFilter !== "ALL") {

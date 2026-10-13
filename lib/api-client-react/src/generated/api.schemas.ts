@@ -203,6 +203,12 @@ export interface HistoryEntry {
   closedAt?: string;
   /** Profit or loss in USD points */
   pnlPoints?: number;
+  signalType?: string;
+  isRealTrade?: boolean;
+  executionStatus?: "EXECUTED" | "NOT_EXECUTED" | "SIMULATED";
+  brokerPositionId?: string | null;
+  executionReason?: string | null;
+  executionType?: string | null;
 }
 
 export interface HistoryResponse {

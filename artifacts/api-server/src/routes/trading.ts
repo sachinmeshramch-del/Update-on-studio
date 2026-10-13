@@ -6,7 +6,7 @@ import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.j
 import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo } from "../lib/metaApiFeed.js";
+import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo, getOpenBrokerPositions } from "../lib/metaApiFeed.js";
 import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById, getSystemSettings } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
@@ -353,25 +353,64 @@ router.get(["/history", "/signals"], async (req, res) => {
     const limitParam = parseInt((req.query.limit as string) ?? "1000", 10);
     const limit = isNaN(limitParam) || limitParam < 1 ? 1000 : Math.min(limitParam, 5000);
 
-    const rows = await getRecentSignals(limit);
+    const [rows, openBrokerPositions] = await Promise.all([
+      getRecentSignals(limit),
+      getOpenBrokerPositions().catch(() => [])
+    ]);
 
-    const signals = rows.map((r: any) => ({
-      id:            String(r.id),
-      signal:        r.signal as "LONG" | "SHORT" | "HOLD",
-      confidence:    r.confidence,
-      entryPrice:    r.entryPrice,
-      stopLoss:      r.stopLoss,
-      takeProfit:    r.takeProfit,
-      trend:         r.trend as "BULLISH" | "BEARISH" | "NEUTRAL",
-      reason:        r.reason,
-      timestamp:     r.createdAt.toISOString(),
-      tradeDuration: r.tradeDuration,
-      tradeStatus:   (r.tradeStatus ?? "RUNNING") as "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD",
-      closedPrice:   r.closedPrice ?? undefined,
-      closedAt:      r.closedAt ? r.closedAt.toISOString() : undefined,
-      pnlPoints:     r.pnlPoints ?? undefined,
-      signalType:    r.signalType ?? "TREND_FOLLOW",
-    }));
+    const signals = rows.map((r: any) => {
+      // Cross-verify with open broker positions in real time
+      const matchingOpenPos = openBrokerPositions.find((p: any) => {
+        if (r.brokerPositionId && String(r.brokerPositionId) === String(p.id)) return true;
+        const rTime = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+        const pTime = p.time ? new Date(p.time).getTime() : 0;
+        const timeMatch = rTime > 0 && Math.abs(pTime - rTime) <= 180_000;
+        const dirMatch = (r.signal === "LONG" && p.type === "POSITION_TYPE_BUY") ||
+                         (r.signal === "SHORT" && p.type === "POSITION_TYPE_SELL");
+        const priceMatch = Math.abs((p.openPrice ?? 0) - r.entryPrice) <= 2.5;
+        return timeMatch && dirMatch && priceMatch;
+      });
+
+      // True if explicitly marked as real trade, or has a verified broker ticket, or currently open on broker
+      const isExecuted = Boolean(r.isRealTrade === true || r.brokerPositionId || matchingOpenPos);
+      const positionId = matchingOpenPos?.id ? String(matchingOpenPos.id) : (r.brokerPositionId ? String(r.brokerPositionId) : null);
+      const isRunning = (r.tradeStatus ?? "RUNNING") === "RUNNING";
+
+      let executionStatus: "EXECUTED" | "NOT_EXECUTED" = isExecuted ? "EXECUTED" : "NOT_EXECUTED";
+      let executionReason = r.executionReason;
+      if (!executionReason) {
+        if (isExecuted) {
+          executionReason = positionId ? `Executed on Real MT5 Account (Ticket #${positionId})` : "Executed on Real MT5 Account";
+        } else if (isRunning) {
+          executionReason = "Running as Signal Only (Not executed on MT5 account — Auto-trading disabled or risk shield active)";
+        } else {
+          executionReason = "Not executed on MT5 (Simulated / Signal Only)";
+        }
+      }
+
+      return {
+        id:               String(r.id),
+        signal:           r.signal as "LONG" | "SHORT" | "HOLD",
+        confidence:       r.confidence,
+        entryPrice:       r.entryPrice,
+        stopLoss:         r.stopLoss,
+        takeProfit:       r.takeProfit,
+        trend:            r.trend as "BULLISH" | "BEARISH" | "NEUTRAL",
+        reason:           r.reason,
+        timestamp:        r.createdAt.toISOString(),
+        tradeDuration:    r.tradeDuration,
+        tradeStatus:      (r.tradeStatus ?? "RUNNING") as "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD",
+        closedPrice:      r.closedPrice ?? undefined,
+        closedAt:         r.closedAt ? r.closedAt.toISOString() : undefined,
+        pnlPoints:        r.pnlPoints ?? undefined,
+        signalType:       r.signalType ?? "TREND_FOLLOW",
+        isRealTrade:      isExecuted,
+        executionStatus,
+        executionType:    isExecuted ? "REAL_MT5" : "SIMULATED",
+        brokerPositionId: positionId,
+        executionReason,
+      };
+    });
 
     res.json({ signals });
   } catch (err: any) {

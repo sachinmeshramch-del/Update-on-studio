@@ -1676,47 +1676,91 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       dynamicAtrStop,
     };
 
-    // ── Hybrid Dual-Engine: Evaluate Deterministic ORB Breakout Engine ──────
+    // ── Engine Mode & Hybrid Dual-Engine Architecture Evaluation ───────────
     const orbStatus = await getDeterministicOrbStatus(currentPrice);
     const orbSignal = await evaluateDeterministicOrb(currentPrice, liveSpread);
+    const settings = await getSystemSettings().catch(() => null);
+    const engineMode = settings?.engineMode || "HYBRID_DUAL";
 
-    if (orbSignal) {
-      const isSynergy = (orbSignal.signal === "LONG" && (trendPrimary === "BULLISH" || result.signal === "LONG")) ||
-                        (orbSignal.signal === "SHORT" && (trendPrimary === "BEARISH" || result.signal === "SHORT"));
-
-      result.signal = orbSignal.signal;
-      result.entryPrice = orbSignal.entryPrice;
-      result.stopLoss = orbSignal.stopLoss;
-      result.takeProfit = orbSignal.takeProfit;
-      result.trend = orbSignal.trend;
-      result.tradeDuration = orbSignal.tradeDuration;
-      result.signalType = "ORB_BREAKOUT";
-
-      if (isSynergy) {
-        result.confidence = 96;
-        result.signalStrength = "STRONG";
-        result.reason = `[HYBRID DUAL-ENGINE: DUAL SYNERGY] ${orbSignal.reason} · Supported by SMC Multi-Timeframe Trend ✓`;
-        result.dualEngine = {
-          activeEngine: "DUAL_SYNERGY",
-          orbStatus,
-          orbRange: orbSignal.orbRange
-        };
-      } else {
-        result.confidence = orbSignal.confidence;
-        result.signalStrength = "STRONG";
-        result.reason = orbSignal.reason;
-        result.dualEngine = {
-          activeEngine: "DETERMINISTIC_ORB",
-          orbStatus,
-          orbRange: orbSignal.orbRange
-        };
-      }
-    } else {
+    if (engineMode === "HERMES_ADAPTIVE") {
+      // 1. HERMES ADAPTIVE MODE:
+      // Multi-indicator adaptive confluence engine (SMC + EMA ribbons + RSI + MACD + FVG + Order Blocks).
+      // Trades according to dynamic Hermes hyper-parameters without ORB breakout override.
       result.dualEngine = {
         activeEngine: "SMC_CONFLUENCE",
         orbStatus,
         orbRange: orbStatus.currentRange
       };
+    } else if (engineMode === "DETERMINISTIC_ORB") {
+      // 2. PURE DETERMINISTIC ORB MODE:
+      // Strictly fires only when an Opening Range Breakout is active. Outside ORB sessions, holds.
+      if (orbSignal) {
+        result.signal = orbSignal.signal;
+        result.entryPrice = orbSignal.entryPrice;
+        result.stopLoss = orbSignal.stopLoss;
+        result.takeProfit = orbSignal.takeProfit;
+        result.trend = orbSignal.trend;
+        result.tradeDuration = orbSignal.tradeDuration;
+        result.signalType = "ORB_BREAKOUT";
+        result.confidence = orbSignal.confidence;
+        result.signalStrength = "STRONG";
+        result.reason = `[PURE DETERMINISTIC ORB] ${orbSignal.reason}`;
+        result.dualEngine = {
+          activeEngine: "DETERMINISTIC_ORB",
+          orbStatus,
+          orbRange: orbSignal.orbRange
+        };
+      } else {
+        result.signal = "HOLD";
+        result.confidence = 0;
+        result.reason = `[PURE DETERMINISTIC ORB] HOLD – ${orbStatus.summary || "Waiting for ORB Breakout"}`;
+        result.dualEngine = {
+          activeEngine: "DETERMINISTIC_ORB",
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      }
+    } else {
+      // 3. HYBRID DUAL-ENGINE MODE (Default / Recommended):
+      // Merges the Deterministic ORB Breakout Engine with Hermes AI Multi-Timeframe Confluence.
+      if (orbSignal) {
+        const isSynergy = (orbSignal.signal === "LONG" && (trendPrimary === "BULLISH" || result.signal === "LONG")) ||
+                          (orbSignal.signal === "SHORT" && (trendPrimary === "BEARISH" || result.signal === "SHORT"));
+
+        result.signal = orbSignal.signal;
+        result.entryPrice = orbSignal.entryPrice;
+        result.stopLoss = orbSignal.stopLoss;
+        result.takeProfit = orbSignal.takeProfit;
+        result.trend = orbSignal.trend;
+        result.tradeDuration = orbSignal.tradeDuration;
+        result.signalType = "ORB_BREAKOUT";
+
+        if (isSynergy) {
+          result.confidence = 96;
+          result.signalStrength = "STRONG";
+          result.reason = `[HYBRID DUAL-ENGINE: DUAL SYNERGY] ${orbSignal.reason} · Supported by SMC Multi-Timeframe Trend ✓`;
+          result.dualEngine = {
+            activeEngine: "DUAL_SYNERGY",
+            orbStatus,
+            orbRange: orbSignal.orbRange
+          };
+        } else {
+          result.confidence = orbSignal.confidence;
+          result.signalStrength = "STRONG";
+          result.reason = orbSignal.reason;
+          result.dualEngine = {
+            activeEngine: "DETERMINISTIC_ORB",
+            orbStatus,
+            orbRange: orbSignal.orbRange
+          };
+        }
+      } else {
+        result.dualEngine = {
+          activeEngine: "SMC_CONFLUENCE",
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      }
     }
 
     cachedSignal = result;
