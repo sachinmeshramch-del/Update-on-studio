@@ -1607,11 +1607,11 @@ export async function executeTradeOnAccount(
                 positionId: posId,
                 accountId: targetAccountId,
                 orderId,
-                stopLoss,
+                stopLoss: undefined,
                 takeProfit,
                 intendedEntryPrice,
                 direction,
-                reason: "Slippage stop calibration"
+                reason: "Slippage take profit calibration (no initial SL)"
             });
         } catch (calErr: any) {
             logger.debug({ err: calErr?.message }, "Slippage stop calibration notice");
