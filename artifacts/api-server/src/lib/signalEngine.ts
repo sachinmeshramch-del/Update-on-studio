@@ -1010,9 +1010,11 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const longRaw  = Math.max(0, longEmaScore  + longRsiScore  + longMacdScore  + longMomentum  + longFvgScore  + longSweepScore  + longObScore  + longCandleScore  + longMomentumAdj);
     const shortRaw = Math.max(0, shortEmaScore + shortRsiScore + shortMacdScore + shortMomentum + shortFvgScore + shortSweepScore + shortObScore + shortCandleScore + shortMomentumAdj);
 
-    // Normalize to 0-100 for display and threshold comparison
-    let longNorm  = Math.min(100, Math.round((longRaw  / MAX_RAW_SCORE) * 100));
-    let shortNorm = Math.min(100, Math.round((shortRaw / MAX_RAW_SCORE) * 100));
+    // Normalize to 0-100 for display and threshold comparison (realistic institutional max 140)
+    // Scale so 100% is never falsely declared on partial multi-timeframe confirmation
+    const REALISTIC_MAX_SCORE = 140;
+    let longNorm  = Math.min(94, Math.round((longRaw  / REALISTIC_MAX_SCORE) * 100));
+    let shortNorm = Math.min(94, Math.round((shortRaw / REALISTIC_MAX_SCORE) * 100));
 
     // ── High-Precision Accuracy Guards (Prevent buying tops / selling bottoms) ──
     // ── Market Structure & Range Analysis (Move these UP so we can use them in the guards) ──
@@ -1353,8 +1355,10 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       // When 1H and 15m are both aligned bearish or in a downtrend, ALL LONG trades (TREND_FOLLOW, RANGE, REVERSAL) are strictly FORBIDDEN!
       const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
       const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
-      const priceBullishMacro = currentPrice > ema9 && currentPrice > ema21; // 15m price structure
-      const priceBearishMacro = currentPrice < ema9 && currentPrice < ema21; // 15m price structure
+      const lastEma9_15m = ema9_15m[ema9_15m.length - 1] ?? currentPrice;
+      const lastEma21_15m = ema21_15m[ema21_15m.length - 1] ?? currentPrice;
+      const priceBullishMacro = currentPrice > lastEma9_15m && currentPrice > lastEma21_15m; // 15m price structure
+      const priceBearishMacro = currentPrice < lastEma9_15m && currentPrice < lastEma21_15m; // 15m price structure
 
       const isMultiTimeframeBearish = (macro1hState === "BEARISH" || trend1h === "BEARISH" || ms1h.structure === "DOWNTREND" || priceBearish1h) &&
                                       (trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearishMacro);
@@ -1463,31 +1467,45 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         }
       }
 
-      // 3. Strict blocking for Trend-Following Trades: Never trend-follow against 1H macro or 15m structure
+      // 3. Strict blocking for Trend-Following Trades: Must strictly align with 1H macro AND 15m structure
       if (finalSignal !== "HOLD" && signalType === "TREND_FOLLOW") {
         const priceBullish1h = currentPrice > lastEma20_1h && currentPrice > lastEma50_1h;
         const priceBearish1h = currentPrice < lastEma20_1h && currentPrice < lastEma50_1h;
+        const priceBullish15m = currentPrice > lastEma9_15m && currentPrice > lastEma21_15m;
+        const priceBearish15m = currentPrice < lastEma9_15m && currentPrice < lastEma21_15m;
         
-        const htBearish = macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h;
-        const htBullish = macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h;
+        const htBearish = macro1hState === "BEARISH" || trendMacro === "BEARISH" || msMacro.structure === "DOWNTREND" || priceBearish1h || priceBearish15m;
+        const htBullish = macro1hState === "BULLISH" || trendMacro === "BULLISH" || msMacro.structure === "UPTREND" || priceBullish1h || priceBullish15m;
 
-        // Bypassing logic: If there's high confidence (e.g., > 75%) and a strong sweep, 
-        // we might allow it even if HTF is slightly against it, but generally we block.
-        // For now, let's keep it strict but make the reason clearer.
         if (finalSignal === "LONG" && htBearish) {
           logger.warn(
             { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed LONG trend-follow: Higher timeframe structure is BEARISH"
           );
           finalSignal = "HOLD";
-          suppressionReason = `Strict Macro Gate: Cannot BUY trend-follow. (1H: ${macro1hState}, 15m: ${trendMacro}, 15m MS: ${msMacro.structure})`;
+          suppressionReason = `Strict Macro Gate: Cannot BUY trend-follow against bearish HTF. (1H: ${macro1hState}, 15m: ${trendMacro}, 15m MS: ${msMacro.structure})`;
         } else if (finalSignal === "SHORT" && htBullish) {
           logger.warn(
             { finalSignal, macro1hState, trend1h, trendMacro, msMacro: msMacro.structure },
             "[Macro Gate] Suppressed SHORT trend-follow: Higher timeframe structure is BULLISH"
           );
           finalSignal = "HOLD";
-          suppressionReason = `Strict Macro Gate: Cannot SELL trend-follow. (1H: ${macro1hState}, 15m: ${trendMacro}, 15m MS: ${msMacro.structure})`;
+          suppressionReason = `Strict Macro Gate: Cannot SELL trend-follow against bullish HTF. (1H: ${macro1hState}, 15m: ${trendMacro}, 15m MS: ${msMacro.structure})`;
+        } else if (finalSignal === "SHORT" && (macro1hState === "NEUTRAL" && trendMacro === "NEUTRAL")) {
+          // Prevent trend-following short into chop when neither 1H nor 15m has established a downtrend
+          logger.warn(
+            { finalSignal, macro1hState, trendMacro },
+            "[Macro Gate] Suppressed SHORT trend-follow: HTF is NEUTRAL/CHOP without confirmed downtrend"
+          );
+          finalSignal = "HOLD";
+          suppressionReason = "Strict Macro Gate: Cannot SELL trend-follow in neutral HTF without established downtrend.";
+        } else if (finalSignal === "LONG" && (macro1hState === "NEUTRAL" && trendMacro === "NEUTRAL")) {
+          logger.warn(
+            { finalSignal, macro1hState, trendMacro },
+            "[Macro Gate] Suppressed LONG trend-follow: HTF is NEUTRAL/CHOP without confirmed uptrend"
+          );
+          finalSignal = "HOLD";
+          suppressionReason = "Strict Macro Gate: Cannot BUY trend-follow in neutral HTF without established uptrend.";
         }
       }
 

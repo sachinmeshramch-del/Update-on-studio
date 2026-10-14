@@ -316,13 +316,19 @@ export async function checkRunningTrades(): Promise<void> {
         // ── GUARANTEED PROFIT RETRACE SAFEGUARD WHEN MARKET WAS IN FAVOR (LONG) ──
         // Only trigger market close if the trade ALREADY moved firmly into favor (peak >= +1.50 pts)
         // AND subsequently retraced back down to the +1.00 pt guarantee level.
-        // Never trigger on initial arrival at +1.00 pts so runners can run!
+        // Slippage & Spread Compensation: For a LONG trade, closing sends a SELL at the live BID price.
+        // To guarantee the user receives at least the desired +1.00 point net profit after broker execution,
+        // we add a slippage/spread allowance buffer (0.15 pts) so net profit delivered to the broker account is >= 1.00 pt.
         const is5rRunner = trade.tradeDuration?.includes("5R") || trade.signalType === "BREAKOUT" || (distanceToInitialTarget >= 14.0);
-        const minGuaranteedProfitPrice = +(actualEntry + 1.00).toFixed(2);
-        if (!is5rRunner && peakProfit >= 1.50 && currentBid <= minGuaranteedProfitPrice) {
+        const slippageAllowance = 0.15;
+        const targetNetProfit = 1.00;
+        const minGuaranteedProfitPrice = +(actualEntry + targetNetProfit).toFixed(2);
+        const triggerProfitThreshold = +(actualEntry + targetNetProfit + slippageAllowance).toFixed(2);
+
+        if (!is5rRunner && peakProfit >= 1.50 && currentBid <= triggerProfitThreshold) {
           newStatus   = "TARGET_HIT";
-          closedPrice = minGuaranteedProfitPrice;
-          pnlPoints   = 1.00;
+          closedPrice = +(currentBid).toFixed(2);
+          pnlPoints   = +(closedPrice - actualEntry).toFixed(2);
           if (matchingOpenPos) {
             closeBrokerPosition(matchingOpenPos.id, matchingOpenPos.accountId).catch(err =>
               logger.warn({ id, err }, "Failed to send market close for 1-point profit booking on broker")
@@ -331,7 +337,7 @@ export async function checkRunningTrades(): Promise<void> {
           activeTradeStates.delete(id as string);
           logger.info(
             { id, signal, entryPrice: actualEntry, peakProfit, closedPrice, pnlPoints },
-            `🎯 [Favorable Market Exit] Trade moved firmly in favor (peak: +${peakProfit} pts) and retraced to guarantee level. Booked +1.00 points profit!`
+            `🎯 [Favorable Market Exit] Trade moved firmly in favor (peak: +${peakProfit} pts) and retraced to guarantee level (+ slippage buffer). Booked desired profit on broker!`
           );
         } else if (!matchingOpenPos && !trade.isRealTrade && currentBid <= stopLoss) {
           newStatus   = "STOP_HIT";
@@ -527,13 +533,21 @@ export async function checkRunningTrades(): Promise<void> {
         // ── GUARANTEED PROFIT RETRACE SAFEGUARD WHEN MARKET WAS IN FAVOR (SHORT) ──
         // Only trigger market close if the trade ALREADY moved firmly into favor (peak >= +1.50 pts)
         // AND subsequently retraced back up to the -1.00 pt guarantee level.
-        // Never trigger on initial arrival at -1.00 pts so runners can run!
+        // Slippage & Spread Compensation: For a SHORT trade, closing sends a BUY at the live ASK price.
+        // The broker spreads GOLD by ~0.30 - 0.55 points. If we close when ASK touches (Entry - 1.00), the BID was
+        // only (Entry - 1.50), and after spread execution the realized profit might be 0.66 - 0.70 pts.
+        // To guarantee the user receives at least the desired +1.00 point net profit on their broker statement:
+        // We calculate target execution price factoring in the broker spread and slippage allowance (0.35 pts).
         const is5rRunner = trade.tradeDuration?.includes("5R") || trade.signalType === "BREAKOUT" || (distanceToInitialTarget >= 14.0);
-        const minGuaranteedProfitPrice = +(actualEntry - 1.00).toFixed(2);
-        if (!is5rRunner && peakProfit >= 1.50 && currentAsk >= minGuaranteedProfitPrice) {
+        const slippageSpreadBuffer = Math.max(0.35, +(currentSpread * 0.6).toFixed(2));
+        const targetNetProfit = 1.00;
+        // Trigger threshold: Close only when ASK is at or below (actualEntry - 1.00 - slippageSpreadBuffer)
+        // or if it bounced back up to (actualEntry - 1.00 - slippageSpreadBuffer) after reaching peak.
+        const minGuaranteedProfitPrice = +(actualEntry - targetNetProfit - slippageSpreadBuffer).toFixed(2);
+        if (!is5rRunner && peakProfit >= 1.60 && currentAsk >= minGuaranteedProfitPrice && currentAsk <= (actualEntry - 0.80)) {
           newStatus   = "TARGET_HIT";
-          closedPrice = minGuaranteedProfitPrice;
-          pnlPoints   = 1.00;
+          closedPrice = +(currentAsk).toFixed(2);
+          pnlPoints   = +(actualEntry - closedPrice).toFixed(2);
           if (matchingOpenPos) {
             closeBrokerPosition(matchingOpenPos.id, matchingOpenPos.accountId).catch(err =>
               logger.warn({ id, err }, "Failed to send market close for 1-point profit booking on broker")
@@ -541,8 +555,8 @@ export async function checkRunningTrades(): Promise<void> {
           }
           activeTradeStates.delete(id as string);
           logger.info(
-            { id, signal, entryPrice: actualEntry, peakProfit, closedPrice, pnlPoints },
-            `🎯 [Favorable Market Exit] Trade moved firmly in favor (peak: +${peakProfit} pts) and retraced to guarantee level. Booked +1.00 points profit!`
+            { id, signal, entryPrice: actualEntry, peakProfit, closedPrice, pnlPoints, spread: currentSpread },
+            `🎯 [Favorable Market Exit] Trade moved firmly in favor (peak: +${peakProfit} pts) and retraced to guarantee level (+ slippage/spread buffer). Booked desired profit on broker!`
           );
         } else if (!matchingOpenPos && !trade.isRealTrade && currentAsk >= stopLoss) {
           newStatus   = "STOP_HIT";

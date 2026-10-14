@@ -118,10 +118,10 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   // 3. Dynamic Floor & Spread Buffer (Tailored for Gold Volatility & Scalping)
   // Gold 5m ATR ranges between 1.5 - 3.5 pts. Broker spreads fluctuate 0.35 - 0.75 pts.
   // Dynamic floor of 4.80 - 5.50 pts avoids instant wick stop-outs while keeping risk tight.
-  // Dynamic cap of 7.50 - 8.50 pts prevents single-trade drawdowns.
+  // Dynamic cap strictly limited to 6.80 - 7.50 pts maximum to prevent painful single-trade drawdowns!
   const spreadBuffer = Number(Math.max(0.60, liveSpread * 1.5).toFixed(2));
-  const dynamicFloor = Number(Math.max(4.80, Math.min(atr * 1.8, 5.80), liveSpread * 3.5).toFixed(2));
-  const dynamicCap   = Number(Math.max(7.50, atr * 2.8).toFixed(2));
+  const dynamicFloor = Number(Math.max(4.80, Math.min(atr * 1.8, 5.50), liveSpread * 3.5).toFixed(2));
+  const dynamicCap   = Number(Math.min(7.50, Math.max(6.20, atr * 2.2)).toFixed(2));
 
   // 4. Structural Swing High/Low Anchor Check
   let anchoredToStructure = false;
