@@ -1,1 +1,0 @@
-- [Scheduler dedup guard](scheduler-dedup.md) — in-memory cooldown resets on restart; only a DB-backed RUNNING-signal check reliably prevents duplicate inserts.

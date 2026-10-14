@@ -1,3 +1,0 @@
-legacy-peer-deps=true
-auto-install-peers=false
-strict-peer-dependencies=false

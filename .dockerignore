@@ -1,9 +1,0 @@
-node_modules
-.git
-.gitignore
-.env
-*.log
-dev.log
-.DS_Store
-dist
-artifacts/*/dist
