@@ -1,0 +1,210 @@
+import { getClosedTrades } from "@workspace/db";
+import { logger } from "./logger.js";
+
+export interface TradeRecord {
+  id:          string;
+  signal:      "LONG" | "SHORT";
+  result:      "WIN" | "LOSS";
+  entryPrice:  number;
+  closedPrice: number;
+  pnlPoints:   number;
+  timestamp:   string;
+}
+
+export interface AnalyticsSummary {
+  totalCompleted: number;
+  wins:           number;
+  losses:         number;
+  winRate:        number;
+  lossRate:       number;
+  avgProfit:      number;
+  avgLoss:        number;
+  expectancy:     number;
+  last10:         TradeRecord[];
+  smartMode:      boolean;
+  smartModeStatus: string;
+  learningStatus:  string;
+  sufficientData:  boolean;
+  streak:          number;
+  recentTrend:     "HOT" | "COLD" | "STABLE" | "LEARNING";
+  rollingExpectancy?: number;
+  rolling30Count?:    number;
+  tradingState?:      "ACTIVE" | "PAUSED";
+}
+
+const CACHE_TTL = 30_000;
+let cachedAnalytics:  AnalyticsSummary | null = null;
+let lastAnalyticsTime = 0;
+let smartModeEnabled  = false;
+
+export function isSmartMode(): boolean { return smartModeEnabled; }
+
+export function setSmartMode(enabled: boolean) {
+  smartModeEnabled = enabled;
+  cachedAnalytics  = null;
+  logger.info({ smartMode: enabled }, "Smart Mode toggled");
+}
+
+function calcStreak(last10: TradeRecord[]): number {
+  if (last10.length === 0) return 0;
+  const first = last10[0].result;
+  let streak = 0;
+  for (const t of last10) {
+    if (t.result === first) streak++;
+    else break;
+  }
+  return first === "WIN" ? streak : -streak;
+}
+
+export async function getAnalyticsSummary(forceRefresh = false): Promise<AnalyticsSummary> {
+  const now = Date.now();
+  if (!forceRefresh && cachedAnalytics && (now - lastAnalyticsTime) < CACHE_TTL) {
+    return cachedAnalytics;
+  }
+
+  try {
+    const closedRows = await getClosedTrades(200);
+
+    const completed = closedRows.filter((r: any) =>
+      (r.signal === "LONG" || r.signal === "SHORT") &&
+      r.pnlPoints !== null && r.closedPrice !== null
+    );
+
+    const totalCompleted = completed.length;
+    const wins   = completed.filter((r: any) => r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) > 0).length;
+    const losses = completed.filter((r: any) => (r.pnlPoints ?? 0) < 0).length;
+    const winRate  = totalCompleted > 0 ? Math.round((wins   / totalCompleted) * 100) : 0;
+    const lossRate = totalCompleted > 0 ? Math.round((losses / totalCompleted) * 100) : 0;
+
+    const winPnls  = completed.filter((r: any) => (r.pnlPoints ?? 0) > 0).map((r: any) => r.pnlPoints ?? 0);
+    const lossPnls = completed.filter((r: any) => (r.pnlPoints ?? 0) < 0).map((r: any) => r.pnlPoints ?? 0);
+
+    const avgProfit = winPnls.length  > 0
+      ? winPnls.reduce((s: any, v: any)  => s + v, 0) / winPnls.length  : 0;
+    const avgLoss = lossPnls.length > 0
+      ? Math.abs(lossPnls.reduce((s: any, v: any) => s + v, 0) / lossPnls.length) : 0;
+    const expectancy = totalCompleted > 0
+      ? (winRate / 100) * avgProfit - (lossRate / 100) * avgLoss : 0;
+
+    const last10: TradeRecord[] = completed.slice(0, 10).map((r: any) => ({
+      id:          r.id,
+      signal:      r.signal as "LONG" | "SHORT",
+      result:      (r.tradeStatus === "TARGET_HIT" || (r.pnlPoints ?? 0) > 0) ? "WIN" : "LOSS",
+      entryPrice:  r.entryPrice,
+      closedPrice: r.closedPrice ?? r.entryPrice,
+      pnlPoints:   r.pnlPoints ?? 0,
+      timestamp:   r.createdAt.toISOString(),
+    }));
+
+    const sufficientData = totalCompleted >= 10;
+    const streak = calcStreak(last10);
+
+    const recentWins  = last10.slice(0, Math.min(5, last10.length)).filter(t => t.result === "WIN").length;
+    const recentTotal = Math.min(5, last10.length);
+    let recentTrend: AnalyticsSummary["recentTrend"] = "LEARNING";
+    if (recentTotal >= 3) {
+      const recentWR = recentWins / recentTotal;
+      recentTrend = recentWR >= 0.67 ? "HOT" : recentWR <= 0.33 ? "COLD" : "STABLE";
+    }
+
+    // ── Rolling 30-Trade Expectancy Monitor ────────────────────────────
+    const rolling30 = completed.slice(0, 30);
+    const rolling30Count = rolling30.length;
+    let rollingExpectancy = 0;
+    let tradingState: "ACTIVE" | "PAUSED" = "ACTIVE";
+
+    if (rolling30Count > 0) {
+      const rWins = rolling30.filter((r: any) => (r.pnlPoints ?? 0) > 0);
+      const rLosses = rolling30.filter((r: any) => (r.pnlPoints ?? 0) < 0);
+      const rollingWinRate = rWins.length / rolling30Count;
+      const rollingLossRate = rLosses.length / rolling30Count;
+
+      const rWinRValues = rWins.map((r: any) => {
+        const slDist = (r.stopLoss && r.entryPrice) ? Math.abs(r.entryPrice - r.stopLoss) : 6.0;
+        return (r.pnlPoints ?? 0) / Math.max(slDist, 1.0);
+      });
+      const rLossRValues = rLosses.map((r: any) => {
+        const slDist = (r.stopLoss && r.entryPrice) ? Math.abs(r.entryPrice - r.stopLoss) : 6.0;
+        return Math.abs(r.pnlPoints ?? 0) / Math.max(slDist, 1.0);
+      });
+
+      const avgWinR = rWinRValues.length > 0
+        ? rWinRValues.reduce((a, b) => a + b, 0) / rWinRValues.length
+        : 2.5;
+      const avgLossR = rLossRValues.length > 0
+        ? rLossRValues.reduce((a, b) => a + b, 0) / rLossRValues.length
+        : 1.0;
+
+      // rollingExpectancy = (rollingWinRate * avgWinR) - (rollingLossRate * avgLossR)
+      rollingExpectancy = Number(((rollingWinRate * avgWinR) - (rollingLossRate * avgLossR)).toFixed(3));
+
+      // If rolling 30-trade expectancy drops below 0.00 R, set tradingState = "PAUSED" and issue alert
+      if (rolling30Count >= 10 && rollingExpectancy < 0.00) {
+        tradingState = "PAUSED";
+        logger.warn(
+          { rollingExpectancy, rolling30Count, rollingWinRate: +(rollingWinRate * 100).toFixed(1) },
+          "[PerformanceMonitor] ALERT: Rolling 30-trade expectancy dropped below 0.00 R. TradingState set to PAUSED to protect capital."
+        );
+      }
+    }
+
+    let smartModeStatus = "OFF – all signals shown";
+    if (smartModeEnabled && !sufficientData) {
+      smartModeStatus = `ON – building history (${totalCompleted}/10 intraday trades needed)`;
+    } else if (smartModeEnabled) {
+      if (tradingState === "PAUSED") {
+        smartModeStatus = `ON – PAUSED (Rolling 30 expectancy ${rollingExpectancy.toFixed(2)} R < 0.00 R · Trading halted)`;
+      } else {
+        smartModeStatus = `ON – ACTIVE (Rolling 30 expectancy +${rollingExpectancy.toFixed(2)} R · Positive Edge)`;
+      }
+    }
+
+    let learningStatus: string;
+    if (totalCompleted === 0) {
+      learningStatus = "Collecting first intraday trades…";
+    } else if (totalCompleted < 5) {
+      learningStatus = `Early phase (${totalCompleted} trades) — observing market structure`;
+    } else if (totalCompleted < 10) {
+      learningStatus = `Learning (${totalCompleted}/10 trades) — building performance baseline`;
+    } else if (rollingExpectancy >= 0) {
+      learningStatus = `Active (${totalCompleted} trades) — Rolling expectancy +${rollingExpectancy.toFixed(2)} R · Performing with positive edge`;
+    } else {
+      learningStatus = `Monitoring (${totalCompleted} trades) — Rolling expectancy ${rollingExpectancy.toFixed(2)} R · Risk mitigation active`;
+    }
+
+    const result: AnalyticsSummary = {
+      totalCompleted,
+      wins,
+      losses,
+      winRate,
+      lossRate,
+      avgProfit:  +avgProfit.toFixed(2),
+      avgLoss:    +avgLoss.toFixed(2),
+      expectancy: +expectancy.toFixed(2),
+      last10,
+      smartMode:       smartModeEnabled,
+      smartModeStatus,
+      learningStatus,
+      sufficientData,
+      streak,
+      recentTrend,
+      rollingExpectancy,
+      rolling30Count,
+      tradingState,
+    };
+
+    cachedAnalytics   = result;
+    lastAnalyticsTime = now;
+    return result;
+
+  } catch (err) {
+    logger.warn({ err }, "Analytics query failed");
+    return {
+      totalCompleted: 0, wins: 0, losses: 0,
+      winRate: 0, lossRate: 0, avgProfit: 0, avgLoss: 0, expectancy: 0,
+      last10: [], smartMode: smartModeEnabled,
+      smartModeStatus: "unavailable", learningStatus: "Unavailable",
+      sufficientData: false, streak: 0, recentTrend: "LEARNING",
+    };
+  }
+}
