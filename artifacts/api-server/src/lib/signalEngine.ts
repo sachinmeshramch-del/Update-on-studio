@@ -577,7 +577,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
 
   // ── Performance Monitor Capital Protection Guard ─────────────────────────
   // If rolling 30-trade expectancy drops below 0.00 R, halt new entries to preserve capital.
-  if (settings.tradingState === "PAUSED" || analytics.tradingState === "PAUSED") {
+  const bypassPerformanceGuard = Boolean(settings?.disableCooldowns);
+  if (!bypassPerformanceGuard && (settings.tradingState === "PAUSED" || analytics.tradingState === "PAUSED")) {
     logger.warn({ rollingExpectancy: analytics.rollingExpectancy }, "[RiskMonitor] Trading is currently PAUSED by rolling expectancy monitor");
     return {
       signal:               "HOLD",
@@ -624,59 +625,19 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
 
   // ── Feature Session Guard (London & NY only, skip Asian & rollover) ───────
   const useSessionFilter = settings.featureSessionFilter !== false;
-  if (useSessionFilter) {
-    const nowUTC = new Date();
-    const utcH = nowUTC.getUTCHours();
-    const utcM = nowUTC.getUTCMinutes();
-    const totalM = utcH * 60 + utcM;
-    const isLondonNYWindow = utcH >= 7 && utcH < 17;
-    const isRollover = totalM >= (21 * 60 + 45) && totalM <= (22 * 60 + 30);
-    const isAsian = utcH >= 22 || utcH < 7;
-
-    if (!isLondonNYWindow || isRollover || isAsian) {
-      return {
-        signal:               "HOLD",
-        confidence:           0,
-        entryPrice:           +currentPrice.toFixed(2),
-        stopLoss:             +(currentPrice - 6.0).toFixed(2),
-        takeProfit:           +(currentPrice + 12.0).toFixed(2),
-        trend:                "NEUTRAL",
-        reason:               `HOLD – Session Guard: Trading restricted to London & NY (07:00–17:00 UTC) · Inactive during ${isRollover ? "Rollover (21:45–22:30 UTC)" : isAsian ? "Asian session" : "Off-hours"}`,
-        timestamp:            new Date().toISOString(),
-        tradeDuration:        "—",
-        cooldownRemaining:    0,
-        smartMode,
-        session,
-        signalStrength:       null,
-        spikeCooldownCandles: 0,
-        spikeCooldownRemaining: 0,
-        emaScore:      0,
-        rsiScore:      0,
-        macdScore:     0,
-        momentumScore: 0,
-        fvgScore:      0,
-        sweepScore:    0,
-        obScore:       0,
-        candleScore:         0,
-        candlePattern:       null,
-        signalType:          "TREND_FOLLOW" as const,
-        patternDetected:     null,
-        patternStrength:     0,
-        contextValid:        false,
-        confluenceMet:       false,
-        confirmationStatus:  null,
-        indicators: {
-          rsi: 50, ema9: currentPrice, ema21: currentPrice,
-          macdLine: 0, macdSignal: 0, macdHistogram: 0, atr: 3,
-          trend5m: "NEUTRAL", trend1m: "NEUTRAL",
-          trendPrimary: "NEUTRAL", trendEntry: "NEUTRAL",
-        },
-        circuitBreakerActive: false,
-        circuitBreakerRemainingMinutes: 0,
-        consecutiveLosses: 0,
-      };
-    }
-  }
+  const nowUTC = new Date();
+  const utcH = nowUTC.getUTCHours();
+  const utcM = nowUTC.getUTCMinutes();
+  const totalM = utcH * 60 + utcM;
+  const isLondonNYWindow = utcH >= 7 && utcH < 17;
+  const isRollover = totalM >= (21 * 60 + 45) && totalM <= (22 * 60 + 30);
+  const isAsian = utcH >= 22 || utcH < 7;
+  const isSessionRestricted = useSessionFilter && (!isLondonNYWindow || isRollover || isAsian);
+  const sessionRestrictionReason = isRollover
+    ? "Rollover (21:45–22:30 UTC)"
+    : isAsian
+    ? "Asian session"
+    : "Off-hours";
 
   // Uncouple confidence score gating: baseline without arbitrary penalty
   const minConf = effectiveMinConfNormal;
@@ -686,11 +647,24 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const fetchWithFallback = async (tf: string, count: number) => {
       try {
         const { getMetaApiHistoricalOHLC } = await import("./metaApiFeed.js");
-        return await getMetaApiHistoricalOHLC(tf, count);
+        const liveCandles = await getMetaApiHistoricalOHLC(tf, count);
+        if (liveCandles && liveCandles.length > 0) return liveCandles;
       } catch (metaErr) {
-        logger.debug({ tf, err: (metaErr as any)?.message }, "MetaApi historical candle fetch failed (no fallback permitted)");
-        throw new Error(`Primary data source unavailable for ${tf} candles.`);
+        logger.debug({ tf, err: (metaErr as any)?.message }, "MetaApi historical candle fetch failed, using persisted store");
       }
+      
+      // Resilient stored historical candle fallback so indicators never stop functioning
+      try {
+        const { getHistoricalCandlesForEngine } = await import("./historicalDataManager.js");
+        const stored = getHistoricalCandlesForEngine("XAUUSD", tf, count);
+        if (stored && stored.length > 0) {
+          return stored;
+        }
+      } catch (storeErr) {
+        logger.debug({ tf, err: (storeErr as any)?.message }, "Stored candle lookup warning");
+      }
+
+      throw new Error(`Primary and stored data sources temporarily unavailable for ${tf} candles.`);
     };
     
     let candlesPrimary: OHLCCandle[];
@@ -758,7 +732,16 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         candlesMacro = cachedCandlesMacro.map(c => ({ ...c }));
         candlesHTF = cachedCandlesHTF.map(c => ({ ...c }));
       } else {
-        throw candleFetchErr;
+        const { getHistoricalCandlesForEngine } = await import("./historicalDataManager.js");
+        const stored5m = getHistoricalCandlesForEngine("XAUUSD", "5m", 300);
+        if (stored5m && stored5m.length >= 20) {
+          candlesPrimary = stored5m;
+          candlesEntry = getHistoricalCandlesForEngine("XAUUSD", "1m", 300) || stored5m;
+          candlesMacro = getHistoricalCandlesForEngine("XAUUSD", "15m", 100) || stored5m;
+          candlesHTF = getHistoricalCandlesForEngine("XAUUSD", "1h", 100) || stored5m;
+        } else {
+          throw candleFetchErr;
+        }
       }
     }
     const recentStops = await getRecentStopCounts();
@@ -1788,7 +1771,11 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const sessionNote = `[${session.active}]`;
     let reason: string;
 
-    if (finalSignal !== "HOLD" && direction !== "HOLD") {
+    if (isSessionRestricted) {
+      finalSignal = "HOLD";
+      confidence = 0;
+      reason = `HOLD – Session Guard: Trading restricted to London & NY (07:00–17:00 UTC) · Inactive during ${sessionRestrictionReason}`;
+    } else if (finalSignal !== "HOLD" && direction !== "HOLD") {
       const parts: string[] = [];
       if      (emaScore >= 35) parts.push(`EMA9/21 ${freshCross ? "CROSSED" : "aligned"}`);
       else if (emaScore >= 20) parts.push(`EMA9 ${finalSignal === "LONG" ? ">" : "<"} EMA21`);

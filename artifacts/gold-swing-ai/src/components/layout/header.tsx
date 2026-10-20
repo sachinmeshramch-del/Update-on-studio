@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { LogOut, Activity, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server, RefreshCw, Brain, BarChart3 } from "lucide-react";
+import { LogOut, Activity, TrendingUp, TrendingDown, Wifi, WifiOff, Bell, BellOff, Server, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePriceStream } from "@/hooks/usePriceStream";
@@ -35,7 +35,8 @@ function Heartbeat({ lastBeat, connected }: { lastBeat?: number, connected: bool
   );
 }
 
-function formatNum(n: number, decimals = 2) {
+function formatNum(n: number | null | undefined, decimals = 2) {
+  if (typeof n !== "number" || isNaN(n)) return "0.00";
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
@@ -419,75 +420,56 @@ export function Header() {
           </div>
 
           
-          {/* ── Quick Auto-Trade Toggle, Theme Toggle & Notifications ───────────────────────────── */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* ── Quick Controls & Theme (Streamlined Banner) ────────────────────────── */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <QuickAutoTrade variant="header" />
 
             <RefreshIntervalControl variant="header" />
-            
+
+            <SettingsDialog />
+
+            <ModeToggle />
+
+            {notifStatus !== "unsupported" && (
+              <button
+                onClick={notifStatus === "subscribed" ? disableNotifs : enableNotifs}
+                title={
+                  notifStatus === "subscribed" ? "Disable signal notifications" :
+                  notifStatus === "denied"     ? "Notifications blocked — allow in browser settings" :
+                  notifStatus === "loading"    ? "Enabling…" :
+                  "Get push alerts when a signal fires"
+                }
+                disabled={notifStatus === "loading" || notifStatus === "denied"}
+                className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-lg text-xs font-medium border transition-all duration-200 shrink-0 cursor-pointer",
+                  notifStatus === "subscribed"
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                    : notifStatus === "denied"
+                      ? "border-red-500/30 bg-red-500/5 text-red-500/60 cursor-not-allowed"
+                      : notifStatus === "loading"
+                        ? "border-border bg-black/5 dark:bg-white/5 text-muted-foreground animate-pulse cursor-wait"
+                        : "border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-500"
+                )}
+                id="header-notifications-button"
+              >
+                {notifStatus === "subscribed" ? (
+                  <Bell className="w-3.5 h-3.5 text-amber-500" />
+                ) : notifStatus === "denied" ? (
+                  <BellOff className="w-3.5 h-3.5 text-red-500" />
+                ) : (
+                  <Bell className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => logout()}
               title="Sign Out"
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all shrink-0 cursor-pointer"
+              className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all shrink-0 cursor-pointer"
               id="header-logout-button"
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>
-            <Link href="/diagnostics">
-              <button
-                title="Hermes AI Brain Telemetry & Diagnostics"
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-amber-500/10 hover:text-amber-500 hover:border-amber-500/30 transition-all shrink-0 cursor-pointer"
-                id="header-diagnostics-button"
-              >
-                <Brain className="w-3.5 h-3.5 text-amber-500" />
-              </button>
-            </Link>
-
-            <Link href="/backtest">
-              <button
-                title="Historical Strategy Backtester"
-                className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold text-muted-foreground border border-border bg-black/5 dark:bg-white/5 hover:bg-amber-500/10 hover:text-amber-500 hover:border-amber-500/30 transition-all shrink-0 cursor-pointer"
-                id="header-backtest-button"
-              >
-                <BarChart3 className="w-3.5 h-3.5 text-amber-500" />
-                <span className="font-mono text-[11px]">Backtest</span>
-              </button>
-            </Link>
-
-            <SettingsDialog />
-    
-            <ModeToggle />
-
-          {notifStatus !== "unsupported" && (
-            <button
-              onClick={notifStatus === "subscribed" ? disableNotifs : enableNotifs}
-              title={
-                notifStatus === "subscribed" ? "Disable signal notifications" :
-                notifStatus === "denied"     ? "Notifications blocked — allow in browser settings" :
-                notifStatus === "loading"    ? "Enabling…" :
-                "Get push alerts when a signal fires"
-              }
-              disabled={notifStatus === "loading" || notifStatus === "denied"}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 shrink-0",
-                notifStatus === "subscribed"
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
-                  : notifStatus === "denied"
-                    ? "border-red-500/30 bg-red-500/5 text-red-600/60 dark:text-red-400/60 cursor-not-allowed"
-                    : notifStatus === "loading"
-                      ? "border-border bg-black/5 dark:bg-white/5 text-muted-foreground animate-pulse cursor-wait"
-                      : "border-border bg-black/5 dark:bg-white/5 text-muted-foreground hover:border-amber-500/30 hover:text-amber-600 dark:hover:text-amber-400"
-              )}
-            >
-              {notifStatus === "subscribed" ? (
-                <><Bell className="w-3.5 h-3.5" /><span className="hidden sm:inline">Alerts ON</span></>
-              ) : notifStatus === "denied" ? (
-                <><BellOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">Blocked</span></>
-              ) : (
-                <><Bell className="w-3.5 h-3.5" /><span className="hidden sm:inline">Alerts</span></>
-              )}
-            </button>
-          )}
           </div>
 
           {/* ── Change + 24H stats ───────────────────────────────────────── */}

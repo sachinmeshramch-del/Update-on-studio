@@ -93,18 +93,24 @@ export default function SettingsPage() {
         riskPerTradePercent: settings.riskPerTradePercent ?? 1.0,
         dailyProfitTargetPercent: settings.dailyProfitTargetPercent ?? 3.0,
         dailyStopLossPercent: settings.dailyStopLossPercent ?? 5.0,
-        engineMode: settings.engineMode ?? "HYBRID_DUAL",
+        engineMode: settings.engineMode ?? (typeof window !== "undefined" ? (localStorage.getItem("gold_swing_engine_mode") as any) : null) ?? "HYBRID_DUAL",
         orbRiskPerTrade: settings.orbRiskPerTrade ?? 2.0,
         orbTargetMultiple: settings.orbTargetMultiple ?? 5.0,
         orbStopAtrMultiplier: settings.orbStopAtrMultiplier ?? 1.5,
         orbAllowLondonSession: settings.orbAllowLondonSession ?? false,
         orbNewsFilterEnabled: settings.orbNewsFilterEnabled ?? true,
       });
+      if (settings.engineMode && typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", settings.engineMode);
+      }
     }
   }, [settings]);
 
   const mutation = useMutation({
     mutationFn: async (newSettings: Partial<Settings>) => {
+      if (newSettings.engineMode && typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", newSettings.engineMode);
+      }
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -114,8 +120,14 @@ export default function SettingsPage() {
       return res.json();
     },
     onSuccess: (data) => {
+      if (data.engineMode && typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", data.engineMode);
+      }
       queryClient.setQueryData(["settings"], data);
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hermes/orb-state"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hermes/diagnostics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/signal"] });
       toast({
         title: "Settings Saved",
         description: "Trading configurations successfully updated.",
@@ -179,7 +191,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col pb-20">
       <Header />
 
       <main className="flex-grow container mx-auto px-3 sm:px-4 py-4 md:py-8 max-w-2xl">

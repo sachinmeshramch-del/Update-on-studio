@@ -273,7 +273,7 @@ export function LiveTickChart() {
               )}
               title={data ? `Mid Price: $${data.price?.toFixed(2)} | Bid: $${data.bid?.toFixed(2)} | Ask: $${data.ask?.toFixed(2)} | Spread: $${data.spread?.toFixed(2)}` : undefined}
             >
-              {isUp ? "▲" : "▼"} {data.price?.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {isUp ? "▲" : "▼"} {typeof data.price === "number" ? data.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
             </span>
           </div>
         )}

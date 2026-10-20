@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default function DiagnosticsPage() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col pb-20">
       <Header />
 
       <main className="flex-grow container mx-auto px-2 sm:px-4 py-4 md:py-8 flex flex-col gap-6">

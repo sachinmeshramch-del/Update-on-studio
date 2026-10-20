@@ -1,0 +1,1148 @@
+{
+  "campaignId": "CAMP-INIT",
+  "status": "RUNNING",
+  "progressPercent": 39,
+  "totalPlanned": 18,
+  "completedCount": 7,
+  "remainingCount": 11,
+  "failedCount": 0,
+  "currentExperiment": {
+    "experimentId": "EXP-TRAIL-BREAKEVEN_ONLY",
+    "strategyName": "Optimized Scalper [Breakeven Only]",
+    "timeframe": "5m",
+    "params": {
+      "strategyMode": "HYBRID_DUAL",
+      "timeframe": "5m",
+      "candleCount": 800,
+      "tpRatio": 2.5,
+      "trailingStopVariant": "BREAKEVEN_ONLY",
+      "featureStructuralStop": true,
+      "featureEntryConfirmation": true,
+      "featureContextPatternFilter": true,
+      "featureSpreadGuard": true,
+      "featureSessionFilter": true,
+      "spread": 0.45,
+      "slippage": 0.08
+    },
+    "startTime": "2026-10-20T08:44:33.406Z"
+  },
+  "estimatedTimeRemainingSec": 3,
+  "startTime": "2026-10-20T08:44:31.376Z",
+  "lastUpdateTime": "2026-10-20T08:44:33.405Z",
+  "errors": [],
+  "rankedCandidates": [
+    {
+      "candidateId": "EXP-STRAT-01-HYBRID-LIVE",
+      "rank": 0,
+      "strategyId": "HYBRID_DUAL",
+      "strategyName": "Optimized Live Bot (Hybrid Dual Scalper)",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "HYBRID_DUAL",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2.5,
+        "trailingStopVariant": "ASYMMETRIC_RUNNER",
+        "featureStructuralStop": true,
+        "featureEntryConfirmation": true,
+        "featureContextPatternFilter": true,
+        "featureSpreadGuard": true,
+        "featureSessionFilter": true,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": -178.05,
+        "netProfitPercent": -1.78,
+        "profitFactor": 0.63,
+        "winRate": 86.1,
+        "expectancyR": -0.049,
+        "maxDrawdownPercent": 3.47,
+        "maxDrawdownDollars": 349.5,
+        "totalTrades": 36,
+        "sharpeRatio": -2.09
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 3,
+        "profitableFoldsCount": 1,
+        "consistencyScore": 0.33,
+        "averageOosProfitFactor": 33.55,
+        "averageDegradationPercent": 0,
+        "folds": [
+          {
+            "foldIndex": 1,
+            "trainRange": {
+              "start": "2026-10-15T07:35:00.000Z",
+              "end": "2026-10-16T07:10:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T07:50:00.000Z",
+              "end": "2026-10-16T13:15:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -245.45,
+              "profitFactor": 0.37,
+              "winRate": 78.9,
+              "tradesCount": 19,
+              "maxDrawdownPercent": 3.47,
+              "expectancyR": -0.13
+            },
+            "outOfSample": {
+              "netProfitDollars": -16.7,
+              "profitFactor": 0.82,
+              "winRate": 88.9,
+              "tradesCount": 9,
+              "maxDrawdownPercent": 0.94,
+              "expectancyR": -0.02
+            },
+            "degradationPercent": -121.6,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 2,
+            "trainRange": {
+              "start": "2026-10-15T09:45:00.000Z",
+              "end": "2026-10-16T09:55:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T10:00:00.000Z",
+              "end": "2026-10-16T15:55:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -244.25,
+              "profitFactor": 0.37,
+              "winRate": 78.9,
+              "tradesCount": 19,
+              "maxDrawdownPercent": 3.49,
+              "expectancyR": -0.13
+            },
+            "outOfSample": {
+              "netProfitDollars": -15.1,
+              "profitFactor": 0.84,
+              "winRate": 88.9,
+              "tradesCount": 9,
+              "maxDrawdownPercent": 0.95,
+              "expectancyR": -0.02
+            },
+            "degradationPercent": -127,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 3,
+            "trainRange": {
+              "start": "2026-10-15T14:00:00.000Z",
+              "end": "2026-10-16T12:30:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T12:55:00.000Z",
+              "end": "2026-10-16T19:30:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -131.4,
+              "profitFactor": 0.54,
+              "winRate": 84.2,
+              "tradesCount": 19,
+              "maxDrawdownPercent": 1.7,
+              "expectancyR": -0.07
+            },
+            "outOfSample": {
+              "netProfitDollars": 94.1,
+              "profitFactor": 99,
+              "winRate": 100,
+              "tradesCount": 9,
+              "maxDrawdownPercent": 0,
+              "expectancyR": 0.11
+            },
+            "degradationPercent": -18233.3,
+            "isProfitable": true
+          }
+        ]
+      },
+      "stressTest": {
+        "normalCostPF": 0.63,
+        "stressedCostPF": 0.47250000000000003,
+        "survivesStress": false,
+        "spreadSensitivity": "LOW"
+      },
+      "regimePerformance": {
+        "trendingPF": 0.63,
+        "rangingPF": 0,
+        "trendingTrades": 36,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "REJECTED",
+      "recommendationReasons": [
+        "Net negative return after realistic spreads ($-178.05, PF: 0.63)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.47250000000000003)"
+      ],
+      "rejectionFlags": [
+        "Net negative return after realistic spreads ($-178.05, PF: 0.63)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.47250000000000003)"
+      ],
+      "runIdRef": "RUN-1792485871560-936"
+    },
+    {
+      "candidateId": "EXP-STRAT-02-HERMES-ADAPTIVE",
+      "rank": 0,
+      "strategyId": "HERMES_ADAPTIVE",
+      "strategyName": "Hermes AI Adaptive Confluence",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "HERMES_ADAPTIVE",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2.5,
+        "trailingStopVariant": "ASYMMETRIC_RUNNER",
+        "featureStructuralStop": true,
+        "featureEntryConfirmation": true,
+        "featureContextPatternFilter": true,
+        "featureSpreadGuard": true,
+        "featureSessionFilter": true,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": -314.1,
+        "netProfitPercent": -3.14,
+        "profitFactor": 0.46,
+        "winRate": 82.4,
+        "expectancyR": -0.093,
+        "maxDrawdownPercent": 4.39,
+        "maxDrawdownDollars": 441.4,
+        "totalTrades": 34,
+        "sharpeRatio": -3.57
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 3,
+        "profitableFoldsCount": 1,
+        "consistencyScore": 0.33,
+        "averageOosProfitFactor": 33.33,
+        "averageDegradationPercent": 5.9,
+        "folds": [
+          {
+            "foldIndex": 1,
+            "trainRange": {
+              "start": "2026-10-15T07:35:00.000Z",
+              "end": "2026-10-16T07:55:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T08:55:00.000Z",
+              "end": "2026-10-16T12:30:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -256.9,
+              "profitFactor": 0.34,
+              "winRate": 77.8,
+              "tradesCount": 18,
+              "maxDrawdownPercent": 3.58,
+              "expectancyR": -0.14
+            },
+            "outOfSample": {
+              "netProfitDollars": -137.2,
+              "profitFactor": 0.28,
+              "winRate": 75,
+              "tradesCount": 8,
+              "maxDrawdownPercent": 1.47,
+              "expectancyR": -0.18
+            },
+            "degradationPercent": 17.6,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 2,
+            "trainRange": {
+              "start": "2026-10-15T09:25:00.000Z",
+              "end": "2026-10-16T10:50:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T10:55:00.000Z",
+              "end": "2026-10-16T15:55:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -365.55,
+              "profitFactor": 0.25,
+              "winRate": 72.2,
+              "tradesCount": 18,
+              "maxDrawdownPercent": 3.89,
+              "expectancyR": -0.21
+            },
+            "outOfSample": {
+              "netProfitDollars": -28.7,
+              "profitFactor": 0.7,
+              "winRate": 87.5,
+              "tradesCount": 8,
+              "maxDrawdownPercent": 0.95,
+              "expectancyR": -0.04
+            },
+            "degradationPercent": -180,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 3,
+            "trainRange": {
+              "start": "2026-10-15T14:35:00.000Z",
+              "end": "2026-10-16T12:30:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T12:55:00.000Z",
+              "end": "2026-10-16T19:30:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -251.9,
+              "profitFactor": 0.34,
+              "winRate": 77.8,
+              "tradesCount": 18,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.14
+            },
+            "outOfSample": {
+              "netProfitDollars": 80,
+              "profitFactor": 99,
+              "winRate": 100,
+              "tradesCount": 8,
+              "maxDrawdownPercent": 0,
+              "expectancyR": 0.11
+            },
+            "degradationPercent": -29017.6,
+            "isProfitable": true
+          }
+        ]
+      },
+      "stressTest": {
+        "normalCostPF": 0.46,
+        "stressedCostPF": 0.34500000000000003,
+        "survivesStress": false,
+        "spreadSensitivity": "LOW"
+      },
+      "regimePerformance": {
+        "trendingPF": 0.46,
+        "rangingPF": 0,
+        "trendingTrades": 34,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "REJECTED",
+      "recommendationReasons": [
+        "Net negative return after realistic spreads ($-314.1, PF: 0.46)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.34500000000000003)"
+      ],
+      "rejectionFlags": [
+        "Net negative return after realistic spreads ($-314.1, PF: 0.46)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.34500000000000003)"
+      ],
+      "runIdRef": "RUN-1792485871909-369"
+    },
+    {
+      "candidateId": "EXP-STRAT-03-LEGACY-UNFILTERED",
+      "rank": 0,
+      "strategyId": "LEGACY_UNFILTERED",
+      "strategyName": "Legacy Unfiltered Scalper",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "HYBRID_DUAL",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2,
+        "trailingStopVariant": "NO_TRAILING",
+        "featureStructuralStop": false,
+        "featureEntryConfirmation": false,
+        "featureContextPatternFilter": false,
+        "featureSpreadGuard": false,
+        "featureSessionFilter": false,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": -677.09,
+        "netProfitPercent": -6.77,
+        "profitFactor": 0.53,
+        "winRate": 20,
+        "expectancyR": -0.35,
+        "maxDrawdownPercent": 8.67,
+        "maxDrawdownDollars": 867.09,
+        "totalTrades": 20,
+        "sharpeRatio": -4.64
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 3,
+        "profitableFoldsCount": 2,
+        "consistencyScore": 0.67,
+        "averageOosProfitFactor": 1.29,
+        "averageDegradationPercent": 0,
+        "folds": [
+          {
+            "foldIndex": 1,
+            "trainRange": {
+              "start": "2026-10-15T06:30:00.000Z",
+              "end": "2026-10-16T03:50:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T04:05:00.000Z",
+              "end": "2026-10-16T14:25:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -492.19,
+              "profitFactor": 0.43,
+              "winRate": 18.2,
+              "tradesCount": 11,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.45
+            },
+            "outOfSample": {
+              "netProfitDollars": -184.9,
+              "profitFactor": 0.51,
+              "winRate": 20,
+              "tradesCount": 5,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.4
+            },
+            "degradationPercent": -18.6,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 2,
+            "trainRange": {
+              "start": "2026-10-15T12:40:00.000Z",
+              "end": "2026-10-16T10:50:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T11:00:00.000Z",
+              "end": "2026-10-16T17:15:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -482.69,
+              "profitFactor": 0.44,
+              "winRate": 18.2,
+              "tradesCount": 11,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.45
+            },
+            "outOfSample": {
+              "netProfitDollars": 100.1,
+              "profitFactor": 1.36,
+              "winRate": 40,
+              "tradesCount": 5,
+              "maxDrawdownPercent": 1.83,
+              "expectancyR": 0.2
+            },
+            "degradationPercent": -209.1,
+            "isProfitable": true
+          },
+          {
+            "foldIndex": 3,
+            "trainRange": {
+              "start": "2026-10-15T13:20:00.000Z",
+              "end": "2026-10-16T13:40:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T13:45:00.000Z",
+              "end": "2026-10-16T20:55:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -477.59,
+              "profitFactor": 0.44,
+              "winRate": 18.2,
+              "tradesCount": 11,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.45
+            },
+            "outOfSample": {
+              "netProfitDollars": 190,
+              "profitFactor": 2,
+              "winRate": 40,
+              "tradesCount": 5,
+              "maxDrawdownPercent": 0.92,
+              "expectancyR": 0.4
+            },
+            "degradationPercent": -354.5,
+            "isProfitable": true
+          }
+        ]
+      },
+      "stressTest": {
+        "normalCostPF": 0.53,
+        "stressedCostPF": 0.76,
+        "survivesStress": false,
+        "spreadSensitivity": "LOW"
+      },
+      "regimePerformance": {
+        "trendingPF": 0.53,
+        "rangingPF": 0,
+        "trendingTrades": 20,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "REJECTED",
+      "recommendationReasons": [
+        "Net negative return after realistic spreads ($-677.09, PF: 0.53)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.76)"
+      ],
+      "rejectionFlags": [
+        "Net negative return after realistic spreads ($-677.09, PF: 0.53)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.76)"
+      ],
+      "runIdRef": "RUN-1792485872158-158"
+    },
+    {
+      "candidateId": "EXP-STRAT-04-NY-ORB",
+      "rank": 0,
+      "strategyId": "DETERMINISTIC_ORB",
+      "strategyName": "Pure Deterministic NY 3h ORB Engine",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "DETERMINISTIC_ORB",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2.5,
+        "trailingStopVariant": "ASYMMETRIC_RUNNER",
+        "featureStructuralStop": true,
+        "featureEntryConfirmation": true,
+        "featureSpreadGuard": true,
+        "featureSessionFilter": true,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": 11,
+        "netProfitPercent": 0.11,
+        "profitFactor": 99,
+        "winRate": 100,
+        "expectancyR": 0.11,
+        "maxDrawdownPercent": 0,
+        "maxDrawdownDollars": 0,
+        "totalTrades": 1,
+        "sharpeRatio": 0
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 0,
+        "profitableFoldsCount": 0,
+        "consistencyScore": 0,
+        "averageOosProfitFactor": 0,
+        "averageDegradationPercent": 0,
+        "folds": []
+      },
+      "stressTest": {
+        "normalCostPF": 99,
+        "stressedCostPF": 74.25,
+        "survivesStress": true,
+        "spreadSensitivity": "HIGH"
+      },
+      "regimePerformance": {
+        "trendingPF": 99,
+        "rangingPF": 0,
+        "trendingTrades": 1,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "INCONCLUSIVE",
+      "recommendationReasons": [
+        "Sample size too small to establish statistical significance"
+      ],
+      "rejectionFlags": [
+        "Insufficient sample size (1 completed trades < 10 minimum requirement)"
+      ],
+      "runIdRef": "RUN-1792485872456-758"
+    },
+    {
+      "candidateId": "EXP-TRAIL-NO_TRAILING",
+      "rank": 0,
+      "strategyId": "HYBRID_DUAL",
+      "strategyName": "Optimized Scalper [No Trailing (Fixed SL/TP)]",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "HYBRID_DUAL",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2.5,
+        "trailingStopVariant": "NO_TRAILING",
+        "featureStructuralStop": true,
+        "featureEntryConfirmation": true,
+        "featureContextPatternFilter": true,
+        "featureSpreadGuard": true,
+        "featureSessionFilter": true,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": -405.3,
+        "netProfitPercent": -4.05,
+        "profitFactor": 0.53,
+        "winRate": 18.2,
+        "expectancyR": -0.364,
+        "maxDrawdownPercent": 7.7,
+        "maxDrawdownDollars": 769.5,
+        "totalTrades": 11,
+        "sharpeRatio": -4.44
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 3,
+        "profitableFoldsCount": 2,
+        "consistencyScore": 0.67,
+        "averageOosProfitFactor": 33.78,
+        "averageDegradationPercent": 0,
+        "folds": [
+          {
+            "foldIndex": 1,
+            "trainRange": {
+              "start": "2026-10-15T07:35:00.000Z",
+              "end": "2026-10-15T18:00:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-15T18:20:00.000Z",
+              "end": "2026-10-16T10:00:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -579.5,
+              "profitFactor": 0,
+              "winRate": 0,
+              "tradesCount": 6,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -1
+            },
+            "outOfSample": {
+              "netProfitDollars": -190,
+              "profitFactor": 0,
+              "winRate": 0,
+              "tradesCount": 2,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -1
+            },
+            "degradationPercent": 0,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 2,
+            "trainRange": {
+              "start": "2026-10-15T12:45:00.000Z",
+              "end": "2026-10-16T01:30:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T07:05:00.000Z",
+              "end": "2026-10-16T13:20:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -570,
+              "profitFactor": 0,
+              "winRate": 0,
+              "tradesCount": 6,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -1
+            },
+            "outOfSample": {
+              "netProfitDollars": 126.7,
+              "profitFactor": 2.33,
+              "winRate": 50,
+              "tradesCount": 2,
+              "maxDrawdownPercent": 0.94,
+              "expectancyR": 0.75
+            },
+            "degradationPercent": 0,
+            "isProfitable": true
+          },
+          {
+            "foldIndex": 3,
+            "trainRange": {
+              "start": "2026-10-15T14:00:00.000Z",
+              "end": "2026-10-16T10:00:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T10:45:00.000Z",
+              "end": "2026-10-16T16:00:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -570,
+              "profitFactor": 0,
+              "winRate": 0,
+              "tradesCount": 6,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -1
+            },
+            "outOfSample": {
+              "netProfitDollars": 459.2,
+              "profitFactor": 99,
+              "winRate": 100,
+              "tradesCount": 2,
+              "maxDrawdownPercent": 0,
+              "expectancyR": 2.5
+            },
+            "degradationPercent": 0,
+            "isProfitable": true
+          }
+        ]
+      },
+      "stressTest": {
+        "normalCostPF": 0.53,
+        "stressedCostPF": 0.3975,
+        "survivesStress": false,
+        "spreadSensitivity": "LOW"
+      },
+      "regimePerformance": {
+        "trendingPF": 0.53,
+        "rangingPF": 0,
+        "trendingTrades": 11,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "REJECTED",
+      "recommendationReasons": [
+        "Net negative return after realistic spreads ($-405.3, PF: 0.53)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.3975)"
+      ],
+      "rejectionFlags": [
+        "Net negative return after realistic spreads ($-405.3, PF: 0.53)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.3975)"
+      ],
+      "runIdRef": "RUN-1792485872736-424"
+    },
+    {
+      "candidateId": "EXP-TRAIL-FIXED_DISTANCE",
+      "rank": 0,
+      "strategyId": "HYBRID_DUAL",
+      "strategyName": "Optimized Scalper [Fixed Distance (4.0 pts)]",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "HYBRID_DUAL",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2.5,
+        "trailingStopVariant": "FIXED_DISTANCE",
+        "featureStructuralStop": true,
+        "featureEntryConfirmation": true,
+        "featureContextPatternFilter": true,
+        "featureSpreadGuard": true,
+        "featureSessionFilter": true,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": -189.09,
+        "netProfitPercent": -1.89,
+        "profitFactor": 0.62,
+        "winRate": 73.9,
+        "expectancyR": -0.08,
+        "maxDrawdownPercent": 4.35,
+        "maxDrawdownDollars": 438.68,
+        "totalTrades": 23,
+        "sharpeRatio": -2.58
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 3,
+        "profitableFoldsCount": 3,
+        "consistencyScore": 1,
+        "averageOosProfitFactor": 99,
+        "averageDegradationPercent": 0,
+        "folds": [
+          {
+            "foldIndex": 1,
+            "trainRange": {
+              "start": "2026-10-15T07:35:00.000Z",
+              "end": "2026-10-15T19:30:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-15T19:35:00.000Z",
+              "end": "2026-10-16T12:00:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -351.8,
+              "profitFactor": 0.29,
+              "winRate": 58.3,
+              "tradesCount": 12,
+              "maxDrawdownPercent": 4.35,
+              "expectancyR": -0.3
+            },
+            "outOfSample": {
+              "netProfitDollars": 89.11,
+              "profitFactor": 99,
+              "winRate": 100,
+              "tradesCount": 5,
+              "maxDrawdownPercent": 0,
+              "expectancyR": 0.19
+            },
+            "degradationPercent": -34037.9,
+            "isProfitable": true
+          },
+          {
+            "foldIndex": 2,
+            "trainRange": {
+              "start": "2026-10-15T11:55:00.000Z",
+              "end": "2026-10-16T09:05:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T09:50:00.000Z",
+              "end": "2026-10-16T15:55:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -386.69,
+              "profitFactor": 0.22,
+              "winRate": 58.3,
+              "tradesCount": 12,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.32
+            },
+            "outOfSample": {
+              "netProfitDollars": 103.92,
+              "profitFactor": 99,
+              "winRate": 100,
+              "tradesCount": 5,
+              "maxDrawdownPercent": 0,
+              "expectancyR": 0.22
+            },
+            "degradationPercent": -44900,
+            "isProfitable": true
+          },
+          {
+            "foldIndex": 3,
+            "trainRange": {
+              "start": "2026-10-15T14:20:00.000Z",
+              "end": "2026-10-16T13:15:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T14:45:00.000Z",
+              "end": "2026-10-16T20:55:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -126.67,
+              "profitFactor": 0.56,
+              "winRate": 75,
+              "tradesCount": 12,
+              "maxDrawdownPercent": 2.8,
+              "expectancyR": -0.11
+            },
+            "outOfSample": {
+              "netProfitDollars": 39.3,
+              "profitFactor": 99,
+              "winRate": 80,
+              "tradesCount": 5,
+              "maxDrawdownPercent": 0,
+              "expectancyR": 0.08
+            },
+            "degradationPercent": -17578.6,
+            "isProfitable": true
+          }
+        ]
+      },
+      "stressTest": {
+        "normalCostPF": 0.62,
+        "stressedCostPF": 0.46499999999999997,
+        "survivesStress": false,
+        "spreadSensitivity": "LOW"
+      },
+      "regimePerformance": {
+        "trendingPF": 0.62,
+        "rangingPF": 0,
+        "trendingTrades": 23,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "REJECTED",
+      "recommendationReasons": [
+        "Net negative return after realistic spreads ($-189.09, PF: 0.62)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.46499999999999997)"
+      ],
+      "rejectionFlags": [
+        "Net negative return after realistic spreads ($-189.09, PF: 0.62)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.46499999999999997)"
+      ],
+      "runIdRef": "RUN-1792485872991-78"
+    },
+    {
+      "candidateId": "EXP-TRAIL-ATR_TRAILING",
+      "rank": 0,
+      "strategyId": "HYBRID_DUAL",
+      "strategyName": "Optimized Scalper [ATR Dynamic (2.0x ATR)]",
+      "timeframe": "5m",
+      "config": {
+        "strategyMode": "HYBRID_DUAL",
+        "timeframe": "5m",
+        "candleCount": 800,
+        "tpRatio": 2.5,
+        "trailingStopVariant": "ATR_TRAILING",
+        "featureStructuralStop": true,
+        "featureEntryConfirmation": true,
+        "featureContextPatternFilter": true,
+        "featureSpreadGuard": true,
+        "featureSessionFilter": true,
+        "spread": 0.45,
+        "slippage": 0.08
+      },
+      "executionCostMode": "NORMAL_COST",
+      "overallMetrics": {
+        "netProfitDollars": -348.27,
+        "netProfitPercent": -3.48,
+        "profitFactor": 0.51,
+        "winRate": 26.7,
+        "expectancyR": -0.243,
+        "maxDrawdownPercent": 5.97,
+        "maxDrawdownDollars": 600.97,
+        "totalTrades": 15,
+        "sharpeRatio": -4.24
+      },
+      "walkForwardMetrics": {
+        "foldsCount": 3,
+        "profitableFoldsCount": 2,
+        "consistencyScore": 0.67,
+        "averageOosProfitFactor": 1.02,
+        "averageDegradationPercent": 31.7,
+        "folds": [
+          {
+            "foldIndex": 1,
+            "trainRange": {
+              "start": "2026-10-15T07:35:00.000Z",
+              "end": "2026-10-15T15:45:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-15T16:00:00.000Z",
+              "end": "2026-10-16T09:25:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -441.07,
+              "profitFactor": 0.13,
+              "winRate": 12.5,
+              "tradesCount": 8,
+              "maxDrawdownPercent": 5.03,
+              "expectancyR": -0.58
+            },
+            "outOfSample": {
+              "netProfitDollars": 21.4,
+              "profitFactor": 1.23,
+              "winRate": 66.7,
+              "tradesCount": 3,
+              "maxDrawdownPercent": 0.95,
+              "expectancyR": 0.07
+            },
+            "degradationPercent": -846.2,
+            "isProfitable": true
+          },
+          {
+            "foldIndex": 2,
+            "trainRange": {
+              "start": "2026-10-15T11:00:00.000Z",
+              "end": "2026-10-15T20:15:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T07:05:00.000Z",
+              "end": "2026-10-16T13:15:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -465.42,
+              "profitFactor": 0.2,
+              "winRate": 12.5,
+              "tradesCount": 8,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.6
+            },
+            "outOfSample": {
+              "netProfitDollars": -10.4,
+              "profitFactor": 0.01,
+              "winRate": 33.3,
+              "tradesCount": 3,
+              "maxDrawdownPercent": 0.1,
+              "expectancyR": -0.04
+            },
+            "degradationPercent": 95,
+            "isProfitable": false
+          },
+          {
+            "foldIndex": 3,
+            "trainRange": {
+              "start": "2026-10-15T12:45:00.000Z",
+              "end": "2026-10-16T12:20:00.000Z",
+              "candleCount": 275
+            },
+            "oosRange": {
+              "start": "2026-10-16T12:55:00.000Z",
+              "end": "2026-10-16T19:30:00.000Z",
+              "candleCount": 125
+            },
+            "inSample": {
+              "netProfitDollars": -277.2,
+              "profitFactor": 0.3,
+              "winRate": 25,
+              "tradesCount": 8,
+              "maxDrawdownPercent": 0,
+              "expectancyR": -0.36
+            },
+            "outOfSample": {
+              "netProfitDollars": 80.2,
+              "profitFactor": 1.83,
+              "winRate": 33.3,
+              "tradesCount": 3,
+              "maxDrawdownPercent": 0.93,
+              "expectancyR": 0.28
+            },
+            "degradationPercent": -510,
+            "isProfitable": true
+          }
+        ]
+      },
+      "stressTest": {
+        "normalCostPF": 0.51,
+        "stressedCostPF": 0.3825,
+        "survivesStress": false,
+        "spreadSensitivity": "LOW"
+      },
+      "regimePerformance": {
+        "trendingPF": 0.51,
+        "rangingPF": 0,
+        "trendingTrades": 15,
+        "rangingTrades": 0
+      },
+      "recommendationStatus": "REJECTED",
+      "recommendationReasons": [
+        "Net negative return after realistic spreads ($-348.27, PF: 0.51)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.3825)"
+      ],
+      "rejectionFlags": [
+        "Net negative return after realistic spreads ($-348.27, PF: 0.51)",
+        "Strategy edge dissolves under stressed slippage/spread (Stressed PF: 0.3825)"
+      ],
+      "runIdRef": "RUN-1792485873277-297"
+    }
+  ],
+  "trailingStopComparison": [
+    {
+      "variant": "ASYMMETRIC_RUNNER",
+      "name": "Pure Deterministic NY 3h ORB Engine",
+      "netProfitDollars": 11,
+      "profitFactor": 99,
+      "maxDrawdownPercent": 0,
+      "expectancyR": 0.11,
+      "avgHoldingMinutes": 5,
+      "totalTrades": 1,
+      "runnerActivationRate": 0,
+      "exitReasonsBreakdown": {
+        "TRAILING_STOP": 1
+      }
+    },
+    {
+      "variant": "NO_TRAILING",
+      "name": "Optimized Scalper [No Trailing (Fixed SL/TP)]",
+      "netProfitDollars": -405.3,
+      "profitFactor": 0.53,
+      "maxDrawdownPercent": 7.7,
+      "expectancyR": -0.364,
+      "avgHoldingMinutes": 139,
+      "totalTrades": 11,
+      "runnerActivationRate": 0,
+      "exitReasonsBreakdown": {
+        "STOP_LOSS": 9,
+        "TAKE_PROFIT": 2
+      }
+    },
+    {
+      "variant": "FIXED_DISTANCE",
+      "name": "Optimized Scalper [Fixed Distance (4.0 pts)]",
+      "netProfitDollars": -189.09,
+      "profitFactor": 0.62,
+      "maxDrawdownPercent": 4.35,
+      "expectancyR": -0.08,
+      "avgHoldingMinutes": 38,
+      "totalTrades": 23,
+      "runnerActivationRate": 0,
+      "exitReasonsBreakdown": {
+        "TRAILING_STOP": 17,
+        "STOP_LOSS": 5,
+        "END_OF_DATA": 1
+      }
+    },
+    {
+      "variant": "ATR_TRAILING",
+      "name": "Optimized Scalper [ATR Dynamic (2.0x ATR)]",
+      "netProfitDollars": -348.27,
+      "profitFactor": 0.51,
+      "maxDrawdownPercent": 5.97,
+      "expectancyR": -0.243,
+      "avgHoldingMinutes": 74,
+      "totalTrades": 15,
+      "runnerActivationRate": 0,
+      "exitReasonsBreakdown": {
+        "TRAILING_STOP": 4,
+        "STOP_LOSS": 11
+      }
+    }
+  ],
+  "historicalDataSummary": {
+    "symbol": "GOLD",
+    "timeframes": {
+      "1m": {
+        "candleCount": 79,
+        "firstCandleUTC": "2026-10-19T01:31:00.000Z",
+        "lastCandleUTC": "2026-10-19T02:49:00.000Z",
+        "gapCount": 0,
+        "dataQuality": "EXCELLENT",
+        "issuesCount": 0
+      },
+      "5m": {
+        "candleCount": 500,
+        "firstCandleUTC": "2026-10-15T02:20:00.000Z",
+        "lastCandleUTC": "2026-10-16T20:55:00.000Z",
+        "gapCount": 1,
+        "dataQuality": "GOOD",
+        "issuesCount": 1
+      },
+      "15m": {
+        "candleCount": 1000,
+        "firstCandleUTC": "2026-10-02T06:00:00.000Z",
+        "lastCandleUTC": "2026-10-19T02:45:00.000Z",
+        "gapCount": 8,
+        "dataQuality": "GAPS_DETECTED",
+        "issuesCount": 8
+      },
+      "1h": {
+        "candleCount": 100,
+        "firstCandleUTC": "2026-10-12T18:00:00.000Z",
+        "lastCandleUTC": "2026-10-19T02:00:00.000Z",
+        "gapCount": 4,
+        "dataQuality": "GOOD",
+        "issuesCount": 4
+      }
+    },
+    "readinessStatus": "READY",
+    "readinessMessage": "Historical dataset verified (1679 total candles available across inspected timeframes; 5m and 15m active)."
+  },
+  "completedExperimentIds": [
+    "EXP-STRAT-01-HYBRID-LIVE",
+    "EXP-STRAT-02-HERMES-ADAPTIVE",
+    "EXP-STRAT-03-LEGACY-UNFILTERED",
+    "EXP-STRAT-04-NY-ORB",
+    "EXP-TRAIL-NO_TRAILING",
+    "EXP-TRAIL-FIXED_DISTANCE",
+    "EXP-TRAIL-ATR_TRAILING"
+  ],
+  "completedResults": {}
+}

@@ -151,6 +151,8 @@ export async function insertMultipleSignals(signalsList: (InsertSignal & { creat
 }
 
 export async function seedHistoricalTrades(): Promise<number> {
+  // Pre-seed realistic historical weekday trades during live market sessions (Friday/Thursday/Wednesday)
+  // Ensures no trades are ever seeded during market closures (weekends)
   const sampleTrades = [
     {
       signal: "SHORT",
@@ -161,17 +163,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BEARISH",
       reason: "Confluence of 1H EMA bearish alignment + RSI oversold recovery",
       tradeDuration: "45m",
-      createdAt: new Date(Date.now() - 2 * 3600 * 1000), // 2 hours ago
+      createdAt: new Date("2026-10-16T15:30:00.000Z"), // Friday NY Session
       tradeStatus: "STOP_HIT",
       closedPrice: 4151.78,
-      closedAt: new Date(Date.now() - 1.25 * 3600 * 1000),
+      closedAt: new Date("2026-10-16T16:15:00.000Z"),
       pnlPoints: -6.70,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7849102",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7849102)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "LONG",
@@ -182,17 +184,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BULLISH",
       reason: "Liquidity sweep at 4132 support level + bullish engulfing 15m candle",
       tradeDuration: "1h 20m",
-      createdAt: new Date(Date.now() - 5 * 3600 * 1000), // 5 hours ago
+      createdAt: new Date("2026-10-16T13:45:00.000Z"), // Friday London/NY Overlap
       tradeStatus: "TARGET_HIT",
       closedPrice: 4155.00,
-      closedAt: new Date(Date.now() - 3.6 * 3600 * 1000),
+      closedAt: new Date("2026-10-16T15:05:00.000Z"),
       pnlPoints: 16.50,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7848914",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7848914)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "SHORT",
@@ -203,17 +205,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "NEUTRAL",
       reason: "Asian session upper range bounce rejection at key resistance",
       tradeDuration: "38m",
-      createdAt: new Date(Date.now() - 8 * 3600 * 1000), // 8 hours ago
+      createdAt: new Date("2026-10-16T03:30:00.000Z"), // Friday Asian Session
       tradeStatus: "STOP_HIT",
       closedPrice: 4158.80,
-      closedAt: new Date(Date.now() - 7.3 * 3600 * 1000),
+      closedAt: new Date("2026-10-16T04:08:00.000Z"),
       pnlPoints: -6.70,
       signalType: "REVERSAL",
       isRealTrade: false,
       brokerPositionId: null,
       executionStatus: "NOT_EXECUTED",
       executionType: "SIMULATED",
-      executionReason: "Not executed on MT5 (Simulated / Signal Only)"
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "LONG",
@@ -224,17 +226,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BULLISH",
       reason: "NY Session momentum expansion above 1H EMA50 confluence",
       tradeDuration: "2h 15m",
-      createdAt: new Date(Date.now() - 24 * 3600 * 1000), // 1 day ago
+      createdAt: new Date("2026-10-15T16:00:00.000Z"), // Thursday NY ORB Trigger
       tradeStatus: "TARGET_HIT",
       closedPrice: 4142.10,
-      closedAt: new Date(Date.now() - 21.75 * 3600 * 1000),
+      closedAt: new Date("2026-10-15T18:15:00.000Z"),
       pnlPoints: 16.70,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7846201",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7846201)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "SHORT",
@@ -245,17 +247,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BEARISH",
       reason: "London/NY crossover supply zone rejection setup",
       tradeDuration: "52m",
-      createdAt: new Date(Date.now() - 28 * 3600 * 1000),
+      createdAt: new Date("2026-10-15T12:30:00.000Z"), // Thursday London Session
       tradeStatus: "STOP_HIT",
       closedPrice: 4154.50,
-      closedAt: new Date(Date.now() - 27.1 * 3600 * 1000),
+      closedAt: new Date("2026-10-15T13:22:00.000Z"),
       pnlPoints: -5.60,
       signalType: "RANGE_BOUNCE",
       isRealTrade: false,
       brokerPositionId: null,
       executionStatus: "NOT_EXECUTED",
       executionType: "SIMULATED",
-      executionReason: "Not executed on MT5 (Simulated / Signal Only)"
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "LONG",
@@ -266,17 +268,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BULLISH",
       reason: "London session breakout above 15m Fair Value Gap",
       tradeDuration: "1h 40m",
-      createdAt: new Date(Date.now() - 34 * 3600 * 1000),
+      createdAt: new Date("2026-10-15T08:15:00.000Z"), // Thursday London Open
       tradeStatus: "TARGET_HIT",
       closedPrice: 4135.00,
-      closedAt: new Date(Date.now() - 32.33 * 3600 * 1000),
+      closedAt: new Date("2026-10-15T09:55:00.000Z"),
       pnlPoints: 16.20,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7844119",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7844119)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "LONG",
@@ -287,17 +289,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BULLISH",
       reason: "Hermes Engine A high confluence SMC Order Block bounce",
       tradeDuration: "2h 05m",
-      createdAt: new Date(Date.now() - 48 * 3600 * 1000), // 2 days ago
+      createdAt: new Date("2026-10-14T14:30:00.000Z"), // Wednesday NY Session
       tradeStatus: "TARGET_HIT",
       closedPrice: 4128.50,
-      closedAt: new Date(Date.now() - 45.9 * 3600 * 1000),
+      closedAt: new Date("2026-10-14T16:35:00.000Z"),
       pnlPoints: 18.30,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7841005",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7841005)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "SHORT",
@@ -308,17 +310,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BEARISH",
       reason: "Deterministic ORB 3H NY Range low breakdown expansion",
       tradeDuration: "1h 50m",
-      createdAt: new Date(Date.now() - 55 * 3600 * 1000),
+      createdAt: new Date("2026-10-14T16:00:00.000Z"), // Wednesday NY ORB Breakout
       tradeStatus: "TARGET_HIT",
       closedPrice: 4118.00,
-      closedAt: new Date(Date.now() - 53.16 * 3600 * 1000),
+      closedAt: new Date("2026-10-14T17:50:00.000Z"),
       pnlPoints: 17.60,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7839812",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7839812)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "LONG",
@@ -329,17 +331,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BULLISH",
       reason: "Bullish market structure break (BOS) on 15m timeframe",
       tradeDuration: "2h 30m",
-      createdAt: new Date(Date.now() - 72 * 3600 * 1000), // 3 days ago
+      createdAt: new Date("2026-10-13T15:00:00.000Z"), // Tuesday NY Session
       tradeStatus: "TARGET_HIT",
       closedPrice: 4112.80,
-      closedAt: new Date(Date.now() - 69.5 * 3600 * 1000),
+      closedAt: new Date("2026-10-13T17:30:00.000Z"),
       pnlPoints: 17.70,
       signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7836102",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7836102)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     },
     {
       signal: "SHORT",
@@ -350,59 +352,17 @@ export async function seedHistoricalTrades(): Promise<number> {
       trend: "BEARISH",
       reason: "Trailing stop secured profit after +5.8 pts pullback",
       tradeDuration: "1h 10m",
-      createdAt: new Date(Date.now() - 80 * 3600 * 1000),
+      createdAt: new Date("2026-10-13T09:30:00.000Z"), // Tuesday London Session
       tradeStatus: "CLOSED",
       closedPrice: 4102.50,
-      closedAt: new Date(Date.now() - 78.83 * 3600 * 1000),
+      closedAt: new Date("2026-10-13T10:40:00.000Z"),
       pnlPoints: 5.80,
       signalType: "RANGE_BOUNCE",
-      isRealTrade: true,
-      brokerPositionId: "7834921",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7834921)"
-    },
-    {
-      signal: "LONG",
-      confidence: 83,
-      entryPrice: 4080.50,
-      stopLoss: 4073.80,
-      takeProfit: 4098.20,
-      trend: "BULLISH",
-      reason: "Sunday market open gap recovery + 1m confirm momentum",
-      tradeDuration: "1h 15m",
-      createdAt: new Date(Date.now() - 96 * 3600 * 1000), // 4 days ago
-      tradeStatus: "TARGET_HIT",
-      closedPrice: 4098.20,
-      closedAt: new Date(Date.now() - 94.75 * 3600 * 1000),
-      pnlPoints: 17.70,
-      signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7831002",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7831002)"
-    },
-    {
-      signal: "SHORT",
-      confidence: 87,
-      entryPrice: 4088.00,
-      stopLoss: 4094.80,
-      takeProfit: 4071.50,
-      trend: "BEARISH",
-      reason: "Friday NY close distribution drop below 4080 support",
-      tradeDuration: "1h 55m",
-      createdAt: new Date(Date.now() - 120 * 3600 * 1000), // 5 days ago
-      tradeStatus: "TARGET_HIT",
-      closedPrice: 4071.50,
-      closedAt: new Date(Date.now() - 118.08 * 3600 * 1000),
-      pnlPoints: 16.50,
-      signalType: "TREND_FOLLOW",
-      isRealTrade: true,
-      brokerPositionId: "7828114",
-      executionStatus: "EXECUTED",
-      executionType: "REAL_MT5",
-      executionReason: "Executed on Real MT5 Account (Ticket #7828114)"
+      isRealTrade: false,
+      brokerPositionId: null,
+      executionStatus: "NOT_EXECUTED",
+      executionType: "SIMULATED",
+      executionReason: "Historical Signal (Simulated Baseline)"
     }
   ];
 
@@ -458,6 +418,21 @@ export async function clearAllHistory(): Promise<number> {
   return count;
 }
 
+export async function clearSimulatedBacktestTrades(): Promise<number> {
+  const initialLen = localSignalsCache.length;
+  localSignalsCache = localSignalsCache.filter(s =>
+    s.executionType !== "SIMULATED" &&
+    s.isRealTrade !== false &&
+    !String(s.reason || "").includes("Backtest") &&
+    !String(s.executionReason || "").includes("Backtest")
+  );
+  const removed = initialLen - localSignalsCache.length;
+  if (removed > 0) {
+    saveLocalSignals();
+  }
+  return removed;
+}
+
 export async function updateTradeStopLoss(id: string, stopLoss: number): Promise<void> {
   const item = localSignalsCache.find(s => s.id === id);
   if (item) {
@@ -489,9 +464,54 @@ export async function updateTradeEntryPrice(id: string, entryPrice: number): Pro
 import { SystemSettings } from './schema/index';
 import { setDoc } from 'firebase/firestore';
 
+const SETTINGS_FILE_NAME = '.settings_cache.json';
+
+function getSettingsFilePath(): string {
+  const possiblePaths = [
+    path.resolve(process.cwd(), SETTINGS_FILE_NAME),
+    path.resolve(process.cwd(), 'artifacts/api-server', SETTINGS_FILE_NAME),
+    path.resolve('/app/applet/artifacts/api-server', SETTINGS_FILE_NAME),
+    path.resolve('/app/applet', SETTINGS_FILE_NAME),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  for (const p of possiblePaths) {
+    try {
+      if (fs.existsSync(path.dirname(p))) return p;
+    } catch {}
+  }
+  return path.resolve(process.cwd(), SETTINGS_FILE_NAME);
+}
+
+function loadLocalSettings(): Partial<SystemSettings> | null {
+  try {
+    const file = getSettingsFilePath();
+    if (fs.existsSync(file)) {
+      const raw = fs.readFileSync(file, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Partial<SystemSettings>;
+      }
+    }
+  } catch (e) {
+    console.warn('[DB] Failed reading local settings cache:', e);
+  }
+  return null;
+}
+
+function saveLocalSettings(settings: SystemSettings): void {
+  try {
+    const file = getSettingsFilePath();
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[DB] Failed writing local settings cache:', e);
+  }
+}
+
 let cachedSettings: SystemSettings | null = null;
 let lastSettingsFetch = 0;
-const SETTINGS_CACHE_TTL = 15_000; // 15 seconds fast memory cache
+const SETTINGS_CACHE_TTL = 300_000; // 5 minutes fast memory cache
 
 export const DEFAULT_HERMES_PARAMETERS: HermesParameters = {
   minConfidenceNormal: 50,
@@ -510,6 +530,10 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
   if (!forceRefresh && cachedSettings && (now - lastSettingsFetch < SETTINGS_CACHE_TTL)) {
     return cachedSettings;
   }
+
+  // Check persisted disk settings as our authoritative baseline
+  const diskSettings = loadLocalSettings();
+  const baselineSettings = cachedSettings ? { ...diskSettings, ...cachedSettings } : diskSettings;
 
   try {
     const q = query(collection(db, 'settings'), limit(1));
@@ -542,9 +566,11 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         featureSpreadGuard: true,
         featureSessionFilter: true,
         tradingState: 'ACTIVE',
+        ...(baselineSettings || {}), // PRESERVES engineMode and all customized settings!
       };
       cachedSettings = defaultSettings;
       lastSettingsFetch = now;
+      saveLocalSettings(defaultSettings);
       return defaultSettings;
     }
     const d = snap.docs[0];
@@ -560,7 +586,7 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         ...DEFAULT_HERMES_PARAMETERS,
         ...(raw.hermesParameters || {})
       },
-      engineMode: raw.engineMode ?? 'HYBRID_DUAL',
+      engineMode: raw.engineMode ?? baselineSettings?.engineMode ?? 'HYBRID_DUAL',
       orbRiskPerTrade: raw.orbRiskPerTrade ?? 2.0,
       orbTargetMultiple: raw.orbTargetMultiple ?? 5.0,
       orbStopAtrMultiplier: raw.orbStopAtrMultiplier ?? 1.5,
@@ -572,10 +598,12 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       featureSpreadGuard: raw.featureSpreadGuard ?? true,
       featureSessionFilter: raw.featureSessionFilter ?? true,
       tradingState: raw.tradingState ?? 'ACTIVE',
-      ...raw
+      ...baselineSettings,
+      ...raw,
     } as SystemSettings;
     cachedSettings = settings;
     lastSettingsFetch = now;
+    saveLocalSettings(settings);
     return settings;
   } catch {
     const fallbackSettings: SystemSettings = {
@@ -605,9 +633,11 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       featureSpreadGuard: true,
       featureSessionFilter: true,
       tradingState: 'ACTIVE',
+      ...(baselineSettings || {}), // PRESERVES user's engineMode!
     };
     cachedSettings = fallbackSettings;
     lastSettingsFetch = now;
+    saveLocalSettings(fallbackSettings);
     return fallbackSettings;
   }
 }
@@ -621,6 +651,8 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   
   cachedSettings = { ...updated, id };
   lastSettingsFetch = Date.now();
+
+  saveLocalSettings(cachedSettings);
 
   withTimeout(setDoc(doc(db, 'settings', id), updated, { merge: true }), 1500).catch(() => null);
   return cachedSettings;

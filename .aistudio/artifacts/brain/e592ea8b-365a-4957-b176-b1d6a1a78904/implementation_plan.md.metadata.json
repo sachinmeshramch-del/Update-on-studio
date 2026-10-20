@@ -1,0 +1,6 @@
+{
+  "summary": "Implementation plan for enabling micro account trade execution (0.01 lot minimum bypass) on MT5, resolving execution blockers for balances under $50 while maintaining broker margin safety.",
+  "updatedAt": "2026-10-17T05:30:40.159718081Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

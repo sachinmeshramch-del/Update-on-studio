@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -93,6 +93,13 @@ export function HermesCard() {
     refetchInterval: 8000,
   });
 
+  const [localEngineMode, setLocalEngineMode] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("gold_swing_engine_mode");
+    }
+    return null;
+  });
+
   const { data: orbData } = useQuery<{
     engineMode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
     orbRiskPerTrade: number;
@@ -110,8 +117,23 @@ export function HermesCard() {
     refetchInterval: 8000,
   });
 
+  useEffect(() => {
+    if (orbData?.engineMode) {
+      setLocalEngineMode(orbData.engineMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", orbData.engineMode);
+      }
+    }
+  }, [orbData?.engineMode]);
+
+  const currentActiveMode = orbData?.engineMode || localEngineMode || "HYBRID_DUAL";
+
   const setEngineModeMutation = useMutation({
     mutationFn: async (mode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE") => {
+      setLocalEngineMode(mode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", mode);
+      }
       const res = await fetch("/api/hermes/set-engine-mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,6 +143,14 @@ export function HermesCard() {
       return res.json();
     },
     onSuccess: (data) => {
+      setLocalEngineMode(data.engineMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", data.engineMode);
+      }
+      queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({
+        ...(old || {}),
+        engineMode: data.engineMode,
+      }));
       queryClient.invalidateQueries({ queryKey: ["/api/hermes/orb-state"] });
       queryClient.invalidateQueries({ queryKey: ["/api/signal"] });
       queryClient.invalidateQueries({ queryKey: ["settings"] });
@@ -486,9 +516,9 @@ export function HermesCard() {
                     Execution Engine Architecture
                   </span>
                   <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/10 border-amber-500/40 text-amber-500">
-                    {orbData?.engineMode === "HYBRID_DUAL"
+                    {currentActiveMode === "HYBRID_DUAL"
                       ? "Hybrid Dual-Engine"
-                      : orbData?.engineMode === "DETERMINISTIC_ORB"
+                      : currentActiveMode === "DETERMINISTIC_ORB"
                       ? "Deterministic ORB"
                       : "Hermes Adaptive"}
                   </Badge>
@@ -509,7 +539,7 @@ export function HermesCard() {
                 ] as const
               ).map((mode) => {
                 const Icon = mode.icon;
-                const isSelected = (orbData?.engineMode || "HYBRID_DUAL") === mode.id;
+                const isSelected = currentActiveMode === mode.id;
                 return (
                   <button
                     key={mode.id}

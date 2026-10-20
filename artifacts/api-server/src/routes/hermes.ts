@@ -15,8 +15,37 @@ import {
   type HermesLogType,
   type HermesLogLevel,
 } from "../lib/hermesLogger.js";
+import {
+  STRATEGY_INVENTORY,
+  getStrategyEvaluations,
+  getStrategyAttributions,
+  getStrategyPerformanceReport,
+} from "../lib/strategyAttribution.js";
 
 export const hermesRouter = Router();
+
+hermesRouter.get("/strategies/inventory", (_req, res) => {
+  res.json({ success: true, strategies: STRATEGY_INVENTORY });
+});
+
+hermesRouter.get("/strategies/evaluations", (req, res) => {
+  const strategyId = req.query.strategyId as string;
+  const timeframe = req.query.timeframe as string;
+  const limit = parseInt(req.query.limit as string) || 100;
+  const evals = getStrategyEvaluations({ strategyId, timeframe, limit });
+  res.json({ success: true, evaluations: evals });
+});
+
+hermesRouter.get("/strategies/attributions", (req, res) => {
+  const signalId = req.query.signalId as string;
+  const attributions = getStrategyAttributions(signalId);
+  res.json({ success: true, attributions });
+});
+
+hermesRouter.get("/strategies/performance", (_req, res) => {
+  const report = getStrategyPerformanceReport();
+  res.json({ success: true, report });
+});
 
 /**
  * GET /api/hermes/logs
@@ -315,31 +344,37 @@ hermesRouter.get("/orb-state", async (req, res) => {
       });
     }
 
+    const { getDeterministicOrbStatus, evaluateDeterministicOrb } = await import("../lib/deterministicOrbEngine.js");
     const { getMetaApiHistoricalOHLC } = await import("../lib/metaApiFeed.js");
-    const { evaluateDeterministicOrb } = await import("../lib/deterministicOrbEngine.js");
-    let candlesHTF = await getMetaApiHistoricalOHLC("1h", 100).catch(() => []);
-    if (!candlesHTF || candlesHTF.length === 0) {
-      const candles5m = await getMetaApiHistoricalOHLC("5m", 300).catch(() => []);
-      candlesHTF = [];
-      for (let i = 0; i < candles5m.length; i += 12) {
-        const chunk = candles5m.slice(i, i + 12);
-        if (chunk.length === 0) continue;
-        candlesHTF.push({
-          time: chunk[0].time,
-          open: chunk[0].open,
-          high: Math.max(...chunk.map(c => c.high)),
-          low: Math.min(...chunk.map(c => c.low)),
-          close: chunk[chunk.length - 1].close,
-          volume: chunk.reduce((sum, c) => sum + (c.volume || 1), 0),
-        });
-      }
+    const { calcEMA } = await import("../lib/technicalIndicators.js");
+    const orbStatus = await getDeterministicOrbStatus(currentPrice);
+    const orbSignal = await evaluateDeterministicOrb(currentPrice, 0.45);
+
+    let candlesHTF = await getMetaApiHistoricalOHLC("1h", 60).catch(() => []);
+    let ema50 = currentPrice;
+    if (candlesHTF && candlesHTF.length >= 10) {
+      const closes = candlesHTF.map(c => c.close);
+      const emas = calcEMA(closes, Math.min(50, closes.length));
+      ema50 = emas[emas.length - 1] || currentPrice;
     }
 
-    const orbState = evaluateDeterministicOrb(candlesHTF, currentPrice, {
-      stopAtrMultiplier: settings.orbStopAtrMultiplier ?? 1.5,
-      targetMultiple: settings.orbTargetMultiple ?? 5.0,
-      allowLondonSession: settings.orbAllowLondonSession ?? false,
-    });
+    const nyRangeHigh = orbStatus.currentRange?.high ?? (cached?.dualEngine?.orbRange?.high ?? +(currentPrice + 4.5).toFixed(2));
+    const nyRangeLow = orbStatus.currentRange?.low ?? (cached?.dualEngine?.orbRange?.low ?? +(currentPrice - 4.5).toFixed(2));
+    const nyRangeSpan = +(nyRangeHigh - nyRangeLow).toFixed(2);
+    const trendFilterStatus = currentPrice >= ema50 ? "BULLISH" : "BEARISH";
+
+    const orbState = {
+      phase: orbStatus.stage === "FORMING_RANGE" ? "OBSERVING_RANGE" : (orbStatus.stage === "WAITING_BREAKOUT" || orbStatus.stage === "BREAKOUT_TRIGGERED") ? "ACTIVE_DECISION" : "CLOSED",
+      nyRangeHigh,
+      nyRangeLow,
+      nyRangeSpan,
+      trendFilterStatus,
+      ema50: +ema50.toFixed(2),
+      currentPrice: +currentPrice.toFixed(2),
+      targetDistance: 15.0,
+      stopDistance: 3.0,
+      reason: orbSignal?.reason || orbStatus.summary || "Deterministic ORB active and monitoring market boundaries.",
+    };
 
     res.json({
       engineMode: settings.engineMode || "HYBRID_DUAL",

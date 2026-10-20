@@ -1,0 +1,4417 @@
+{
+  "runId": "RUN-1792485871740-482",
+  "runTimestamp": "2026-10-20T08:44:31.740Z",
+  "summary": {
+    "totalTrades": 0,
+    "winningTrades": 0,
+    "losingTrades": 0,
+    "winRate": 0,
+    "initialBalance": 10000,
+    "finalBalance": 10000,
+    "netProfitDollars": 0,
+    "netProfitPercent": 0,
+    "netProfitPoints": 0,
+    "grossProfit": 0,
+    "grossLoss": 0,
+    "profitFactor": 0,
+    "expectancyR": 0,
+    "maxDrawdownDollars": 0,
+    "maxDrawdownPercent": 0,
+    "averageWinDollars": 0,
+    "averageLossDollars": 0,
+    "averageWinPoints": 0,
+    "averageLossPoints": 0,
+    "winLossRatio": 0,
+    "sharpeRatio": 0,
+    "maxConsecutiveWins": 0,
+    "maxConsecutiveLosses": 0,
+    "avgTradeDurationMinutes": 0,
+    "candlesEvaluated": 500,
+    "timeframe": "5m",
+    "dataSource": "MetaApi Historical Cloud Feed (Persisted)",
+    "runnerTradesCount": 0,
+    "intrabarAmbiguitiesCount": 0,
+    "strategyMode": "HYBRID_DUAL",
+    "strategyName": "Hybrid Dual-Engine Scalper",
+    "totalEligibleSignals": 0,
+    "totalRejectedSignals": 284,
+    "rejectionsByFilter": {
+      "sessionGuard": 136,
+      "patternFilter": 26,
+      "entryConfirmation": 75,
+      "spreadGuard": 47
+    },
+    "availableCandleCount": 500,
+    "earliestCandleUTC": "2026-10-15T02:20:00.000Z",
+    "latestCandleUTC": "2026-10-16T20:55:00.000Z",
+    "dataCompleteness": "COMPLETE",
+    "missingCandlesCount": 0
+  },
+  "breakdownBySession": [],
+  "breakdownByPattern": [],
+  "breakdownByRegime": [],
+  "breakdownByDirection": [],
+  "breakdownByStrategy": [],
+  "monthlyBreakdown": [],
+  "variantComparison": [
+    {
+      "variant": "ASYMMETRIC_RUNNER",
+      "label": "Asymmetric Runner (Live Bot)",
+      "activationThreshold": "Locks Breakeven at +1.0 pt, locks +1.0 pt at +1.3 pts; unlocks Runner at 85% TP",
+      "stopDistanceRule": "Progressive multi-tier: trail 7.0 pts at +12 pts, 10.0 pts at +22 pts, 15.0 pts at +38 pts",
+      "updateFrequency": "Bar-by-bar ratchet upon each closed bar's extreme",
+      "exitRule": "Hit dynamic trailing stop floor, initial SL, or extended runner TP target",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "FIXED_DISTANCE",
+      "label": "Fixed-Distance Trail (4.0 pts)",
+      "activationThreshold": "Activates when peak profit reaches +4.0 points ($4.00/oz)",
+      "stopDistanceRule": "Fixed 4.0 points behind highest high (LONG) or lowest low (SHORT)",
+      "updateFrequency": "Bar-by-bar ratchet (monotonically tightening)",
+      "exitRule": "Bid/Ask touches trailed stop level or initial TP",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "ATR_TRAILING",
+      "label": "ATR Trailing (2.0x ATR)",
+      "activationThreshold": "Activates when favorable excursion reaches 1.5 × ATR",
+      "stopDistanceRule": "Trails at 2.0 × ATR below peak high (LONG) or above peak low (SHORT)",
+      "updateFrequency": "Bar-by-bar dynamic volatility adjustment",
+      "exitRule": "Hit dynamic ATR trailing stop or initial TP",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "BREAKEVEN_ONLY",
+      "label": "Breakeven Only (+0.2 buffer)",
+      "activationThreshold": "Activates when profit reaches max(2.0 pts, 0.5 × initial SL distance)",
+      "stopDistanceRule": "Moves SL to Entry Price + Spread + 0.20 pt friction buffer. No further movement",
+      "updateFrequency": "Single step adjustment",
+      "exitRule": "Hit breakeven buffer or initial Take Profit",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "PROFIT_TRIGGERED",
+      "label": "Profit-Triggered Trail (+1.2 at +2.5)",
+      "activationThreshold": "Activates when favorable price move reaches +2.50 points",
+      "stopDistanceRule": "Locks in +1.20 points of guaranteed profit",
+      "updateFrequency": "Single step adjustment",
+      "exitRule": "Hit profit-locked stop or initial Take Profit",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "NO_TRAILING",
+      "label": "No Trailing (Fixed TP/SL Baseline)",
+      "activationThreshold": "None (Baseline control)",
+      "stopDistanceRule": "Static initial Stop Loss and initial Take Profit",
+      "updateFrequency": "Static (no update during trade)",
+      "exitRule": "Only exits at initial Stop Loss or initial Take Profit",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    }
+  ],
+  "ablationMatrix": [
+    {
+      "id": "ALL_ENABLED",
+      "name": "All 5 Feature Flags Enabled (Optimized Live Bot)",
+      "description": "Baseline benchmark with full confluence, structural stop, confirmation, pattern filter, spread guard, and London/NY session guard",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 0,
+      "signalsRejected": 284,
+      "simulatedTrades": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "winRate": 0,
+      "averageTradeDollars": 0
+    },
+    {
+      "id": "NO_STRUCTURAL_STOP",
+      "name": "Ablation: Without Structural Stop",
+      "description": "Isolates the effect of dynamic 10-bar swing extreme SL by reverting to static 3.0×ATR stop",
+      "flags": {
+        "structuralStop": false,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 0,
+      "signalsRejected": 284,
+      "simulatedTrades": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "winRate": 0,
+      "averageTradeDollars": 0
+    },
+    {
+      "id": "NO_ENTRY_CONFIRMATION",
+      "name": "Ablation: Without Entry Confirmation",
+      "description": "Evaluates trading immediately on signal candle close without requiring 2-bar breakout confirmation",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": false,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 0,
+      "signalsRejected": 333,
+      "simulatedTrades": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "winRate": 0,
+      "averageTradeDollars": 0
+    },
+    {
+      "id": "NO_CONTEXT_PATTERN",
+      "name": "Ablation: Without Context Pattern Filter",
+      "description": "Allows candlestick reversal patterns without requiring Order Block or S/R zone alignment",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": false,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 0,
+      "signalsRejected": 279,
+      "simulatedTrades": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "winRate": 0,
+      "averageTradeDollars": 0
+    },
+    {
+      "id": "NO_SPREAD_GUARD",
+      "name": "Ablation: Without Spread Friction Guard",
+      "description": "Simulates execution without spread-to-stop loss ratio cap (>8% or >0.60 pts)",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": false,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 33,
+      "signalsRejected": 215,
+      "simulatedTrades": 33,
+      "netProfitDollars": -82.3,
+      "profitFactor": 0.79,
+      "expectancyR": -0.023,
+      "maxDrawdownPercent": 3.48,
+      "winRate": 87.9,
+      "averageTradeDollars": -2.49
+    },
+    {
+      "id": "NO_SESSION_GUARD",
+      "name": "Ablation: Without London/NY Session Guard",
+      "description": "Simulates 24-hour continuous trading including Asian session and rollover hours",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": false,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 0,
+      "signalsRejected": 198,
+      "simulatedTrades": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "winRate": 0,
+      "averageTradeDollars": 0
+    },
+    {
+      "id": "SESSION_SPREAD_ONLY",
+      "name": "Combination: Session + Spread Guard Only",
+      "description": "Lightweight filtering: only executes in London/NY with spread friction guard active",
+      "flags": {
+        "structuralStop": false,
+        "entryConfirmation": false,
+        "contextPatternFilter": false,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 0,
+      "signalsRejected": 333,
+      "simulatedTrades": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "winRate": 0,
+      "averageTradeDollars": 0
+    },
+    {
+      "id": "LEGACY_UNFILTERED",
+      "name": "Legacy Unfiltered Baseline",
+      "description": "All 5 feature flags disabled + fixed TP/SL (no trailing runner logic)",
+      "flags": {
+        "structuralStop": false,
+        "entryConfirmation": false,
+        "contextPatternFilter": false,
+        "spreadGuard": false,
+        "sessionFilter": false,
+        "trailingVariant": "NO_TRAILING"
+      },
+      "signalsEligible": 15,
+      "signalsRejected": 0,
+      "simulatedTrades": 15,
+      "netProfitDollars": -687.89,
+      "profitFactor": 0.4,
+      "expectancyR": -0.467,
+      "maxDrawdownPercent": 6.88,
+      "winRate": 13.3,
+      "averageTradeDollars": -45.86
+    }
+  ],
+  "oosValidation": {
+    "train": {
+      "name": "TRAIN",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "validation": {
+      "name": "VALIDATION",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "test": {
+      "name": "TEST_OOS",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "flagWarnings": [
+      "Low sample size: Fewer than 20 trades executed; statistical significance is low."
+    ]
+  },
+  "equityCurve": [
+    {
+      "time": "2026-10-15T02:20:00.000Z",
+      "tradeIndex": 0,
+      "balance": 10000,
+      "equity": 10000,
+      "drawdownDollars": 0,
+      "drawdownPercent": 0
+    }
+  ],
+  "trades": [],
+  "evaluationLogs": [
+    {
+      "id": "EVAL-232",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 53.5,
+        "ema9": 4173.62,
+        "ema21": 4173.6,
+        "ema50": 4170.96,
+        "macdHist": -0.242,
+        "atr": 3.62,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-233",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 48.9,
+        "ema9": 4173.44,
+        "ema21": 4173.52,
+        "ema50": 4171.03,
+        "macdHist": -0.275,
+        "atr": 3.69,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-234",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 42.5,
+        "ema9": 4172.64,
+        "ema21": 4173.14,
+        "ema50": 4170.97,
+        "macdHist": -0.497,
+        "atr": 3.7,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-235",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:15:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 48.9,
+        "ema9": 4172.57,
+        "ema21": 4173.07,
+        "ema50": 4171.02,
+        "macdHist": -0.429,
+        "atr": 3.69,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-236",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 50.6,
+        "ema9": 4172.69,
+        "ema21": 4173.08,
+        "ema50": 4171.1,
+        "macdHist": -0.311,
+        "atr": 3.61,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-237",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:25:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.6,
+        "ema9": 4173.32,
+        "ema21": 4173.33,
+        "ema50": 4171.29,
+        "macdHist": -0.055,
+        "atr": 3.56,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-238",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:30:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 60.3,
+        "ema9": 4174.38,
+        "ema21": 4173.81,
+        "ema50": 4171.58,
+        "macdHist": 0.289,
+        "atr": 3.72,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-239",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 56.1,
+        "ema9": 4174.87,
+        "ema21": 4174.08,
+        "ema50": 4171.78,
+        "macdHist": 0.369,
+        "atr": 3.8,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-240",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 59.5,
+        "ema9": 4175.68,
+        "ema21": 4174.52,
+        "ema50": 4172.06,
+        "macdHist": 0.528,
+        "atr": 3.77,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-241",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 57.1,
+        "ema9": 4176.1,
+        "ema21": 4174.82,
+        "ema50": 4172.29,
+        "macdHist": 0.528,
+        "atr": 3.66,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-242",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.3,
+        "ema9": 4176.3,
+        "ema21": 4175.02,
+        "ema50": 4172.47,
+        "macdHist": 0.445,
+        "atr": 3.59,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-243",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T06:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55,
+        "ema9": 4176.42,
+        "ema21": 4175.2,
+        "ema50": 4172.65,
+        "macdHist": 0.353,
+        "atr": 3.43,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-244",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bullish Engulfing",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 59.5,
+        "ema9": 4177.01,
+        "ema21": 4175.57,
+        "ema50": 4172.91,
+        "macdHist": 0.427,
+        "atr": 3.47,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-245",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Gravestone Doji",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 66.4,
+        "ema9": 4179.55,
+        "ema21": 4177.05,
+        "ema50": 4173.77,
+        "macdHist": 0.891,
+        "atr": 3.5,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-246",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 69.1,
+        "ema9": 4180.87,
+        "ema21": 4177.88,
+        "ema50": 4174.25,
+        "macdHist": 1.056,
+        "atr": 3.55,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-247",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:20:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 70.4,
+        "ema9": 4182.13,
+        "ema21": 4178.72,
+        "ema50": 4174.76,
+        "macdHist": 1.156,
+        "atr": 3.54,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-248",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 70.7,
+        "ema9": 4183.18,
+        "ema21": 4179.51,
+        "ema50": 4175.26,
+        "macdHist": 1.154,
+        "atr": 3.44,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-249",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 71.2,
+        "ema9": 4184.11,
+        "ema21": 4180.26,
+        "ema50": 4175.75,
+        "macdHist": 1.1,
+        "atr": 3.41,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-250",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 59.10729503067005",
+        "MACD Hist: 0.7167201572484352"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 59.1,
+        "ema9": 4184,
+        "ema21": 4180.57,
+        "ema50": 4176.06,
+        "macdHist": 0.717,
+        "atr": 3.6,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-251",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 59.28443793516825",
+        "MACD Hist: 0.4213336404864805"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 59.3,
+        "ema9": 4183.94,
+        "ema21": 4180.85,
+        "ema50": 4176.36,
+        "macdHist": 0.421,
+        "atr": 3.52,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-252",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T07:55:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.5,
+        "ema9": 4184.87,
+        "ema21": 4182.08,
+        "ema50": 4177.42,
+        "macdHist": 0.145,
+        "atr": 3.4,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-253",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 50.3,
+        "ema9": 4184.11,
+        "ema21": 4181.98,
+        "ema50": 4177.56,
+        "macdHist": -0.262,
+        "atr": 3.59,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-254",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:05:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.1,
+        "ema9": 4183.48,
+        "ema21": 4181.89,
+        "ema50": 4177.69,
+        "macdHist": -0.535,
+        "atr": 3.52,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-255",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Dragonfly Doji",
+        "Bias: BULLISH",
+        "S/R Confluence Met"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 50.3,
+        "ema9": 4183,
+        "ema21": 4181.81,
+        "ema50": 4177.83,
+        "macdHist": -0.697,
+        "atr": 3.44,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (8.1%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-256",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 56.5,
+        "ema9": 4183,
+        "ema21": 4182.06,
+        "ema50": 4178.38,
+        "macdHist": -0.523,
+        "atr": 3.46,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-257",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 52.7,
+        "ema9": 4182.92,
+        "ema21": 4182.11,
+        "ema50": 4178.54,
+        "macdHist": -0.525,
+        "atr": 3.42,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-258",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:35:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 51.9,
+        "ema9": 4182.79,
+        "ema21": 4182.13,
+        "ema50": 4178.69,
+        "macdHist": -0.538,
+        "atr": 3.31,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-259",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bullish Engulfing",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 56.9,
+        "ema9": 4183.17,
+        "ema21": 4182.36,
+        "ema50": 4178.93,
+        "macdHist": -0.38,
+        "atr": 3.33,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-260",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T08:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 63.62192778657803",
+        "MACD Hist: 0.1322446146339451"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 63.6,
+        "ema9": 4184.9,
+        "ema21": 4183.39,
+        "ema50": 4179.78,
+        "macdHist": 0.132,
+        "atr": 3.19,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-261",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:10:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 66.1,
+        "ema9": 4187.27,
+        "ema21": 4184.94,
+        "ema50": 4180.88,
+        "macdHist": 0.517,
+        "atr": 3.14,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-262",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:15:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 61.3,
+        "ema9": 4187.69,
+        "ema21": 4185.34,
+        "ema50": 4181.21,
+        "macdHist": 0.456,
+        "atr": 3.14,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-263",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 53.602495543418556",
+        "MACD Hist: 0.17530851515689738"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 53.6,
+        "ema9": 4187.4,
+        "ema21": 4185.42,
+        "ema50": 4181.41,
+        "macdHist": 0.175,
+        "atr": 3.16,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-264",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.8,
+        "ema9": 4186.37,
+        "ema21": 4185.13,
+        "ema50": 4181.44,
+        "macdHist": -0.283,
+        "atr": 3.24,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-265",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 43.1,
+        "ema9": 4185.23,
+        "ema21": 4184.73,
+        "ema50": 4181.41,
+        "macdHist": -0.673,
+        "atr": 3.21,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-266",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:35:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.2,
+        "ema9": 4184.51,
+        "ema21": 4184.45,
+        "ema50": 4181.42,
+        "macdHist": -0.837,
+        "atr": 3.21,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-267",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 42.23206871971776",
+        "MACD Hist: -1.019552262741474"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 42.2,
+        "ema9": 4183.59,
+        "ema21": 4184.03,
+        "ema50": 4181.36,
+        "macdHist": -1.02,
+        "atr": 3.21,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-268",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T09:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 38.709930136044235",
+        "MACD Hist: -1.249219262991459"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 38.7,
+        "ema9": 4181.22,
+        "ema21": 4182.77,
+        "ema50": 4181.1,
+        "macdHist": -1.249,
+        "atr": 3.29,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-269",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 42,
+        "ema9": 4179.84,
+        "ema21": 4181.82,
+        "ema50": 4180.81,
+        "macdHist": -1.164,
+        "atr": 3.23,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-270",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:10:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 49.9,
+        "ema9": 4180.25,
+        "ema21": 4181.83,
+        "ema50": 4180.85,
+        "macdHist": -0.771,
+        "atr": 3.32,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-271",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 52.1,
+        "ema9": 4180.82,
+        "ema21": 4181.95,
+        "ema50": 4180.94,
+        "macdHist": -0.408,
+        "atr": 3.29,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-272",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Gravestone Doji",
+        "Bias: BEARISH",
+        "S/R Confluence Met"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 52.2,
+        "ema9": 4181.28,
+        "ema21": 4182.05,
+        "ema50": 4181.02,
+        "macdHist": -0.151,
+        "atr": 3.17,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-273",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.3,
+        "ema9": 4181.77,
+        "ema21": 4182.21,
+        "ema50": 4181.13,
+        "macdHist": 0.06,
+        "atr": 3.1,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-274",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 52.3,
+        "ema9": 4182.07,
+        "ema21": 4182.3,
+        "ema50": 4181.21,
+        "macdHist": 0.165,
+        "atr": 2.97,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-275",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Dragonfly Doji",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 53,
+        "ema9": 4182.38,
+        "ema21": 4182.42,
+        "ema50": 4181.31,
+        "macdHist": 0.245,
+        "atr": 2.86,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-276",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bearish Engulfing",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 48,
+        "ema9": 4182.21,
+        "ema21": 4182.34,
+        "ema50": 4181.32,
+        "macdHist": 0.155,
+        "atr": 2.85,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (8.0%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-277",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:50:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 35.3,
+        "ema9": 4180.04,
+        "ema21": 4181.29,
+        "ema50": 4180.93,
+        "macdHist": -0.514,
+        "atr": 3.05,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-278",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T10:55:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 34.5,
+        "ema9": 4178.83,
+        "ema21": 4180.63,
+        "ema50": 4180.66,
+        "macdHist": -0.764,
+        "atr": 2.96,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-279",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 40,
+        "ema9": 4178.28,
+        "ema21": 4180.21,
+        "ema50": 4180.48,
+        "macdHist": -0.744,
+        "atr": 3,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-280",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 36.76304100731539",
+        "MACD Hist: -0.8126844886097637"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 36.8,
+        "ema9": 4177.44,
+        "ema21": 4179.66,
+        "ema50": 4180.23,
+        "macdHist": -0.813,
+        "atr": 3.01,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-281",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 40.1658927030034",
+        "MACD Hist: -0.7197967966222694"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 40.2,
+        "ema9": 4177.02,
+        "ema21": 4179.27,
+        "ema50": 4180.04,
+        "macdHist": -0.72,
+        "atr": 3.07,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-282",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:15:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 44.62426493211327",
+        "MACD Hist: -0.4962914881886549"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 44.6,
+        "ema9": 4177.06,
+        "ema21": 4179.08,
+        "ema50": 4179.93,
+        "macdHist": -0.496,
+        "atr": 3.05,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-283",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:20:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 51.5,
+        "ema9": 4177.72,
+        "ema21": 4179.2,
+        "ema50": 4179.95,
+        "macdHist": -0.114,
+        "atr": 3.13,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-284",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:25:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 48.63809280169031",
+        "MACD Hist: 0.05556302805085944"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 48.6,
+        "ema9": 4177.98,
+        "ema21": 4179.18,
+        "ema50": 4179.91,
+        "macdHist": 0.056,
+        "atr": 3.12,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (8.6%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-285",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Dragonfly Doji",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 45.8,
+        "ema9": 4177.88,
+        "ema21": 4178.92,
+        "ema50": 4179.74,
+        "macdHist": 0.116,
+        "atr": 2.95,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-286",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 46.681112445570996",
+        "MACD Hist: 0.15359641608918406"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 46.7,
+        "ema9": 4177.88,
+        "ema21": 4178.83,
+        "ema50": 4179.67,
+        "macdHist": 0.154,
+        "atr": 2.89,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (9.1%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-287",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T11:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 38.94433430030224",
+        "MACD Hist: -0.11250566560758801"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 38.9,
+        "ema9": 4176.83,
+        "ema21": 4178.17,
+        "ema50": 4179.31,
+        "macdHist": -0.113,
+        "atr": 2.9,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-288",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 44,
+        "ema9": 4175.68,
+        "ema21": 4177.36,
+        "ema50": 4178.86,
+        "macdHist": -0.255,
+        "atr": 2.98,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-289",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 42.94362386248588",
+        "MACD Hist: -0.20291336318275843"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 42.9,
+        "ema9": 4175.46,
+        "ema21": 4177.11,
+        "ema50": 4178.7,
+        "macdHist": -0.203,
+        "atr": 2.93,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-290",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 42.07330662302941",
+        "MACD Hist: -0.1751716191135182"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 42.1,
+        "ema9": 4175.2,
+        "ema21": 4176.84,
+        "ema50": 4178.52,
+        "macdHist": -0.175,
+        "atr": 2.9,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-291",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:15:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 45.8,
+        "ema9": 4175.27,
+        "ema21": 4176.73,
+        "ema50": 4178.4,
+        "macdHist": -0.043,
+        "atr": 2.92,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-292",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 50.705499054252066",
+        "MACD Hist: 0.19049321541393183"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 50.7,
+        "ema9": 4175.75,
+        "ema21": 4176.81,
+        "ema50": 4178.37,
+        "macdHist": 0.19,
+        "atr": 3.04,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-293",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.8,
+        "ema9": 4175.78,
+        "ema21": 4176.73,
+        "ema50": 4178.28,
+        "macdHist": 0.227,
+        "atr": 3.03,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-294",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:30:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 55.9,
+        "ema9": 4176.68,
+        "ema21": 4177.05,
+        "ema50": 4178.36,
+        "macdHist": 0.533,
+        "atr": 3.19,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-295",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:35:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 49.8,
+        "ema9": 4176.82,
+        "ema21": 4177.08,
+        "ema50": 4178.32,
+        "macdHist": 0.523,
+        "atr": 3.3,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-296",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:40:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.7,
+        "ema9": 4176.6,
+        "ema21": 4176.96,
+        "ema50": 4178.21,
+        "macdHist": 0.393,
+        "atr": 3.33,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-297",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Dragonfly Doji",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 48,
+        "ema9": 4176.54,
+        "ema21": 4176.9,
+        "ema50": 4178.14,
+        "macdHist": 0.339,
+        "atr": 3.31,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-298",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T12:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bearish Engulfing",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 37.4,
+        "ema9": 4175.15,
+        "ema21": 4176.23,
+        "ema50": 4177.81,
+        "macdHist": -0.13,
+        "atr": 3.56,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-299",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 36.24638932063916",
+        "MACD Hist: -0.7818552522702902"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 36.2,
+        "ema9": 4172.29,
+        "ema21": 4174.66,
+        "ema50": 4176.99,
+        "macdHist": -0.782,
+        "atr": 3.9,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-300",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:05:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 35.8,
+        "ema9": 4171.31,
+        "ema21": 4174,
+        "ema50": 4176.61,
+        "macdHist": -0.863,
+        "atr": 3.85,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-301",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:10:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 35.7,
+        "ema9": 4170.5,
+        "ema21": 4173.39,
+        "ema50": 4176.24,
+        "macdHist": -0.86,
+        "atr": 3.77,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-302",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 26.8,
+        "ema9": 4168.23,
+        "ema21": 4172.09,
+        "ema50": 4175.57,
+        "macdHist": -1.315,
+        "atr": 4.11,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-303",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:20:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 24.3,
+        "ema9": 4165.81,
+        "ema21": 4170.64,
+        "ema50": 4174.81,
+        "macdHist": -1.705,
+        "atr": 4.23,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-304",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 32.8,
+        "ema9": 4164.65,
+        "ema21": 4169.68,
+        "ema50": 4174.23,
+        "macdHist": -1.588,
+        "atr": 4.23,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-305",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:30:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 38.02216447001344",
+        "MACD Hist: -1.2308434168668252"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 38,
+        "ema9": 4164.27,
+        "ema21": 4169.05,
+        "ema50": 4173.78,
+        "macdHist": -1.231,
+        "atr": 4.34,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-306",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 52.5715796692707",
+        "MACD Hist: -0.27541221514592795"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 52.6,
+        "ema9": 4165.96,
+        "ema21": 4169.38,
+        "ema50": 4173.74,
+        "macdHist": -0.275,
+        "atr": 4.81,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-307",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:40:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 57.2,
+        "ema9": 4168.18,
+        "ema21": 4170.08,
+        "ema50": 4173.87,
+        "macdHist": 0.644,
+        "atr": 4.97,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-308",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Hammer"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 59,
+        "ema9": 4170.29,
+        "ema21": 4170.86,
+        "ema50": 4174.06,
+        "macdHist": 1.325,
+        "atr": 5.06,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-309",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:50:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.1,
+        "ema9": 4173.11,
+        "ema21": 4172.09,
+        "ema50": 4174.46,
+        "macdHist": 2.068,
+        "atr": 5.54,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-310",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T13:55:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.5,
+        "ema9": 4175.45,
+        "ema21": 4173.25,
+        "ema50": 4174.87,
+        "macdHist": 2.474,
+        "atr": 5.41,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-311",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 62,
+        "ema9": 4177.01,
+        "ema21": 4174.16,
+        "ema50": 4175.2,
+        "macdHist": 2.515,
+        "atr": 5.77,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-312",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:05:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.7,
+        "ema9": 4178.85,
+        "ema21": 4175.25,
+        "ema50": 4175.63,
+        "macdHist": 2.606,
+        "atr": 5.79,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-313",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:10:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 67.3,
+        "ema9": 4180.89,
+        "ema21": 4176.51,
+        "ema50": 4176.16,
+        "macdHist": 2.715,
+        "atr": 5.74,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-314",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 68.5,
+        "ema9": 4182.84,
+        "ema21": 4177.79,
+        "ema50": 4176.72,
+        "macdHist": 2.738,
+        "atr": 5.77,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-315",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:20:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 71.8,
+        "ema9": 4185.23,
+        "ema21": 4179.34,
+        "ema50": 4177.43,
+        "macdHist": 2.866,
+        "atr": 5.94,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-316",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 73.2,
+        "ema9": 4187.54,
+        "ema21": 4180.92,
+        "ema50": 4178.19,
+        "macdHist": 2.908,
+        "atr": 5.8,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-317",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 66.5,
+        "ema9": 4188.64,
+        "ema21": 4182.03,
+        "ema50": 4178.77,
+        "macdHist": 2.522,
+        "atr": 5.92,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-318",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 58.20399656188985",
+        "MACD Hist: 1.778730080669757"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 58.2,
+        "ema9": 4188.45,
+        "ema21": 4182.54,
+        "ema50": 4179.12,
+        "macdHist": 1.779,
+        "atr": 5.94,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-319",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Gravestone Doji",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 58.9,
+        "ema9": 4188.44,
+        "ema21": 4183.07,
+        "ema50": 4179.49,
+        "macdHist": 1.232,
+        "atr": 5.76,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-320",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 57.84952299496194",
+        "MACD Hist: 0.3296884239017217"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 57.8,
+        "ema9": 4187.96,
+        "ema21": 4183.76,
+        "ema50": 4180.06,
+        "macdHist": 0.33,
+        "atr": 5.47,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-321",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T14:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 53.5,
+        "ema9": 4187.41,
+        "ema21": 4183.89,
+        "ema50": 4180.27,
+        "macdHist": -0.099,
+        "atr": 5.43,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-322",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Dragonfly Doji",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 52.3,
+        "ema9": 4186.79,
+        "ema21": 4183.93,
+        "ema50": 4180.42,
+        "macdHist": -0.455,
+        "atr": 5.3,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (9.8%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-323",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 46.2,
+        "ema9": 4185.24,
+        "ema21": 4183.71,
+        "ema50": 4180.6,
+        "macdHist": -1.065,
+        "atr": 5.37,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-324",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.2,
+        "ema9": 4184.17,
+        "ema21": 4183.36,
+        "ema50": 4180.58,
+        "macdHist": -1.332,
+        "atr": 5.17,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-325",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 42.13051411428797",
+        "MACD Hist: -1.6734213911196516"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 42.1,
+        "ema9": 4182.64,
+        "ema21": 4182.74,
+        "ema50": 4180.42,
+        "macdHist": -1.673,
+        "atr": 5.18,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-326",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:25:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 40.85912817807727",
+        "MACD Hist: -1.894458134866106"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 40.9,
+        "ema9": 4181.19,
+        "ema21": 4182.07,
+        "ema50": 4180.22,
+        "macdHist": -1.894,
+        "atr": 5.06,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-327",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:30:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 42.65499490213138",
+        "MACD Hist: -1.8861335073933276"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 42.7,
+        "ema9": 4180.25,
+        "ema21": 4181.56,
+        "ema50": 4180.07,
+        "macdHist": -1.886,
+        "atr": 4.9,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-328",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 37.365295398935096",
+        "MACD Hist: -1.901821380579824"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 37.4,
+        "ema9": 4177.05,
+        "ema21": 4179.67,
+        "ema50": 4179.39,
+        "macdHist": -1.902,
+        "atr": 4.79,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-329",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T15:55:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 33.1,
+        "ema9": 4174.24,
+        "ema21": 4177.87,
+        "ema50": 4178.62,
+        "macdHist": -1.99,
+        "atr": 4.63,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-330",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:00:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 31.5,
+        "ema9": 4172.65,
+        "ema21": 4176.82,
+        "ema50": 4178.14,
+        "macdHist": -2.038,
+        "atr": 5,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-331",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:05:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 29.9,
+        "ema9": 4171.06,
+        "ema21": 4175.72,
+        "ema50": 4177.61,
+        "macdHist": -2.053,
+        "atr": 4.96,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-332",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 37.89051704638425",
+        "MACD Hist: -1.6983627109608932"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 37.9,
+        "ema9": 4170.54,
+        "ema21": 4175.06,
+        "ema50": 4177.25,
+        "macdHist": -1.698,
+        "atr": 4.99,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-333",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 34,
+        "ema9": 4169.42,
+        "ema21": 4174.14,
+        "ema50": 4176.77,
+        "macdHist": -1.595,
+        "atr": 5.07,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-334",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 37.87042981325292",
+        "MACD Hist: -1.2960523182329324"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 37.9,
+        "ema9": 4168.93,
+        "ema21": 4173.49,
+        "ema50": 4176.38,
+        "macdHist": -1.296,
+        "atr": 4.98,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-335",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:35:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 31.5,
+        "ema9": 4165.6,
+        "ema21": 4170.7,
+        "ema50": 4174.8,
+        "macdHist": -1.156,
+        "atr": 4.78,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-336",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 41.3,
+        "ema9": 4165.68,
+        "ema21": 4170.27,
+        "ema50": 4174.45,
+        "macdHist": -0.716,
+        "atr": 4.84,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-337",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:45:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 34.8,
+        "ema9": 4164.51,
+        "ema21": 4169.32,
+        "ema50": 4173.88,
+        "macdHist": -0.76,
+        "atr": 5.03,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-338",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T16:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Dragonfly Doji",
+        "Bias: BULLISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 35.3,
+        "ema9": 4163.62,
+        "ema21": 4168.48,
+        "ema50": 4173.34,
+        "macdHist": -0.694,
+        "atr": 4.82,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (10.6%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-339",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bearish Engulfing",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 34.8,
+        "ema9": 4162.29,
+        "ema21": 4167.01,
+        "ema50": 4172.32,
+        "macdHist": -0.478,
+        "atr": 4.68,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-340",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 37.381410203772354",
+        "MACD Hist: -0.32180909158025894"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 37.4,
+        "ema9": 4161.82,
+        "ema21": 4166.37,
+        "ema50": 4171.83,
+        "macdHist": -0.322,
+        "atr": 4.55,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-341",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bearish Engulfing",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 35.5,
+        "ema9": 4161.11,
+        "ema21": 4165.63,
+        "ema50": 4171.3,
+        "macdHist": -0.273,
+        "atr": 4.4,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-342",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:15:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 38.62803573879359",
+        "MACD Hist: -0.08508737599304084"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 38.6,
+        "ema9": 4160.86,
+        "ema21": 4165.11,
+        "ema50": 4170.85,
+        "macdHist": -0.085,
+        "atr": 4.35,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-343",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 39.956909969528695",
+        "MACD Hist: 0.12253893081120903"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 40,
+        "ema9": 4160.8,
+        "ema21": 4164.69,
+        "ema50": 4170.45,
+        "macdHist": 0.123,
+        "atr": 4.17,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-344",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 39.8,
+        "ema9": 4160.73,
+        "ema21": 4164.31,
+        "ema50": 4170.05,
+        "macdHist": 0.283,
+        "atr": 4.08,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-345",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 42.5,
+        "ema9": 4160.92,
+        "ema21": 4164.07,
+        "ema50": 4169.73,
+        "macdHist": 0.489,
+        "atr": 3.95,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-346",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:35:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 38.3,
+        "ema9": 4160.5,
+        "ema21": 4163.59,
+        "ema50": 4169.3,
+        "macdHist": 0.448,
+        "atr": 4.01,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-347",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:40:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 49.8,
+        "ema9": 4161.41,
+        "ema21": 4163.73,
+        "ema50": 4169.13,
+        "macdHist": 0.835,
+        "atr": 4.37,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-348",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:45:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.5,
+        "ema9": 4161.56,
+        "ema21": 4163.58,
+        "ema50": 4168.86,
+        "macdHist": 0.885,
+        "atr": 4.32,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-349",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:50:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.4,
+        "ema9": 4161.66,
+        "ema21": 4163.44,
+        "ema50": 4168.59,
+        "macdHist": 0.901,
+        "atr": 4.31,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-350",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T17:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 47.9,
+        "ema9": 4162.02,
+        "ema21": 4163.45,
+        "ema50": 4168.39,
+        "macdHist": 0.985,
+        "atr": 4.16,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-351",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:00:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 48.9,
+        "ema9": 4162.42,
+        "ema21": 4163.5,
+        "ema50": 4168.22,
+        "macdHist": 1.054,
+        "atr": 4.08,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-352",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:05:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 52.9,
+        "ema9": 4163.2,
+        "ema21": 4163.75,
+        "ema50": 4168.14,
+        "macdHist": 1.214,
+        "atr": 4.12,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-353",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Candle Pattern: Bearish Engulfing",
+        "Bias: BEARISH",
+        "Zone verified"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 48.6,
+        "ema9": 4163.34,
+        "ema21": 4163.77,
+        "ema50": 4167.98,
+        "macdHist": 1.125,
+        "atr": 4.12,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-354",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:25:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 40.8,
+        "ema9": 4161.99,
+        "ema21": 4163.01,
+        "ema50": 4167.17,
+        "macdHist": 0.405,
+        "atr": 3.8,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-355",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:30:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 37.44457042541993",
+        "MACD Hist: 0.07269802637248812"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 37.4,
+        "ema9": 4160.94,
+        "ema21": 4162.44,
+        "ema50": 4166.76,
+        "macdHist": 0.073,
+        "atr": 3.81,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-356",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 42.342674996582055",
+        "MACD Hist: 0.02217719692847253"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 42.3,
+        "ema9": 4160.55,
+        "ema21": 4162.13,
+        "ema50": 4166.45,
+        "macdHist": 0.022,
+        "atr": 3.78,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-357",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 41.8563924355615",
+        "MACD Hist: -0.012445350154060009"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 41.9,
+        "ema9": 4160.17,
+        "ema21": 4161.81,
+        "ema50": 4166.15,
+        "macdHist": -0.012,
+        "atr": 3.69,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-358",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 40.9257038099953",
+        "MACD Hist: -0.051852417846481424"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 40.9,
+        "ema9": 4159.76,
+        "ema21": 4161.48,
+        "ema50": 4165.83,
+        "macdHist": -0.052,
+        "atr": 3.61,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-359",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 40.8913469194418",
+        "MACD Hist: -0.05697464951118025"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 40.9,
+        "ema9": 4159.42,
+        "ema21": 4161.17,
+        "ema50": 4165.53,
+        "macdHist": -0.057,
+        "atr": 3.57,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-360",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T18:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 45.52110719462617",
+        "MACD Hist: 0.0810441236913868"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 45.5,
+        "ema9": 4159.53,
+        "ema21": 4161.06,
+        "ema50": 4165.31,
+        "macdHist": 0.081,
+        "atr": 3.56,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-361",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bearish Alignment",
+        "RSI (36-60): 44.34715068485696",
+        "MACD Hist: 0.14373138790513362"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 44.3,
+        "ema9": 4159.5,
+        "ema21": 4160.9,
+        "ema50": 4165.08,
+        "macdHist": 0.144,
+        "atr": 3.46,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close below low of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-362",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bullish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bullish Trend"
+      ],
+      "indicators": {
+        "rsi": 50,
+        "ema9": 4159.95,
+        "ema21": 4160.98,
+        "ema50": 4164.95,
+        "macdHist": 0.345,
+        "atr": 3.47,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-363",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:10:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 57.9,
+        "ema9": 4161.13,
+        "ema21": 4161.42,
+        "ema50": 4164.98,
+        "macdHist": 0.733,
+        "atr": 3.56,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-364",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:15:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 54.4,
+        "ema9": 4161.77,
+        "ema21": 4161.69,
+        "ema50": 4164.96,
+        "macdHist": 0.854,
+        "atr": 3.45,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-365",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 56.07048699872783",
+        "MACD Hist: 0.9571670895117685"
+      ],
+      "conditionsFailed": [
+        "Spread Friction Guard (<8% SL or <=0.60 pts)"
+      ],
+      "indicators": {
+        "rsi": 56.1,
+        "ema9": 4162.46,
+        "ema21": 4162.01,
+        "ema50": 4164.97,
+        "macdHist": 0.957,
+        "atr": 3.34,
+        "spread": 0.75
+      },
+      "confidenceScore": 55,
+      "rejectionReason": "Spread Friction Guard: Spread (0.75 pts) exceeds 8% of SL (7.9%) or absolute limit of 0.60 pts",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-366",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:30:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.2,
+        "ema9": 4165,
+        "ema21": 4163.3,
+        "ema50": 4165.31,
+        "macdHist": 1.399,
+        "atr": 3.38,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-367",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:35:00.000Z",
+      "timeframe": "5m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 65.9,
+        "ema9": 4166.3,
+        "ema21": 4164.05,
+        "ema50": 4165.55,
+        "macdHist": 1.539,
+        "atr": 3.33,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-368",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 58.9,
+        "ema9": 4166.78,
+        "ema21": 4164.47,
+        "ema50": 4165.68,
+        "macdHist": 1.369,
+        "atr": 3.34,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-369",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 59.99805279495816",
+        "MACD Hist: 1.2319244868974335"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 60,
+        "ema9": 4167.3,
+        "ema21": 4164.92,
+        "ema50": 4165.82,
+        "macdHist": 1.232,
+        "atr": 3.23,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-370",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:50:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "Bearish Engulfing"
+      ],
+      "conditionsFailed": [
+        "EMA 9/21 Bearish Trend"
+      ],
+      "indicators": {
+        "rsi": 57.8,
+        "ema9": 4167.54,
+        "ema21": 4165.24,
+        "ema50": 4165.93,
+        "macdHist": 1.021,
+        "atr": 3.2,
+        "spread": 0.75
+      },
+      "confidenceScore": 45,
+      "rejectionReason": "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-371",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T19:55:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [
+        "EMA 9/21/50 Bullish Alignment",
+        "RSI (40-64): 57.96637714463119",
+        "MACD Hist: 0.8338367303048788"
+      ],
+      "conditionsFailed": [
+        "2-Candle Breakout Confirmation"
+      ],
+      "indicators": {
+        "rsi": 58,
+        "ema9": 4167.75,
+        "ema21": 4165.55,
+        "ema50": 4166.03,
+        "macdHist": 0.834,
+        "atr": 3.11,
+        "spread": 0.75
+      },
+      "confidenceScore": 50,
+      "rejectionReason": "Entry Confirmation Filter: Subsequent 2 candles failed to close above high of signal bar",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-372",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:00:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 53.1,
+        "ema9": 4167.53,
+        "ema21": 4165.65,
+        "ema50": 4166.06,
+        "macdHist": 0.541,
+        "atr": 3.05,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-373",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:05:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 53.5,
+        "ema9": 4167.39,
+        "ema21": 4165.76,
+        "ema50": 4166.09,
+        "macdHist": 0.331,
+        "atr": 2.93,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-374",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:10:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 53.7,
+        "ema9": 4167.3,
+        "ema21": 4165.86,
+        "ema50": 4166.12,
+        "macdHist": 0.178,
+        "atr": 2.8,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-375",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:15:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 53.6,
+        "ema9": 4167.22,
+        "ema21": 4165.96,
+        "ema50": 4166.15,
+        "macdHist": 0.059,
+        "atr": 2.68,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-376",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:20:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.6,
+        "ema9": 4167.31,
+        "ema21": 4166.11,
+        "ema50": 4166.21,
+        "macdHist": 0.02,
+        "atr": 2.7,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-377",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:25:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 58.4,
+        "ema9": 4167.6,
+        "ema21": 4166.35,
+        "ema50": 4166.31,
+        "macdHist": 0.056,
+        "atr": 2.68,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-378",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:30:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 54.3,
+        "ema9": 4167.59,
+        "ema21": 4166.46,
+        "ema50": 4166.36,
+        "macdHist": -0.016,
+        "atr": 2.59,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-379",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:35:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 54.6,
+        "ema9": 4167.6,
+        "ema21": 4166.57,
+        "ema50": 4166.41,
+        "macdHist": -0.064,
+        "atr": 2.54,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-380",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:40:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.7,
+        "ema9": 4167.69,
+        "ema21": 4166.7,
+        "ema50": 4166.47,
+        "macdHist": -0.078,
+        "atr": 2.48,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-381",
+      "strategyId": "DUAL_SYNERGY",
+      "strategyName": "Hybrid Dual-Engine Scalper",
+      "strategyVersion": "v2.4.0",
+      "candleTimestamp": "2026-10-16T20:45:00.000Z",
+      "timeframe": "5m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 50.9,
+        "ema9": 4167.48,
+        "ema21": 4166.7,
+        "ema50": 4166.48,
+        "macdHist": -0.181,
+        "atr": 2.5,
+        "spread": 0.75
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    }
+  ],
+  "testedParams": {
+    "strategyMode": "HYBRID_DUAL",
+    "timeframe": "5m",
+    "candleCount": 800,
+    "tpRatio": 2.5,
+    "trailingStopVariant": "ASYMMETRIC_RUNNER",
+    "featureStructuralStop": true,
+    "featureEntryConfirmation": true,
+    "featureContextPatternFilter": true,
+    "featureSpreadGuard": true,
+    "featureSessionFilter": true,
+    "spread": 0.75,
+    "slippage": 0.18
+  },
+  "executionCostModel": {
+    "symbol": "GOLD",
+    "contractSize": 100,
+    "pointValueDollars": 100,
+    "spreadPoints": 0.75,
+    "spreadDollarsPerLot": 75,
+    "slippagePoints": 0.18,
+    "slippageDollarsPerLot": 18,
+    "commissionPerLot": 0,
+    "totalRoundTripCostPerLot": 93,
+    "explanation": "Institutional MT5 standard XAUUSD contract: 1 lot = 100 troy oz. 1 point move ($1.00/oz) = $100.00/lot. Spread (0.75 pts) incurs $75.00/lot round-trip. Entry adds slippage ($18.00/lot)."
+  }
+}

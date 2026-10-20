@@ -37,6 +37,11 @@ let cachedAnalytics:  AnalyticsSummary | null = null;
 let lastAnalyticsTime = 0;
 let smartModeEnabled  = false;
 
+export function resetAnalyticsCache(): void {
+  cachedAnalytics = null;
+  lastAnalyticsTime = 0;
+}
+
 export function isSmartMode(): boolean { return smartModeEnabled; }
 
 export function setSmartMode(enabled: boolean) {
@@ -65,9 +70,15 @@ export async function getAnalyticsSummary(forceRefresh = false): Promise<Analyti
   try {
     const closedRows = await getClosedTrades(200);
 
+    // Only real or forward live paper trades should affect live performance monitor
+    // Exclude simulated backtest runs so running backtests does not pause the live bot!
     const completed = closedRows.filter((r: any) =>
       (r.signal === "LONG" || r.signal === "SHORT") &&
-      r.pnlPoints !== null && r.closedPrice !== null
+      r.pnlPoints !== null && r.closedPrice !== null &&
+      r.executionType !== "SIMULATED" &&
+      r.isRealTrade !== false &&
+      !String(r.reason || "").includes("Backtest") &&
+      !String(r.executionReason || "").includes("Backtest")
     );
 
     const totalCompleted = completed.length;

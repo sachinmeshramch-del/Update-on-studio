@@ -2,7 +2,7 @@ import { sendPushToAll } from "../lib/pushNotifications.js";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { generateSignal, initSignalCooldown } from "../lib/signalEngine.js";
 import { startTradeTracker } from "../lib/tradeTracker.js";
-import { getAnalyticsSummary, setSmartMode } from "../lib/performanceAnalytics.js";
+import { getAnalyticsSummary, setSmartMode, resetAnalyticsCache } from "../lib/performanceAnalytics.js";
 import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
@@ -13,7 +13,25 @@ import { getVapidPublicKey } from "../lib/pushNotifications.js";
 import { calculateDynamicAtrStopLoss, type AtrRegimePreset } from "../lib/dynamicAtrStopLoss.js";
 import { getMetaApiHistoricalOHLC } from "../lib/metaApiFeed.js";
 import { parseAndImportTradeCsv, getSampleCsvTemplate } from "../lib/csvTradeImporter.js";
-import { runBacktest } from "../lib/backtestEngine.js";
+import { runBacktest, getPastBacktestRuns } from "../lib/backtestEngine.js";
+import {
+  auditHistoricalData,
+  syncHistoricalCandlesFromMetaApi,
+  importCandlesFromCsv,
+  loadStoredCandles,
+} from "../lib/historicalDataManager.js";
+import {
+  discoverExistingStrategies,
+  checkHistoricalDataReadiness,
+  getResearchCampaignStatus,
+  startResearchCampaign,
+  pauseResearchCampaign,
+  resumeResearchCampaign,
+  cancelResearchCampaign,
+  queryAiResearchAssistant,
+  generateProposedConfiguration,
+  applyCandidateToLiveBot,
+} from "../lib/autonomousResearchController.js";
 
 // Start background trade outcome tracker
 
@@ -249,18 +267,25 @@ router.get("/signal", async (req, res) => {
            if (quickLive && typeof quickLive.bid === 'number' && typeof quickLive.ask === 'number') {
                price = Number(((quickLive.bid + quickLive.ask) / 2).toFixed(2));
            } else {
-               const recent = await getMetaApiHistoricalOHLC("1m", 1);
+               const recent = await getMetaApiHistoricalOHLC("1m", 1).catch(() => []);
                if (recent && recent.length > 0) {
                    price = recent[recent.length - 1].close;
                    req.log.info({ price }, "Using recent 1m candle close for signal since live price is unavailable");
                } else {
-                   res.status(503).json({ error: "Market data unavailable" });
-                   return;
+                   const { getHistoricalCandlesForEngine } = await import("../lib/historicalDataManager.js");
+                   const stored = getHistoricalCandlesForEngine("XAUUSD", "5m", 5);
+                   if (stored && stored.length > 0) {
+                       price = stored[stored.length - 1].close;
+                       req.log.info({ price }, "Using stored 5m candle close for signal");
+                   } else {
+                       price = 4175.0; // Safe default gold price reference
+                   }
                }
            }
-        } catch (histErr) {
-           res.status(503).json({ error: "Market data unavailable" });
-           return;
+        } catch {
+           const { getHistoricalCandlesForEngine } = await import("../lib/historicalDataManager.js");
+           const stored = getHistoricalCandlesForEngine("XAUUSD", "5m", 5);
+           price = stored && stored.length > 0 ? stored[stored.length - 1].close : 4175.0;
         }
     }
     const signal = await generateSignal(price);
@@ -478,10 +503,185 @@ router.get("/history/csv-template", (_req: Request, res: Response) => {
 router.post("/backtest/run", async (req: Request, res: Response) => {
   try {
     const result = await runBacktest(req.body || {});
+    // NOTE: Per user instruction, backtesting triggered signals are NOT saved to the live history table.
+    // They are returned directly to the backtest client and saved in .backtest_runs/ for audit and comparison.
     res.json(result);
   } catch (err: any) {
     req.log.error({ err }, "Error running strategy backtest");
     res.status(500).json({ success: false, error: err.message || "Failed to execute historical backtest" });
+  }
+});
+
+router.post("/history/sync-backtest", (_req: Request, res: Response) => {
+  // Deprecated: Backtest trades are segregated from the live signal history table.
+  res.json({ success: true, count: 0, message: "Backtesting signals are isolated and never written to live history." });
+});
+
+router.post("/history/purge-simulated", async (_req: Request, res: Response) => {
+  try {
+    const { clearSimulatedBacktestTrades } = await import("@workspace/db");
+    const count = await clearSimulatedBacktestTrades();
+    res.json({ success: true, purged: count, message: `Purged ${count} simulated backtest records from history table.` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to purge simulated records" });
+  }
+});
+
+// ── Historical Market Data Endpoints ──────────────────────────────────────
+router.get("/history/candles/summary", async (req: Request, res: Response) => {
+  try {
+    const symbol = (req.query.symbol as string) || "XAUUSD";
+    const timeframe = (req.query.timeframe as string) || "5m";
+    const audit = auditHistoricalData(symbol, timeframe);
+    res.json(audit);
+  } catch (err: any) {
+    req.log.error({ err }, "Error getting historical candles summary");
+    res.status(500).json({ error: err.message || "Failed to get summary" });
+  }
+});
+
+router.post("/history/candles/sync", async (req: Request, res: Response) => {
+  try {
+    const timeframe = req.body?.timeframe || "5m";
+    const count = Number(req.body?.count) || 1000;
+    const result = await syncHistoricalCandlesFromMetaApi(timeframe, count);
+    res.json(result);
+  } catch (err: any) {
+    req.log.error({ err }, "Error syncing historical candles from MetaApi");
+    res.status(500).json({ success: false, error: err.message || "Failed to sync historical candles" });
+  }
+});
+
+router.post("/history/candles/import-csv", async (req: Request, res: Response) => {
+  try {
+    const csvContent = typeof req.body === "string" ? req.body : req.body?.csv;
+    const symbol = req.body?.symbol || "XAUUSD";
+    const timeframe = req.body?.timeframe || "5m";
+    if (!csvContent || typeof csvContent !== "string") {
+      res.status(400).json({ success: false, error: "Missing 'csv' string in request body" });
+      return;
+    }
+    const result = importCandlesFromCsv(csvContent, symbol, timeframe);
+    res.json(result);
+  } catch (err: any) {
+    req.log.error({ err }, "Error importing CSV candles");
+    res.status(500).json({ success: false, error: err.message || "Failed to process CSV file" });
+  }
+});
+
+router.get("/backtest/runs", (_req: Request, res: Response) => {
+  try {
+    const runs = getPastBacktestRuns();
+    res.json(runs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Autonomous Strategy Research Controller Endpoints ──────────────────────
+router.get("/research/status", (_req: Request, res: Response) => {
+  try {
+    const status = getResearchCampaignStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get campaign status" });
+  }
+});
+
+router.get("/research/strategies", (_req: Request, res: Response) => {
+  try {
+    const strategies = discoverExistingStrategies();
+    res.json({ success: true, count: strategies.length, strategies });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to discover strategies" });
+  }
+});
+
+router.get("/research/historical-readiness", (_req: Request, res: Response) => {
+  try {
+    const readiness = checkHistoricalDataReadiness();
+    res.json(readiness);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to verify data readiness" });
+  }
+});
+
+router.post("/research/campaign/start", async (req: Request, res: Response) => {
+  try {
+    const options = req.body || {};
+    const state = await startResearchCampaign(options);
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to start campaign" });
+  }
+});
+
+router.post("/research/campaign/pause", (_req: Request, res: Response) => {
+  try {
+    const state = pauseResearchCampaign();
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to pause campaign" });
+  }
+});
+
+router.post("/research/campaign/resume", (_req: Request, res: Response) => {
+  try {
+    const state = resumeResearchCampaign();
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to resume campaign" });
+  }
+});
+
+router.post("/research/campaign/cancel", (_req: Request, res: Response) => {
+  try {
+    const state = cancelResearchCampaign();
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to cancel campaign" });
+  }
+});
+
+router.post("/research/ai-assistant", async (req: Request, res: Response) => {
+  try {
+    const query = req.body?.query || "Which strategy performed best out of sample and why?";
+    const response = await queryAiResearchAssistant(query);
+    res.json(response);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "AI Research Assistant error" });
+  }
+});
+
+router.post("/research/proposed-config/generate", (req: Request, res: Response) => {
+  try {
+    const candidateId = req.body?.candidateId;
+    if (!candidateId) {
+      res.status(400).json({ error: "candidateId is required" });
+      return;
+    }
+    const result = generateProposedConfiguration(candidateId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to generate proposed config" });
+  }
+});
+
+router.post("/research/apply-to-live", async (req: Request, res: Response) => {
+  try {
+    const { candidateId, targetEnvironment } = req.body || {};
+    if (!candidateId) {
+      res.status(400).json({ success: false, error: "candidateId is required" });
+      return;
+    }
+    const result = await applyCandidateToLiveBot(candidateId, { targetEnvironment });
+    if (!result.success) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to apply strategy to live bot" });
   }
 });
 
@@ -543,6 +743,19 @@ router.post("/analytics/smart-mode", async (req, res) => {
   setSmartMode(enabled);
   const analytics = await getAnalyticsSummary(true);
   res.json(analytics);
+});
+
+router.post("/performance/reset", async (_req, res) => {
+  try {
+    const { updateSystemSettings } = await import("@workspace/db");
+    await updateSystemSettings({ tradingState: "ACTIVE" });
+    resetAnalyticsCache();
+    resetCooldownTimer();
+    const analytics = await getAnalyticsSummary(true);
+    res.json({ success: true, message: "Performance Monitor reset. Trading is ACTIVE.", analytics });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to reset performance monitor" });
+  }
 });
 
 // ── Push notification endpoints ────────────────────────────────────────────

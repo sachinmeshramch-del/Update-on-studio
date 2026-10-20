@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -252,6 +252,13 @@ export function HermesDiagnosticDashboard({
   const [logsOrderNewestFirst, setLogsOrderNewestFirst] = useState<boolean>(true);
   const [copiedLogs, setCopiedLogs] = useState<boolean>(false);
 
+  const [localEngineMode, setLocalEngineMode] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("gold_swing_engine_mode");
+    }
+    return null;
+  });
+
   const { data: diag, isLoading, isFetching, refetch } = useQuery<DiagnosticReport>({
     queryKey: ["/api/hermes/diagnostics"],
     queryFn: async () => {
@@ -261,6 +268,17 @@ export function HermesDiagnosticDashboard({
     },
     refetchInterval: 6000,
   });
+
+  useEffect(() => {
+    if (diag?.engineMode) {
+      setLocalEngineMode(diag.engineMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", diag.engineMode);
+      }
+    }
+  }, [diag?.engineMode]);
+
+  const currentActiveMode = diag?.engineMode || localEngineMode || "HYBRID_DUAL";
 
   // Dedicated query for Hermes Brain Heartbeat & State Diagnostic Logs
   const {
@@ -367,6 +385,10 @@ export function HermesDiagnosticDashboard({
 
   const setEngineModeMutation = useMutation({
     mutationFn: async (mode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE") => {
+      setLocalEngineMode(mode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", mode);
+      }
       const res = await fetch("/api/hermes/set-engine-mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -376,6 +398,14 @@ export function HermesDiagnosticDashboard({
       return res.json();
     },
     onSuccess: (data) => {
+      setLocalEngineMode(data.engineMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", data.engineMode);
+      }
+      queryClient.setQueryData(["/api/hermes/diagnostics"], (old: any) => ({
+        ...(old || {}),
+        engineMode: data.engineMode,
+      }));
       queryClient.invalidateQueries({ queryKey: ["/api/hermes/diagnostics"] });
       queryClient.invalidateQueries({ queryKey: ["/api/hermes/orb-state"] });
       queryClient.invalidateQueries({ queryKey: ["/api/signal"] });
@@ -702,7 +732,7 @@ export function HermesDiagnosticDashboard({
                           ] as const
                         ).map((mode) => {
                           const Icon = mode.icon;
-                          const active = (diag.engineMode || "HYBRID_DUAL") === mode.id;
+                          const active = currentActiveMode === mode.id;
                           return (
                             <button
                               key={mode.id}

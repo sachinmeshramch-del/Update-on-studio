@@ -105,9 +105,15 @@ export async function executeTradeWithCapitalManagement(
         }
     }
     
-    // 2. EXCESSIVE RISK REJECTOR (Vulnerability #3 Fix)
-    // If the account is so small that minVolume risks MORE than allowed tolerance, reject the trade.
+    // 2. EXCESSIVE RISK REJECTOR
+    // For small / micro accounts (<= $50), allow execution of minimum volume (0.01 lot).
+    // For larger accounts, protect against oversize stop-loss orders.
+    const isMicroAccount = actualEquity <= 50.0;
     if (calculatedVolume < minVolume) {
+        calculatedVolume = minVolume;
+    }
+
+    if (!isMicroAccount) {
         const actualRiskWithMinVolume = riskPerLot * minVolume;
         const actualRiskPct = (actualRiskWithMinVolume / actualEquity) * 100;
         
@@ -123,7 +129,7 @@ export async function executeTradeWithCapitalManagement(
                 `Direction: <b>${direction}</b> @ ${entryPrice.toFixed(2)}\n` +
                 `Stop Loss: <b>${stopLoss.toFixed(2)}</b> (${safeSlDistance.toFixed(1)} pts)\n\n` +
                 `<b>Reason:</b> ${rejectMsg}\n\n` +
-                `<i>Risk Shield prevented this trade to protect your account from losing over 500% of its equity on a single stop loss. Please deposit funds or adjust risk tolerance in Settings.</i>`
+                `<i>Risk Shield prevented this trade to protect your account. Please deposit funds or adjust risk tolerance in Settings.</i>`
             ).catch(console.error);
 
             return {
@@ -135,7 +141,8 @@ export async function executeTradeWithCapitalManagement(
                 safeSlDistance
             };
         }
-        calculatedVolume = minVolume;
+    } else {
+        logger.info({ accountId, actualEquity }, "[AutoTrader] Micro account mode active: Bypassing percentage risk check, allowing 0.01 minimum lot size.");
     }
     
     // Cap at reasonable maximum (e.g. 50.0 lots) to prevent catastrophic errors

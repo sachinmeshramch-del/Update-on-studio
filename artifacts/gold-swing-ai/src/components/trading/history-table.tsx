@@ -17,11 +17,11 @@ import {
   RotateCcw, Repeat, Repeat2, ChevronDown, Check,
   ChevronLeft, ChevronRight, Calendar, Eye, Copy, CheckCheck,
   Activity, ExternalLink, Filter, CheckCircle2, AlertTriangle, ShieldCheck,
-  FileSpreadsheet,
+  FileSpreadsheet, Download,
 } from "lucide-react";
 import { formatDistanceStrict } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
-import { formatPrice } from "@/lib/utils";
+import { cn, formatPrice } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CsvImportDialog } from "./csv-import-dialog";
 
@@ -38,7 +38,7 @@ function toLocalTime(ts: string) {
 type TradeStatus    = "RUNNING" | "TARGET_HIT" | "STOP_HIT" | "HOLD" | "MANUALLY_CLOSED" | "CLOSED";
 type SignalFilter   = "ALL" | "TREND_FOLLOW" | "REVERSAL";
 type OutcomeFilter  = "ALL" | "WINNING" | "LOSING";
-type ExecutionFilter = "ALL" | "EXECUTED" | "NOT_EXECUTED";
+type ExecutionFilter = "ALL" | "EXECUTED" | "SIMULATED" | "NOT_EXECUTED";
 
 const OUTCOME_LABELS: Record<OutcomeFilter, string> = {
   ALL: "All Outcomes",
@@ -48,7 +48,8 @@ const OUTCOME_LABELS: Record<OutcomeFilter, string> = {
 
 const EXECUTION_LABELS: Record<ExecutionFilter, string> = {
   ALL: "All Executions",
-  EXECUTED: "MT5 Executed",
+  EXECUTED: "MT5 Live Executed",
+  SIMULATED: "Backtest / Simulated",
   NOT_EXECUTED: "Signal Only",
 };
 type Period       = "ALL" | "TODAY" | "7D" | "30D";
@@ -495,25 +496,25 @@ function ExecutionDropdown({ value, onChange }: { value: ExecutionFilter; onChan
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/5 dark:bg-white/5 border border-border hover:bg-black/10 dark:hover:bg-white/10 hover:border-border transition-all text-foreground"
       >
         <span className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${value === "EXECUTED" ? "bg-emerald-400" : value === "NOT_EXECUTED" ? "bg-zinc-400" : "bg-amber-400"}`} />
+          <span className={`w-1.5 h-1.5 rounded-full ${value === "EXECUTED" ? "bg-emerald-400" : value === "SIMULATED" ? "bg-amber-400" : value === "NOT_EXECUTED" ? "bg-zinc-400" : "bg-blue-400"}`} />
           <span>{EXECUTION_LABELS[value]}</span>
         </span>
         <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[185px] bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
           <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 border-b border-border">
             Execution Filter
           </div>
-          {(["ALL", "EXECUTED", "NOT_EXECUTED"] as ExecutionFilter[]).map(e => (
+          {(["ALL", "EXECUTED", "SIMULATED", "NOT_EXECUTED"] as ExecutionFilter[]).map(e => (
             <button
               key={e}
               onClick={() => { onChange(e); setOpen(false); }}
               className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             >
               <span className={`flex items-center gap-2 ${value === e ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${e === "EXECUTED" ? "bg-emerald-400" : e === "NOT_EXECUTED" ? "bg-zinc-400" : "bg-amber-400"}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${e === "EXECUTED" ? "bg-emerald-400" : e === "SIMULATED" ? "bg-amber-400" : e === "NOT_EXECUTED" ? "bg-zinc-400" : "bg-blue-400"}`} />
                 {EXECUTION_LABELS[e]}
               </span>
               {value === e && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
@@ -981,7 +982,11 @@ export function HistoryTable() {
   if (executionFilter !== "ALL") {
     signals = signals.filter((s: any) => {
       const isExecuted = Boolean(s.isRealTrade || s.executionStatus === "EXECUTED" || s.brokerPositionId);
-      return executionFilter === "EXECUTED" ? isExecuted : !isExecuted;
+      const isSimulated = s.executionType === "SIMULATED" || (s.executionReason && s.executionReason.includes("Backtest")) || (s.reason && s.reason.includes("Backtest")) || (s.id && s.id.startsWith("seed-"));
+      if (executionFilter === "EXECUTED") return isExecuted;
+      if (executionFilter === "SIMULATED") return isSimulated;
+      if (executionFilter === "NOT_EXECUTED") return !isExecuted && !isSimulated;
+      return true;
     });
   }
 
@@ -1049,14 +1054,51 @@ export function HistoryTable() {
               </span>
             </button>
 
-            {/* Quick Button: Import Older Trades via CSV */}
+
+
+            {/* Quick Button: Download History as CSV */}
             <button
-              onClick={() => setIsCsvImportOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all shadow-sm active:scale-95 ml-1"
-              title="Import older MT4/MT5 trade history in CSV format"
+              onClick={() => {
+                const rows = signals.map((s: any) => ({
+                  Time: s.timestamp ? new Date(s.timestamp).toISOString() : "",
+                  Direction: s.signal || "",
+                  EntryPrice: s.entryPrice || "",
+                  StopLoss: s.stopLoss || "",
+                  TakeProfit: s.takeProfit || "",
+                  ClosePrice: s.closedPrice || "",
+                  PnLPoints: s.pnlPoints ?? "",
+                  Status: s.tradeStatus || "",
+                  Execution: s.isRealTrade || s.brokerPositionId ? "EXECUTED" : "SIMULATED",
+                  Ticket: s.brokerPositionId || "",
+                  Reason: (s.reason || "").replace(/"/g, '""'),
+                }));
+
+                if (rows.length === 0) {
+                  toast.error("No trades to export in current view");
+                  return;
+                }
+
+                const headers = Object.keys(rows[0]);
+                const csvContent = [
+                  headers.join(","),
+                  ...rows.map(r => headers.map(h => `"${(r as any)[h] ?? ""}"`).join(","))
+                ].join("\n");
+
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `gold_swing_trade_history_${new Date().toISOString().split("T")[0]}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success(`Successfully downloaded ${rows.length} trades as CSV!`);
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30 hover:bg-sky-500/25 transition-all shadow-sm active:scale-95 ml-1"
+              title="Download currently filtered trade history as CSV file"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Import CSV</span>
+              <Download className="w-3.5 h-3.5 text-sky-400" />
+              <span>Export CSV</span>
             </button>
 
             {/* Type filter tabs */}
@@ -1086,6 +1128,8 @@ export function HistoryTable() {
             </div>
 
             <div className="ml-auto flex items-center gap-2 sm:gap-3 flex-wrap">
+              {/* Execution picker (Live MT5 vs Backtest vs All) */}
+              <ExecutionDropdown value={executionFilter} onChange={setExecutionFilter} />
               {/* Outcome picker */}
               <OutcomeDropdown value={outcomeFilter} onChange={setOutcomeFilter} />
               {/* Period picker */}
@@ -1195,6 +1239,14 @@ export function HistoryTable() {
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <StatusBadge status={status} pnlPoints={row.pnlPoints} />
+                            {/* Execution Status Badge */}
+                            <Badge variant="outline" className={cn("text-[9px] font-bold px-1.5 py-0", 
+                              (row.isRealTrade || row.executionStatus === "EXECUTED" || row.brokerPositionId) 
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                            )}>
+                                {(row.isRealTrade || row.executionStatus === "EXECUTED" || row.brokerPositionId) ? "LIVE" : "SIM"}
+                            </Badge>
                             {status === "RUNNING" && (
                               <button
                                 onClick={() => setTradeToClose(row.id)}

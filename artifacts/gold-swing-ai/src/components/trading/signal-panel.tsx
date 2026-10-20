@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useGetSignal } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -149,6 +151,8 @@ function playSignalBeep() {
 }
 
 export function SignalPanel() {
+  const queryClient = useQueryClient();
+  const [isResettingGuard, setIsResettingGuard] = useState(false);
   const { refreshInterval, countdown, isRefreshing, triggerManualRefresh, currentOption } = useRefreshInterval();
   const { data: signalDataRaw, isLoading, isError, refetch, isFetching } = useGetSignal({
     query: {
@@ -374,9 +378,42 @@ export function SignalPanel() {
         <div className="bg-black/30 border border-border rounded-2xl p-4 flex flex-col gap-3">
           <div className="flex items-start gap-3">
             <Zap className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-            <div>
+            <div className="flex-1">
               <h4 className="text-sm font-semibold text-foreground mb-1">Signal Reasoning</h4>
               <p className="text-sm text-muted-foreground leading-relaxed">{reason}</p>
+
+              {reason?.includes("Trading Paused by Performance Monitor") && (
+                <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-2 text-xs text-amber-300">
+                    <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>Safety circuit breaker active.</span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setIsResettingGuard(true);
+                      try {
+                        const res = await fetch("/api/performance/reset", { method: "POST" });
+                        const data = await res.json();
+                        if (res.ok && data.success) {
+                          toast.success(data.message || "Performance guard reset. Live trading resumed.");
+                          refetch();
+                          queryClient.invalidateQueries();
+                        } else {
+                          toast.error(data.error || "Failed to reset performance guard");
+                        }
+                      } catch {
+                        toast.error("Failed to connect to reset endpoint");
+                      } finally {
+                        setIsResettingGuard(false);
+                      }
+                    }}
+                    disabled={isResettingGuard}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black cursor-pointer shrink-0 transition-all disabled:opacity-50"
+                  >
+                    {isResettingGuard ? "Resetting..." : "Reset & Resume Signals"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

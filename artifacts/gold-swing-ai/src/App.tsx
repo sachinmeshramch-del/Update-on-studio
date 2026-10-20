@@ -54,17 +54,25 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 import DiagnosticsPage from "@/pages/diagnostics";
 import BacktestPage from "@/pages/backtest";
+import DataPage from "@/pages/data";
+import MorePage from "@/pages/more";
+import { BottomNav } from "@/components/layout/bottom-nav";
 
 function Router() {
   return (
     <AuthGuard>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route path="/diagnostics" component={DiagnosticsPage} />
-        <Route path="/backtest" component={BacktestPage} />
-        <Route component={NotFound} />
-      </Switch>
+      <div className="relative min-h-screen">
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/backtest" component={BacktestPage} />
+          <Route path="/data" component={DataPage} />
+          <Route path="/more" component={MorePage} />
+          <Route path="/settings" component={SettingsPage} />
+          <Route path="/diagnostics" component={DiagnosticsPage} />
+          <Route component={NotFound} />
+        </Switch>
+        <BottomNav />
+      </div>
     </AuthGuard>
   );
 }

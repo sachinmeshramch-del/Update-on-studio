@@ -1,0 +1,170 @@
+{
+  "runId": "RUN-1792378187605-751",
+  "runTimestamp": "2026-10-19T02:49:47.605Z",
+  "summary": {
+    "totalTrades": 0,
+    "winningTrades": 0,
+    "losingTrades": 0,
+    "winRate": 0,
+    "initialBalance": 10000,
+    "finalBalance": 10000,
+    "netProfitDollars": 0,
+    "netProfitPercent": 0,
+    "netProfitPoints": 0,
+    "profitFactor": 0,
+    "expectancyR": 0,
+    "maxDrawdownDollars": 0,
+    "maxDrawdownPercent": 0,
+    "averageWinDollars": 0,
+    "averageLossDollars": 0,
+    "averageWinPoints": 0,
+    "averageLossPoints": 0,
+    "winLossRatio": 0,
+    "sharpeRatio": 0,
+    "maxConsecutiveWins": 0,
+    "maxConsecutiveLosses": 0,
+    "avgTradeDurationMinutes": 0,
+    "candlesEvaluated": 79,
+    "timeframe": "1m",
+    "dataSource": "MetaApi Historical Cloud Feed (Persisted)",
+    "runnerTradesCount": 0,
+    "intrabarAmbiguitiesCount": 0
+  },
+  "breakdownBySession": [],
+  "breakdownByPattern": [],
+  "breakdownByRegime": [],
+  "breakdownByDirection": [],
+  "variantComparison": [
+    {
+      "variant": "ASYMMETRIC_RUNNER",
+      "label": "Asymmetric Runner (Live Bot)",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "FIXED_DISTANCE",
+      "label": "Fixed-Distance Trail (4.0 pts)",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "ATR_TRAILING",
+      "label": "ATR Trailing (2.0x ATR)",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "BREAKEVEN_ONLY",
+      "label": "Breakeven Only (+0.2 buffer)",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "PROFIT_TRIGGERED",
+      "label": "Profit-Triggered Trail (+1.0 at +2.5)",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "NO_TRAILING",
+      "label": "No Trailing (Fixed TP/SL)",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    }
+  ],
+  "oosValidation": {
+    "train": {
+      "name": "TRAIN",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "validation": {
+      "name": "VALIDATION",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "test": {
+      "name": "TEST_OOS",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "flagWarnings": [
+      "Low sample size: Fewer than 20 trades executed; statistical significance is low."
+    ]
+  },
+  "equityCurve": [
+    {
+      "time": "2026-10-19T01:31:00.000Z",
+      "tradeIndex": 0,
+      "balance": 10000,
+      "equity": 10000,
+      "drawdownDollars": 0,
+      "drawdownPercent": 0
+    }
+  ],
+  "trades": [],
+  "testedParams": {
+    "timeframe": "1m",
+    "candleCount": 1000
+  }
+}

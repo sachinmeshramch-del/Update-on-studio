@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 
 export default function Dashboard() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col pb-20">
       <Header />
 
       <main className="flex-grow container mx-auto px-2 sm:px-4 py-4 md:py-8 flex flex-col gap-6 md:gap-8">
