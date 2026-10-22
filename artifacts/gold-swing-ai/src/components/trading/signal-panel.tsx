@@ -370,7 +370,7 @@ export function SignalPanel() {
                 transition={{ duration: 1, ease: "easeOut" }}
               />
             </div>
-            <p className="text-[10px] text-zinc-700 dark:text-zinc-500 text-right">EMA9/21 · RSI · MACD · 1m confirm</p>
+            <p className="text-[10px] text-zinc-700 dark:text-zinc-500 text-right">15m Structure · 1H Trend · SMC Confluence</p>
           </div>
         </div>
 
@@ -437,7 +437,7 @@ export function SignalPanel() {
               <span>Updated {timestamp ? format(new Date(timestamp), "HH:mm:ss") : "N/A"}</span>
             </div>
             <Badge variant="outline" className="text-[10px] border-border text-muted-foreground py-0 px-1.5">
-              EMA · RSI · MACD
+              15m SMC · 1H Trend · 1:2.5+ R:R
             </Badge>
           </div>
         </div>

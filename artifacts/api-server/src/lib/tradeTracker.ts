@@ -372,30 +372,30 @@ export async function checkRunningTrades(): Promise<void> {
         } else {
           // ── ASYMMETRIC TRAILING STOP CALCULATION ──
           let targetSl = stopLoss > 0 ? stopLoss : actualEntry;
-          // Break-even price covers spread plus small buffer (+0.20 pts)
-          const breakEvenPrice = +(actualEntry + currentSpread + 0.20).toFixed(2);
-          // Fixed 1-point profit lock price: Entry + 1.00 pts
-          const minProfitLockPrice = +(actualEntry + 1.00).toFixed(2);
+          // Break-even price covers spread plus small buffer (+0.50 pts)
+          const breakEvenPrice = +(actualEntry + currentSpread + 0.50).toFixed(2);
+          // Fixed profit lock price: Entry + 2.50 pts (secured intraday profit)
+          const minProfitLockPrice = +(actualEntry + 2.50).toFixed(2);
 
-          // Step A: Guaranteed Profit Floors when Market is in Favor
-          // Trigger Break-Even after market moves +1.0 pts
-          // Trigger Fixed +1.0 pt Profit Lock once market moves >= +1.3 pts
-          const beActivationProfit = Math.max(1.00, +(distanceToInitialTarget * 0.12).toFixed(2));
-          const profitLockActivation = Math.max(1.30, +(distanceToInitialTarget * 0.18).toFixed(2));
+          // Step A: Guaranteed Profit Floors when Market is in Favor (Intraday Calibrated)
+          // Trigger Break-Even after market moves +4.50 pts (or 35% of initial target)
+          // Trigger Fixed +2.50 pt Profit Lock once market moves >= +6.50 pts (or 50% of initial target)
+          const beActivationProfit = Math.max(4.50, +(distanceToInitialTarget * 0.35).toFixed(2));
+          const profitLockActivation = Math.max(6.50, +(distanceToInitialTarget * 0.50).toFixed(2));
 
           if (currentProfit >= profitLockActivation || peakProfit >= profitLockActivation) {
-            // Once market has moved >= 1.3 pts in favor, lock fixed +1.0 pt profit (giving breathing room above minStopBuffer)
+            // Once market has moved >= 6.5 pts in favor, lock fixed +2.5 pt profit
             if (currentBid >= minProfitLockPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, minProfitLockPrice);
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
-                trackerState.trailStage = "PROFIT_LOCKED_1PT";
+                trackerState.trailStage = "PROFIT_LOCKED_2PT";
               }
             } else if (currentBid >= breakEvenPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
           } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
-            // Capital Protection / Break-Even when in profit (+1.0 pts)
+            // Capital Protection / Break-Even when in profit (+4.5 pts)
             if (currentBid >= breakEvenPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
@@ -591,30 +591,30 @@ export async function checkRunningTrades(): Promise<void> {
         } else {
           // ── ASYMMETRIC TRAILING STOP CALCULATION ──
           let targetSl = stopLoss > 0 ? stopLoss : actualEntry;
-          // Break-even price covers spread plus small buffer (+0.20 pts)
-          const breakEvenPrice = +(actualEntry - currentSpread - 0.20).toFixed(2);
-          // Fixed 1-point profit lock price: Entry - 1.00 pts
-          const minProfitLockPrice = +(actualEntry - 1.00).toFixed(2);
+          // Break-even price covers spread plus small buffer (+0.50 pts)
+          const breakEvenPrice = +(actualEntry - currentSpread - 0.50).toFixed(2);
+          // Fixed profit lock price: Entry - 2.50 pts (secured intraday profit)
+          const minProfitLockPrice = +(actualEntry - 2.50).toFixed(2);
 
-          // Step A: Guaranteed Profit Floors when Market is in Favor
-          // Trigger Break-Even after market moves +1.0 pts
-          // Trigger Fixed +1.0 pt Profit Lock once market moves >= +1.3 pts
-          const beActivationProfit = Math.max(1.00, +(distanceToInitialTarget * 0.12).toFixed(2));
-          const profitLockActivation = Math.max(1.30, +(distanceToInitialTarget * 0.18).toFixed(2));
+          // Step A: Guaranteed Profit Floors when Market is in Favor (Intraday Calibrated)
+          // Trigger Break-Even after market moves +4.50 pts (or 35% of initial target)
+          // Trigger Fixed +2.50 pt Profit Lock once market moves >= +6.50 pts (or 50% of initial target)
+          const beActivationProfit = Math.max(4.50, +(distanceToInitialTarget * 0.35).toFixed(2));
+          const profitLockActivation = Math.max(6.50, +(distanceToInitialTarget * 0.50).toFixed(2));
 
           if (currentProfit >= profitLockActivation || peakProfit >= profitLockActivation) {
-            // Once market has moved >= 1.3 pts in favor, lock fixed +1.0 pt profit (giving breathing room below minStopBuffer)
+            // Once market has moved >= 6.5 pts in favor, lock fixed +2.5 pt profit
             if (currentAsk <= minProfitLockPrice - minStopBuffer) {
               targetSl = (targetSl > 0 && targetSl < minProfitLockPrice) ? targetSl : minProfitLockPrice;
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
-                trackerState.trailStage = "PROFIT_LOCKED_1PT";
+                trackerState.trailStage = "PROFIT_LOCKED_2PT";
               }
             } else if (currentAsk <= breakEvenPrice - minStopBuffer) {
               targetSl = (targetSl > 0 && targetSl < breakEvenPrice) ? targetSl : breakEvenPrice;
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
           } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
-            // Capital Protection / Break-Even when in profit (+1.0 pts)
+            // Capital Protection / Break-Even when in profit (+4.5 pts)
             if (currentAsk <= breakEvenPrice - minStopBuffer) {
               targetSl = (targetSl > 0 && targetSl < breakEvenPrice) ? targetSl : breakEvenPrice;
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";

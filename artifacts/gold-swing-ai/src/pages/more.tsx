@@ -145,7 +145,7 @@ export default function MorePage() {
 
         {/* ── App Information & System Status ─────────────────────────────── */}
         <div className="text-center text-xs text-muted-foreground pt-4 pb-2">
-          <p className="font-mono">XAUUSD Gold Intraday & Scalping Engine • v2.4.0</p>
+          <p className="font-mono">XAUUSD Gold Institutional Intraday Engine • v3.0.0</p>
           <p className="text-[11px] text-muted-foreground/60 mt-0.5">
             Signal-Only Automated Intelligence • Zero Live Trade Modification Guard Active
           </p>

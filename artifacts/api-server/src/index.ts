@@ -71,6 +71,11 @@ function initBackgroundServices(serverInstance: any) {
 
   // Start Hermes AI Brain heartbeat & communication gap monitor daemon
   startHermesHeartbeatDaemon();
+
+  // Reconcile MT5 broker deals into history table shortly after feed starts
+  setTimeout(() => {
+    import("./lib/metaApiFeed.js").then(m => m.syncBrokerClosedDealsToHistory(true)).catch(() => {});
+  }, 3500);
 }
 
 function startServer(retries = 12, delayMs = 1500) {

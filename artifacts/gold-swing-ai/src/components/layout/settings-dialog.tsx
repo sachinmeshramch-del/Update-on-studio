@@ -322,7 +322,7 @@ export function SettingsDialog() {
                     {formData.engineMode === "HERMES_ADAPTIVE" && <Check className="w-3.5 h-3.5 text-amber-500" />}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    Multi-indicator autonomous self-tuning swing & scalp engine.
+                    Multi-indicator autonomous self-tuning intraday swing & SMC engine.
                   </p>
                 </button>
               </div>

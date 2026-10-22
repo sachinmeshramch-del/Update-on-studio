@@ -379,12 +379,12 @@ export async function evaluateDeterministicOrb(
 
   // ── LONG BREAKOUT ──────────────────────────────────────────────────────────
   if (currentPrice >= longBreakoutPrice) {
-    // Dynamic Stop Loss for Gold Scalping: 4.80 to 6.80 pts (clears noise wicks without excessive risk)
-    const stopLossDistance = Math.min(Math.max(currentPrice - orb.mid, 4.8), 6.8);
+    // Dynamic Stop Loss for Gold Intraday: 5.50 to 9.50 pts (clears market wicks without excessive risk)
+    const stopLossDistance = Math.min(Math.max(currentPrice - orb.mid, 5.5), 9.5);
     const stopLoss = +(currentPrice - stopLossDistance).toFixed(2);
 
-    // 1:2.0 Risk-to-Reward Ratio: 2x SL distance expansion for steady account balance growth
-    const targetExpansion = Number(Math.max(stopLossDistance * 2.0, orb.range * 1.5).toFixed(2));
+    // 1:2.2+ Intraday Risk-to-Reward Ratio: Target major session expansion (minimum 12.0 pts)
+    const targetExpansion = Number(Math.max(stopLossDistance * 2.2, orb.range * 1.8, 12.0).toFixed(2));
     const takeProfit = +(currentPrice + targetExpansion).toFixed(2);
 
     logger.info(
@@ -396,7 +396,7 @@ export async function evaluateDeterministicOrb(
         stopLoss,
         takeProfit,
       },
-      "🚀 [Deterministic ORB Engine] BULLISH BREAKOUT TRIGGERED!"
+      "🚀 [Deterministic ORB Engine] BULLISH INTRADAY BREAKOUT TRIGGERED!"
     );
 
     return {
@@ -406,8 +406,8 @@ export async function evaluateDeterministicOrb(
       stopLoss,
       takeProfit,
       trend: "BULLISH",
-      reason: `[HYBRID DUAL-ENGINE: ${orb.session} ORB BREAKOUT] Price ${currentPrice.toFixed(2)} broke above ${orb.session} Range High ${orb.high.toFixed(2)} (+${breakoutBuffer}pt buffer) · Range: ${orb.range.toFixed(2)}pt · 1:2 R:R`,
-      tradeDuration: "15-60 mins (ORB Session Expansion)",
+      reason: `[HYBRID DUAL-ENGINE: ${orb.session} ORB BREAKOUT] Price ${currentPrice.toFixed(2)} broke above ${orb.session} Range High ${orb.high.toFixed(2)} (+${breakoutBuffer}pt buffer) · Range: ${orb.range.toFixed(2)}pt · Intraday 1:2.2 R:R`,
+      tradeDuration: "1h - 4h (Intraday Session Expansion)",
       signalType: "ORB_BREAKOUT",
       engine: "DETERMINISTIC_ORB",
       orbRange: {
@@ -422,12 +422,12 @@ export async function evaluateDeterministicOrb(
 
   // ── SHORT BREAKOUT ─────────────────────────────────────────────────────────
   if (currentPrice <= shortBreakoutPrice) {
-    // Dynamic Stop Loss for Gold Scalping: 4.80 to 6.80 pts (clears noise wicks without excessive risk)
-    const stopLossDistance = Math.min(Math.max(orb.mid - currentPrice, 4.8), 6.8);
+    // Dynamic Stop Loss for Gold Intraday: 5.50 to 9.50 pts (clears market wicks without excessive risk)
+    const stopLossDistance = Math.min(Math.max(orb.mid - currentPrice, 5.5), 9.5);
     const stopLoss = +(currentPrice + stopLossDistance).toFixed(2);
 
-    // 1:2.0 Risk-to-Reward Ratio: 2x SL distance expansion for steady account balance growth
-    const targetExpansion = Number(Math.max(stopLossDistance * 2.0, orb.range * 1.5).toFixed(2));
+    // 1:2.2+ Intraday Risk-to-Reward Ratio: Target major session expansion (minimum 12.0 pts)
+    const targetExpansion = Number(Math.max(stopLossDistance * 2.2, orb.range * 1.8, 12.0).toFixed(2));
     const takeProfit = +(currentPrice - targetExpansion).toFixed(2);
 
     logger.info(
@@ -439,7 +439,7 @@ export async function evaluateDeterministicOrb(
         stopLoss,
         takeProfit,
       },
-      "🚀 [Deterministic ORB Engine] BEARISH BREAKOUT TRIGGERED!"
+      "🚀 [Deterministic ORB Engine] BEARISH INTRADAY BREAKOUT TRIGGERED!"
     );
 
     return {
@@ -449,8 +449,8 @@ export async function evaluateDeterministicOrb(
       stopLoss,
       takeProfit,
       trend: "BEARISH",
-      reason: `[HYBRID DUAL-ENGINE: ${orb.session} ORB BREAKOUT] Price ${currentPrice.toFixed(2)} broke below ${orb.session} Range Low ${orb.low.toFixed(2)} (-${breakoutBuffer}pt buffer) · Range: ${orb.range.toFixed(2)}pt`,
-      tradeDuration: "15-60 mins (ORB Session Expansion)",
+      reason: `[HYBRID DUAL-ENGINE: ${orb.session} ORB BREAKOUT] Price ${currentPrice.toFixed(2)} broke below ${orb.session} Range Low ${orb.low.toFixed(2)} (-${breakoutBuffer}pt buffer) · Range: ${orb.range.toFixed(2)}pt · Intraday 1:2.2 R:R`,
+      tradeDuration: "1h - 4h (Intraday Session Expansion)",
       signalType: "ORB_BREAKOUT",
       engine: "DETERMINISTIC_ORB",
       orbRange: {

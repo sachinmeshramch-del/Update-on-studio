@@ -253,7 +253,7 @@ interface HistoricalCoverageSummary {
 }
 
 export default function BacktestPage() {
-  const [timeframe, setTimeframe] = useState<string>("5m");
+  const [timeframe, setTimeframe] = useState<string>("15m");
   const [candleCount, setCandleCount] = useState<number>(1000);
   const [initialBalance, setInitialBalance] = useState<number>(() => {
     try {
@@ -325,9 +325,9 @@ export default function BacktestPage() {
       };
     }
     return {
-      name: "Active Strategy: Hybrid Dual-Engine Scalper",
+      name: "Active Strategy: Hybrid Dual-Engine Intraday",
       badge: "100% Live Synced",
-      description: "Simulates the exact rules of your live bot: Hermes SMC Confluence (EMA 9/21/50 alignment + RSI sweet-spot 40-58/42-60 + MACD histogram + 15m Order Blocks & Sweeps + 2-Candle Confirmation), Dynamic Structural Stops (10-bar swing extreme + 0.5×ATR), and Asymmetric Runners (locks BE at +1.0 pt, locks +1.0 pt profit at +1.3 pts, unlocks runner expansion at 85% TP target, and progressive tier trailing)."
+      description: "Simulates the exact rules of your live intraday bot: 15m/1H Multi-Timeframe SMC Confluence (EMA 9/21/50 alignment + RSI sweet-spot 40-58/42-60 + MACD histogram + 15m Order Blocks & Sweeps + 15m Candle Confirmation), Dynamic Structural Stops (15-bar swing extreme + 0.6×ATR), 1:2.5+ Intraday R:R targets, and Asymmetric Trailing Runners."
     };
   }, [engineMode]);
 
@@ -799,10 +799,10 @@ export default function BacktestPage() {
                   onChange={(e) => setTimeframe(e.target.value)}
                   className="w-full bg-black/20 border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:border-amber-500"
                 >
-                  <option value="1m">1m (Fast Scalp)</option>
-                  <option value="5m">5m (Primary Intraday)</option>
-                  <option value="15m">15m (Swing Structure)</option>
-                  <option value="1h">1h (Macro Trend)</option>
+                  <option value="15m">15m (Primary Intraday Structure)</option>
+                  <option value="1h">1h (Macro Trend Anchor)</option>
+                  <option value="5m">5m (Entry Refinement)</option>
+                  <option value="1m">1m (Fast Execution)</option>
                 </select>
               </div>
 

@@ -116,17 +116,16 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
     }
   }
 
-  // 3. Dynamic Floor & Spread Buffer (Tailored for Gold Volatility & Scalping)
-  // Gold 5m ATR ranges between 1.5 - 3.5 pts. Broker spreads fluctuate 0.35 - 0.75 pts.
-  // Dynamic floor of 4.80 - 5.50 pts avoids instant wick stop-outs while keeping risk tight.
-  // Dynamic cap strictly limited to 6.80 - 7.50 pts maximum to prevent painful single-trade drawdowns!
+  // 3. Dynamic Floor & Spread Buffer (Tailored for Gold Intraday Volatility)
+  // Dynamic floor of 5.50 - 7.00 pts prevents premature stop-outs during regular market swings.
+  // Dynamic cap of 12.50 pts preserves capital and prevents outsized risk.
   const spreadBuffer = Number(Math.max(0.60, liveSpread * 1.5).toFixed(2));
-  const dynamicFloor = Number(Math.max(4.80, Math.min(atr * 1.8, 5.50), liveSpread * 3.5).toFixed(2));
-  const dynamicCap   = Number(Math.min(7.50, Math.max(6.20, atr * 2.2)).toFixed(2));
+  const dynamicFloor = Number(Math.max(5.50, Math.min(atr * 2.0, 7.00), liveSpread * 4.0).toFixed(2));
+  const dynamicCap   = Number(Math.min(12.50, Math.max(9.00, atr * 2.8)).toFixed(2));
 
   const useStructuralStop = req.featureStructuralStop !== false;
 
-  // 4. Structural Swing High/Low Anchor (Last 10 5m candles)
+  // 4. Structural Swing High/Low Anchor (15m Market Structure)
   let anchoredToStructure = false;
   let structureLevel: number | null = null;
   let stopLossDistance: number;
@@ -137,38 +136,37 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
     : Number((currentPrice - liveSpread / 2).toFixed(2));
 
   if (useStructuralStop) {
-    // Feature Structural Stop:
-    // For LONGs: SL = (Lowest Low of the last 10 5m candles) - (0.5 * ATR) - liveSpread
-    // For SHORTs: SL = (Highest High of the last 10 5m candles) + (0.5 * ATR) + liveSpread
-    // Minimum SL distance = 3.5 pts, Maximum cap = 9.0 pts
-    const recent10 = (candlesPrimary && candlesPrimary.length > 0)
-      ? candlesPrimary.slice(-10)
+    // Intraday Structural Stop:
+    // Anchored beyond recent 15-candle swing extreme + (0.6 * ATR) buffer + spread
+    // Floor = 5.50 pts, Cap = 12.0 pts
+    const recentCandles = (candlesPrimary && candlesPrimary.length > 0)
+      ? candlesPrimary.slice(-15)
       : [];
 
     if (direction === "LONG") {
-      const lowestLow = recent10.length > 0
-        ? Math.min(...recent10.map(c => c.low))
-        : (currentPrice - (atr * 2.0));
+      const lowestLow = recentCandles.length > 0
+        ? Math.min(...recentCandles.map(c => c.low))
+        : (currentPrice - (atr * 2.2));
       structureLevel = Number(lowestLow.toFixed(2));
-      const rawSl = lowestLow - (0.5 * atr) - liveSpread;
+      const rawSl = lowestLow - (0.6 * atr) - liveSpread;
       const rawDistance = entryPrice - rawSl;
-      stopLossDistance = Number(Math.max(3.5, Math.min(9.0, rawDistance)).toFixed(2));
+      stopLossDistance = Number(Math.max(5.5, Math.min(12.0, rawDistance)).toFixed(2));
       stopLossPrice = Number((entryPrice - stopLossDistance).toFixed(2));
       anchoredToStructure = true;
     } else {
-      const highestHigh = recent10.length > 0
-        ? Math.max(...recent10.map(c => c.high))
-        : (currentPrice + (atr * 2.0));
+      const highestHigh = recentCandles.length > 0
+        ? Math.max(...recentCandles.map(c => c.high))
+        : (currentPrice + (atr * 2.2));
       structureLevel = Number(highestHigh.toFixed(2));
-      const rawSl = highestHigh + (0.5 * atr) + liveSpread;
+      const rawSl = highestHigh + (0.6 * atr) + liveSpread;
       const rawDistance = rawSl - entryPrice;
-      stopLossDistance = Number(Math.max(3.5, Math.min(9.0, rawDistance)).toFixed(2));
+      stopLossDistance = Number(Math.max(5.5, Math.min(12.0, rawDistance)).toFixed(2));
       stopLossPrice = Number((entryPrice + stopLossDistance).toFixed(2));
       anchoredToStructure = true;
     }
   } else {
-    // Legacy fixed 3.0 * ATR fallback
-    stopLossDistance = Number(Math.max(3.5, Math.min(9.0, atr * 3.0)).toFixed(2));
+    // Sane ATR multiple fallback
+    stopLossDistance = Number(Math.max(5.5, Math.min(12.0, atr * multiplier)).toFixed(2));
     stopLossPrice = direction === "LONG"
       ? Number((entryPrice - stopLossDistance).toFixed(2))
       : Number((entryPrice + stopLossDistance).toFixed(2));
@@ -180,21 +178,21 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
 
   let safetyStatus: DynamicAtrStopLossResult["liquidationSafety"]["status"] = "OPTIMAL";
   let safetyLabel: string = "Structural Clearance (1:2.5 R:R)";
-  let safetyDescription: string = `Calibrated with ${noiseClearanceAtr}x ATR (${stopLossDistance} pts SL) anchored to 10-candle swing extreme with 0.5x ATR buffer.`;
+  let safetyDescription: string = `Calibrated with ${noiseClearanceAtr}x ATR (${stopLossDistance} pts SL) anchored to 15m swing extreme with 0.6x ATR buffer.`;
 
   // 6. Target Dynamic Take Profits: Primary target calibrated to 2.5 * Risk (1:2.5 RR)
   const tp1Dist = Number((stopLossDistance * 1.5).toFixed(2));
-  const tp2Dist = Number((stopLossDistance * 2.5).toFixed(2)); // 1:2.5 RR primary target
-  const tp3Dist = Number((stopLossDistance * 3.5).toFixed(2)); // Runner target
+  const tp2Dist = Number((stopLossDistance * 2.5).toFixed(2)); // 1:2.5 RR core intraday target
+  const tp3Dist = Number((stopLossDistance * 3.5).toFixed(2)); // Runner expansion target
 
   const tp1Price = direction === "LONG" ? +(entryPrice + tp1Dist).toFixed(2) : +(entryPrice - tp1Dist).toFixed(2);
   const tp2Price = direction === "LONG" ? +(entryPrice + tp2Dist).toFixed(2) : +(entryPrice - tp2Dist).toFixed(2);
   const tp3Price = direction === "LONG" ? +(entryPrice + tp3Dist).toFixed(2) : +(entryPrice - tp3Dist).toFixed(2);
 
   const takeProfitTargets = {
-    tp1: { price: tp1Price, distance: tp1Dist, rrRatio: 1.5, label: "TP1 (Quick Scalp 1.5R)" },
-    tp2: { price: tp2Price, distance: tp2Dist, rrRatio: 2.5, label: "TP2 (Standard Target 2.5R)" },
-    tp3: { price: tp3Price, distance: tp3Dist, rrRatio: 3.5, label: "TP3 (Runner Expansion 3.5R)" },
+    tp1: { price: tp1Price, distance: tp1Dist, rrRatio: 1.5, label: "TP1 (Conservative 1.5R)" },
+    tp2: { price: tp2Price, distance: tp2Dist, rrRatio: 2.5, label: "TP2 (Core Intraday 2.5R)" },
+    tp3: { price: tp3Price, distance: tp3Dist, rrRatio: 3.5, label: "TP3 (Session Runner 3.5R)" },
   };
 
   // 7. Chandelier Trailing Stop Level

@@ -22,7 +22,17 @@ function loadLocalSignals(): void {
       const raw = fs.readFileSync(CACHE_FILE, 'utf8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        localSignalsCache = parsed.map((item: any) => ({
+        const seenBrokerIds = new Set<string>();
+        const deduped: any[] = [];
+        for (const item of parsed) {
+          if (item.brokerPositionId) {
+            const key = String(item.brokerPositionId);
+            if (seenBrokerIds.has(key)) continue;
+            seenBrokerIds.add(key);
+          }
+          deduped.push(item);
+        }
+        localSignalsCache = deduped.map((item: any) => ({
           ...item,
           createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
           closedAt: item.closedAt ? new Date(item.closedAt) : null,
@@ -98,20 +108,39 @@ export async function getClosedTrades(limitCount: number): Promise<Signal[]> {
   return localSignalsCache.filter(s => s.tradeStatus !== 'RUNNING').slice(0, limitCount);
 }
 
-export async function insertSignal(signalData: InsertSignal): Promise<void> {
+export async function insertSignal(signalData: InsertSignal & { createdAt?: Date }): Promise<void> {
+  const createdAt = (signalData as any).createdAt ? new Date((signalData as any).createdAt) : new Date();
+  const closedAt = (signalData as any).closedAt ? new Date((signalData as any).closedAt) : ((signalData as any).closedAt ?? null);
+
+  if (signalData.brokerPositionId) {
+    const existingIdx = localSignalsCache.findIndex(s => s.brokerPositionId && String(s.brokerPositionId) === String(signalData.brokerPositionId));
+    if (existingIdx !== -1) {
+      localSignalsCache[existingIdx] = {
+        ...localSignalsCache[existingIdx],
+        ...signalData,
+        createdAt: localSignalsCache[existingIdx].createdAt || createdAt,
+        closedAt: closedAt || localSignalsCache[existingIdx].closedAt,
+      } as Signal;
+      saveLocalSignals();
+      return;
+    }
+  }
+
   const id = `sig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const newSig: Signal = {
     ...signalData,
     id,
-    createdAt: new Date(),
-    closedAt: null,
+    createdAt,
+    closedAt,
   } as Signal;
   localSignalsCache.unshift(newSig);
+  localSignalsCache.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   saveLocalSignals();
 
   withTimeout(addDoc(collection(db, 'signals'), {
     ...signalData,
-    createdAt: new Date(),
+    createdAt,
+    closedAt,
   }), 1500).catch(() => null);
 }
 

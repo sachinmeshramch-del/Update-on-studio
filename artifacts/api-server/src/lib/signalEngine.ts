@@ -156,18 +156,18 @@ let spikeDetectedAt = 0;
 let lastSpikeCandleTime = 0; // tracks which candle triggered the spike to avoid re-triggering on the same candle
 const SPIKE_ATR_MULT       = 2.5;   // body must exceed ATR × this
 const SPIKE_COOLDOWN_COUNT = 1;     // 1 candle to block after a spike
-const CANDLE_PRIMARY_MS         = 60_000;  // 1-minute execution candles for scalping (was 15 min)
+const CANDLE_PRIMARY_MS         = 900_000;  // 15-minute execution & market structure candles for intraday trading
 
-// ── Scalping constants (Ultra-Fast 1m Execution Engine) ─────────────────────
-const SIGNAL_CACHE_TTL        = 30_000;   // 30 seconds cache for rapid scalp responsiveness
-const COOLDOWN_MS             = 120_000;  // 2 minutes between scalp signals (was 15 min)
-const MIN_SIGNAL_INTERVAL_MS  = 60_000;   // 1-minute hard floor for scalping (was 5 min)
-const MIN_CONF_NORMAL         = 50;
-const MIN_CONF_STRONG         = 65;
-const MIN_CONF_REVERSAL       = 60;  // counter-trend trades need higher conviction
-const MIN_CONF_RANGE          = 55;  // range-bound / consolidation markets require high conviction
-const MIN_PRICE_MOVE_PCT      = 0.0015;   // 0.15% (~$3-$5 on gold) to override standard cooldown for fast scalps
-const MAX_RAW_SCORE           = 125;      // realistic max without all institutional factors aligning
+// ── Intraday Constants (Quality Institutional Execution Engine) ────────────
+const SIGNAL_CACHE_TTL        = 120_000;  // 2 minutes cache for intraday signal stability
+const COOLDOWN_MS             = 1_800_000; // 30 minutes between intraday signals (prevents overtrading)
+const MIN_SIGNAL_INTERVAL_MS  = 900_000;   // 15-minute hard floor for intraday
+const MIN_CONF_NORMAL         = 72;        // Quality threshold: only high-conviction intraday setups (72%+)
+const MIN_CONF_STRONG         = 82;
+const MIN_CONF_REVERSAL       = 78;        // Counter-trend trades need strict institutional conviction (78%+)
+const MIN_CONF_RANGE          = 75;        // Range-bound / consolidation markets require 75%+ conviction
+const MIN_PRICE_MOVE_PCT      = 0.0035;    // 0.35% (~$14-$15 on gold) to trigger new intraday evaluation
+const MAX_RAW_SCORE           = 125;       // realistic max without all institutional factors aligning
 
 // ── Session detection ─────────────────────────────────────────────────────
 function getCurrentSession(): SessionInfo {
@@ -539,7 +539,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const base = cachedSignal ?? {
       confidence: 0, entryPrice: +currentPrice.toFixed(2),
       stopLoss: +(currentPrice - 6.0).toFixed(2), takeProfit: +(currentPrice + 12.0).toFixed(2),
-      trend: "NEUTRAL" as const, tradeDuration: "3-15 mins (Scalp)",
+      trend: "NEUTRAL" as const, tradeDuration: "1h - 4h (Intraday)",
       signalStrength: null, emaScore: 0, rsiScore: 0, macdScore: 0,
       momentumScore: 0, fvgScore: 0, sweepScore: 0, obScore: 0, candleScore: 0, candlePattern: null, signalType: "TREND_FOLLOW" as const,
       patternDetected: null, patternStrength: 0, contextValid: false, confluenceMet: false, confirmationStatus: null,
@@ -680,15 +680,32 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         candlesMacro = cachedCandlesMacro.map(c => ({ ...c }));
         candlesHTF = cachedCandlesHTF.map(c => ({ ...c }));
       } else {
-        candlesPrimary = await fetchWithFallback("5m", 300);
-        candlesEntry = await fetchWithFallback("1m", 300);
         try {
-          candlesMacro = await fetchWithFallback("15m", 100);
+          candlesPrimary = await fetchWithFallback("15m", 300);
         } catch {
-          // Synthesize 15m candles from 5m candles if direct 15m REST fetch is delayed
+          const m5 = await fetchWithFallback("5m", 300);
+          candlesPrimary = [];
+          for (let i = 0; i < m5.length; i += 3) {
+            const chunk = m5.slice(i, i + 3);
+            if (chunk.length === 0) continue;
+            candlesPrimary.push({
+              time: chunk[0].time,
+              open: chunk[0].open,
+              high: Math.max(...chunk.map(c => c.high)),
+              low: Math.min(...chunk.map(c => c.low)),
+              close: chunk[chunk.length - 1].close,
+              volume: chunk.reduce((sum, c) => sum + (c.volume || 1), 0),
+            });
+          }
+        }
+        candlesEntry = await fetchWithFallback("5m", 300).catch(() => candlesPrimary.map(c => ({ ...c })));
+        try {
+          candlesMacro = await fetchWithFallback("1h", 100);
+        } catch {
+          // Synthesize 1h candles from 15m candles
           candlesMacro = [];
-          for (let i = 0; i < candlesPrimary.length; i += 3) {
-            const chunk = candlesPrimary.slice(i, i + 3);
+          for (let i = 0; i < candlesPrimary.length; i += 4) {
+            const chunk = candlesPrimary.slice(i, i + 4);
             if (chunk.length === 0) continue;
             candlesMacro.push({
               time: chunk[0].time,
@@ -701,12 +718,12 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
           }
         }
         try {
-          candlesHTF = await fetchWithFallback("1h", 100);
+          candlesHTF = await fetchWithFallback("4h", 100);
         } catch {
-          // Synthesize 1h candles from 5m candles if direct 1h fetch is delayed
+          // Synthesize 4h candles from 1h candles
           candlesHTF = [];
-          for (let i = 0; i < candlesPrimary.length; i += 12) {
-            const chunk = candlesPrimary.slice(i, i + 12);
+          for (let i = 0; i < candlesMacro.length; i += 4) {
+            const chunk = candlesMacro.slice(i, i + 4);
             if (chunk.length === 0) continue;
             candlesHTF.push({
               time: chunk[0].time,
@@ -1794,7 +1811,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       if (sweepRej.detected && sweepRej.rejectionType === (finalSignal === "LONG" ? "BULLISH" : "BEARISH") && signalType === "REVERSAL") parts.push(`Sweep reject @ ${sweepRej.sweptLevel}`);
       const typeTag = signalType === "REVERSAL" ? " ⟳REVERSAL" : "";
       const strPrefix = signalStrength ? `${signalStrength} ` : "";
-      reason = `${strPrefix}${finalSignal}${typeTag} [Scalp] ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
+      reason = `${strPrefix}${finalSignal}${typeTag} [Intraday] ${sessionNote} [conf:${confidence}% | SL:${slDist.toFixed(1)}pt TP:${tpDist.toFixed(1)}pt] — ${parts.join(" · ")}`;
     } else if (recentStops.inCircuitBreakerCooldown) {
       reason = `HOLD – Circuit Breaker (${recentStops.cooldownRemainingMinutes}m cooldown after ${recentStops.consecutiveLosses} consecutive losses) · Preserving capital during consolidation`;
     } else if (suppressionReason.length > 0) {
@@ -1824,7 +1841,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       trend:             overallTrend(trendPrimary, trendEntry),
       reason,
       timestamp:         new Date().toISOString(),
-      tradeDuration:     "3-15 mins (Scalp)",
+      tradeDuration:     "1h - 4h (Intraday)",
       cooldownRemaining: finalSignal !== "HOLD" ? 0 : cooldownRemaining,
       smartMode,
       session,

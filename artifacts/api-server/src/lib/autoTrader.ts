@@ -39,6 +39,26 @@ export async function executeTradeWithCapitalManagement(
     signalTimestamp?: number
 ) {
     const settings = passedSettings || (await getSystemSettings());
+
+    // ── STRICT FAIL-SAFE GUARD: Auto-Trading Enabled Verification ──
+    const isMasterAutoEnabled = settings ? Boolean(settings.autoTradingEnabled) : false;
+    if (!isMasterAutoEnabled) {
+        logger.warn({ accountId, accountType }, "[AutoTrader] Execution BLOCKED: Master auto-trading switch is OFF in settings.");
+        return { executed: false, reason: "Master auto-trading switch is OFF in settings" };
+    }
+
+    if (accountType === "REAL") {
+        if (!settings?.autoTradingRealEnabled || settings?.tradingMode !== "REAL") {
+            logger.warn({ accountId }, "[AutoTrader] REAL Execution BLOCKED: autoTradingRealEnabled is FALSE or tradingMode is not REAL.");
+            return { executed: false, reason: "Auto-trading on Real MT5 account is DISABLED in settings" };
+        }
+    } else if (accountType === "DEMO") {
+        if (!settings?.autoTradingDemoEnabled) {
+            logger.warn({ accountId }, "[AutoTrader] DEMO Execution BLOCKED: autoTradingDemoEnabled is FALSE in settings.");
+            return { executed: false, reason: "Auto-trading on Demo account is DISABLED in settings" };
+        }
+    }
+
     const isOrbEngine = settings?.engineMode === "HYBRID_DUAL" || settings?.engineMode === "DETERMINISTIC_ORB";
     const riskPerTrade = isOrbEngine ? (settings?.orbRiskPerTrade ?? 2.0) : (settings?.riskPerTradePercent ?? 1.0);
     const dailyTarget = settings?.dailyProfitTargetPercent || 3.0;

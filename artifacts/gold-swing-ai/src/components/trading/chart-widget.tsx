@@ -17,7 +17,7 @@ import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 
 type Tab = "ticks" | "ohlc";
 
-// Intraday-first timeframes with quick scalping options
+// Intraday & Swing timeframes for institutional Gold analysis
 const TIMEFRAMES = [
   { label: "1m",  value: "1" },
   { label: "5m",  value: "5" },

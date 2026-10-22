@@ -6,7 +6,7 @@ import { getAnalyticsSummary, setSmartMode, resetAnalyticsCache } from "../lib/p
 import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo, getOpenBrokerPositions } from "../lib/metaApiFeed.js";
+import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo, getOpenBrokerPositions, syncBrokerClosedDealsToHistory } from "../lib/metaApiFeed.js";
 import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById, getSystemSettings } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
@@ -379,6 +379,9 @@ router.get(["/history", "/signals"], async (req, res) => {
     const limitParam = parseInt((req.query.limit as string) ?? "1000", 10);
     const limit = isNaN(limitParam) || limitParam < 1 ? 1000 : Math.min(limitParam, 5000);
 
+    // Reconcile any executed MT5 deals with local history cache
+    await syncBrokerClosedDealsToHistory().catch(() => 0);
+
     const [rows, openBrokerPositions] = await Promise.all([
       getRecentSignals(limit),
       getOpenBrokerPositions().catch(() => [])
@@ -469,6 +472,16 @@ router.delete("/history/:id", async (req, res) => {
   } catch (err: any) {
     req.log.error({ err }, "Error deleting signal");
     res.status(500).json({ error: "delete_error", message: "Failed to delete signal" });
+  }
+});
+
+// ── Force Sync MT5 Broker Deals ──────────────────────────────────────────
+router.post("/history/sync-broker", async (_req: Request, res: Response) => {
+  try {
+    const syncedCount = await syncBrokerClosedDealsToHistory(true);
+    res.json({ success: true, syncedCount });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || String(err) });
   }
 });
 

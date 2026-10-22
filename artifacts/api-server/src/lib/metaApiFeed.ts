@@ -1572,6 +1572,22 @@ export async function executeTradeOnAccount(
         throw new Error(`MetaApi Account ID is missing in settings`);
     }
 
+    // ── STRICT SECURITY GUARD: Infallible check against system settings ──
+    const currentSettings = await getSystemSettings().catch(() => null);
+    const isMasterAutoEnabled = currentSettings ? Boolean(currentSettings.autoTradingEnabled) : false;
+    if (!isMasterAutoEnabled) {
+        logger.warn({ accountId, accountType }, "[MetaApi Security Shield] REJECTED execution: Master auto-trading is OFF.");
+        throw new Error("Security Guard: Master auto-trading is OFF in settings.");
+    }
+    if (accountType === "REAL" && (!currentSettings?.autoTradingRealEnabled || currentSettings?.tradingMode !== "REAL")) {
+        logger.warn({ accountId, accountType }, "[MetaApi Security Shield] REJECTED execution: Real auto-trading is disabled.");
+        throw new Error("Security Guard: Real MT5 auto-trading is OFF in settings. Real execution aborted.");
+    }
+    if (accountType === "DEMO" && !currentSettings?.autoTradingDemoEnabled) {
+        logger.warn({ accountId, accountType }, "[MetaApi Security Shield] REJECTED execution: Demo auto-trading is disabled.");
+        throw new Error("Security Guard: Demo MT5 auto-trading is OFF in settings. Demo execution aborted.");
+    }
+
     const dispatchStart = Date.now();
     const latencyFromSignal = signalTimestamp ? (dispatchStart - signalTimestamp) : null;
     const targetAccountId = accountId.trim();
@@ -1827,6 +1843,132 @@ export async function getRecentlyClosedBrokerDeals(since: Date): Promise<BrokerC
         if (filtered.length > 0) return filtered;
     }
     return [...liveClosedDeals];
+}
+
+let lastDealsSyncTime = 0;
+export async function syncBrokerClosedDealsToHistory(force = false): Promise<number> {
+    const now = Date.now();
+    if (!force && now - lastDealsSyncTime < 8000) {
+        return 0; // Debounce to avoid RPC flooding
+    }
+    lastDealsSyncTime = now;
+
+    try {
+        const settings = await getSystemSettings().catch(() => ({} as any));
+        const targetAccountId = (settings?.tradingMode === "REAL" ? settings.realAccountId : settings.demoAccountId) || settings.realAccountId || activeAccountId || "";
+        if (!targetAccountId || !targetAccountId.trim()) return 0;
+
+        const rpc = await getOrInitRpcConnection(targetAccountId.trim());
+        if (!rpc) return 0;
+
+        const startTime = new Date(Date.now() - 48 * 60 * 60 * 1000); // Look back 48h
+        const dealsResponse: any = await rpc.getDealsByTimeRange(startTime, new Date()).catch((err: any) => {
+            logger.warn({ err: err?.message || err }, "[MetaApi] Failed to get deals by time range");
+            return null;
+        });
+        const deals: any[] = Array.isArray(dealsResponse)
+            ? dealsResponse
+            : (dealsResponse && Array.isArray(dealsResponse.deals) ? dealsResponse.deals : []);
+        logger.info({ dealsCount: deals.length }, "[MetaApi Sync] Retrieved deals from MT5 broker");
+        if (deals.length === 0) return 0;
+
+        // Group deals by positionId
+        const dealsByPos = new Map<string, any[]>();
+        for (const d of deals) {
+            if (!d.positionId) continue;
+            const pid = String(d.positionId);
+            if (!dealsByPos.has(pid)) dealsByPos.set(pid, []);
+            dealsByPos.get(pid)!.push(d);
+        }
+
+        const { getRecentSignals, insertSignal, updateTradeStatus } = await import("@workspace/db");
+        const existingSignals = await getRecentSignals(1000);
+        let syncedCount = 0;
+
+        for (const [posId, posDeals] of dealsByPos.entries()) {
+            const entryDeal = posDeals.find((d: any) => d.entryType === "DEAL_ENTRY_IN" || d.entry === "DEAL_ENTRY_IN") || posDeals[0];
+            const exitDeals = posDeals.filter((d: any) => d.entryType === "DEAL_ENTRY_OUT" || d.entry === "DEAL_ENTRY_OUT" || d.entryType === "DEAL_ENTRY_OUT_BY");
+            const exitDeal = exitDeals.length > 0 ? exitDeals[exitDeals.length - 1] : null;
+
+            if (!entryDeal) continue;
+
+            const existing = existingSignals.find(s => s.brokerPositionId && String(s.brokerPositionId) === posId);
+
+            if (exitDeal) {
+                const netProfit = Number(exitDeals.reduce((sum: number, d: any) => sum + (d.profit || 0) + (d.commission || 0) + (d.swap || 0), 0).toFixed(2));
+                const isBuy = entryDeal.type === "DEAL_TYPE_BUY";
+                const signalDir = isBuy ? "LONG" : "SHORT";
+                const isTp = netProfit >= 0;
+                const status = isTp ? "TARGET_HIT" : "STOP_HIT";
+                const durationMins = entryDeal.time && exitDeal.time 
+                    ? Math.max(1, Math.round((new Date(exitDeal.time).getTime() - new Date(entryDeal.time).getTime()) / 60000))
+                    : 15;
+
+                if (existing) {
+                    if (existing.tradeStatus === "RUNNING") {
+                        await updateTradeStatus(existing.id, status, exitDeal.price, netProfit);
+                        syncedCount++;
+                    }
+                } else {
+                    // Create historical signal for this real MT5 trade
+                    await insertSignal({
+                        createdAt: new Date(entryDeal.time),
+                        signal: signalDir,
+                        confidence: 85,
+                        entryPrice: entryDeal.price,
+                        stopLoss: entryDeal.stopLoss || (isBuy ? +(entryDeal.price - 7.0).toFixed(2) : +(entryDeal.price + 7.0).toFixed(2)),
+                        takeProfit: entryDeal.takeProfit || (isBuy ? +(entryDeal.price + 17.5).toFixed(2) : +(entryDeal.price - 17.5).toFixed(2)),
+                        trend: signalDir === "LONG" ? "BULLISH" : "BEARISH",
+                        reason: exitDeal.comment || entryDeal.comment || `Real MT5 Trade Execution (Ticket #${posId})`,
+                        tradeDuration: `${durationMins}m`,
+                        tradeStatus: status,
+                        closedPrice: exitDeal.price,
+                        closedAt: new Date(exitDeal.time),
+                        pnlPoints: netProfit,
+                        isRealTrade: true,
+                        brokerPositionId: posId,
+                        executionStatus: "EXECUTED",
+                        executionType: "REAL_MT5",
+                        executionReason: `Executed on MT5 Account (Ticket #${posId}) · Net PnL: ${netProfit >= 0 ? "+" : ""}$${netProfit.toFixed(2)}`
+                    });
+                    syncedCount++;
+                }
+            } else if (!existing) {
+                // Currently open position on MT5 but missing from signals table
+                const isBuy = entryDeal.type === "DEAL_TYPE_BUY";
+                const signalDir = isBuy ? "LONG" : "SHORT";
+                await insertSignal({
+                    createdAt: new Date(entryDeal.time),
+                    signal: signalDir,
+                    confidence: 85,
+                    entryPrice: entryDeal.price,
+                    stopLoss: entryDeal.stopLoss || (isBuy ? +(entryDeal.price - 7.0).toFixed(2) : +(entryDeal.price + 7.0).toFixed(2)),
+                    takeProfit: entryDeal.takeProfit || (isBuy ? +(entryDeal.price + 17.5).toFixed(2) : +(entryDeal.price - 17.5).toFixed(2)),
+                    trend: signalDir === "LONG" ? "BULLISH" : "BEARISH",
+                    reason: entryDeal.comment || `Live MT5 Open Position (Ticket #${posId})`,
+                    tradeDuration: "Open",
+                    tradeStatus: "RUNNING",
+                    closedPrice: null,
+                    closedAt: null,
+                    pnlPoints: null,
+                    isRealTrade: true,
+                    brokerPositionId: posId,
+                    executionStatus: "EXECUTED",
+                    executionType: "REAL_MT5",
+                    executionReason: `Active on Real MT5 Account (Ticket #${posId})`
+                });
+                syncedCount++;
+            }
+        }
+
+        if (syncedCount > 0) {
+            logger.info({ syncedCount }, "[MetaApi] Successfully reconciled real MT5 deals with history table");
+        }
+        return syncedCount;
+    } catch (e: any) {
+        logger.warn({ err: e?.message }, "[MetaApi] Broker deals history sync warning");
+        return 0;
+    }
 }
 
 export async function closeBrokerPosition(positionId: string, accountId?: string): Promise<boolean> {
