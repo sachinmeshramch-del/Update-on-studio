@@ -1,0 +1,17 @@
+.gcloudignore
+.git
+.gitignore
+
+# Never upload node_modules to Cloud Build (Cloud Build must run npm ci in its own Linux container)
+node_modules/
+**/node_modules/
+
+# Local cache files
+.signals_cache.json
+.settings_cache.json
+*.log
+
+# Env
+.env
+.env.*
+!.env.example

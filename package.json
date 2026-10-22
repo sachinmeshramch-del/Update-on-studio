@@ -22,8 +22,10 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.6",
     "concurrently": "^8.2.2",
+    "esbuild": "^0.27.3",
     "protobufjs": "^8.8.1",
-    "tsconfig-paths": "^4.2.0"
+    "tsconfig-paths": "^4.2.0",
+    "vite": "^7.3.0"
   },
   "engines": {
     "node": ">=20.0.0"
