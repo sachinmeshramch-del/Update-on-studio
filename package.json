@@ -17,7 +17,7 @@
     "build": "npm run build:frontend && npm run build:backend && node scripts/copy-assets.mjs",
     "start": "node --enable-source-maps ./artifacts/api-server/dist/index.mjs",
     "lint": "node -e 'console.log(\"Lint passed: codebase integrity verified\")'",
-    "gcp-build": "NODE_OPTIONS=--max-old-space-size=4096 npm run build"
+    "gcp-build": "npm run build"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.6",
