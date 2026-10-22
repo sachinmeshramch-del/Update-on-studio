@@ -14,6 +14,8 @@ build/
 .settings_cache.json
 .signals_backup.json
 .signals_temp.json
+.metaapi/
+**/.historical_data/backtest_runs/
 
 # Environment variables
 .env

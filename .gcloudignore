@@ -9,6 +9,8 @@ node_modules/
 # Local cache files
 .signals_cache.json
 .settings_cache.json
+.metaapi/
+**/.historical_data/backtest_runs/
 *.log
 
 # Env
