@@ -342,18 +342,9 @@ export async function checkRunningTrades(): Promise<void> {
           );
         } else if (!matchingOpenPos && !trade.isRealTrade && currentBid <= stopLoss) {
           newStatus   = "STOP_HIT";
-          // Weekend gap protection: If price gapped violently through the stop loss (e.g. over weekend),
-          // real brokers will execute at the current market price (first available tick), NOT the requested SL price.
-          // Therefore, if currentBid is significantly worse than stopLoss, use currentBid as the closed price.
-          // If it's just normal slippage, we cap it at 0.20 points to avoid weird ghost ticks.
-          const gapSize = stopLoss - currentBid;
-          if (gapSize > 1.0) { // Large gap detected
-            closedPrice = currentBid;
-            logger.warn({ id, signal, stopLoss, currentBid, gapSize }, "⚠️ Weekend gap or high slippage detected on SL hit! Using actual market opening price.");
-          } else {
-            const slippage = Math.max(gapSize, 0); // Normal slippage
-            closedPrice = +(stopLoss - slippage).toFixed(2);
-          }
+          // Realistic simulated slippage: cap at 0.50 points past stop loss to prevent phantom gap losses when tracker starts
+          const slippage = Math.min(Math.max(stopLoss - currentBid, 0), 0.50);
+          closedPrice = +(stopLoss - slippage).toFixed(2);
           pnlPoints   = +(closedPrice - actualEntry).toFixed(2);
           activeTradeStates.delete(id as string);
         } else if (!matchingOpenPos && !trade.isRealTrade && currentBid >= trade.takeProfit) {
@@ -562,17 +553,9 @@ export async function checkRunningTrades(): Promise<void> {
           );
         } else if (!matchingOpenPos && !trade.isRealTrade && currentAsk >= stopLoss) {
           newStatus   = "STOP_HIT";
-          // Weekend gap protection: If price gapped violently through the stop loss (e.g. over weekend),
-          // real brokers will execute at the current market price (first available tick), NOT the requested SL price.
-          // Therefore, if currentAsk is significantly worse than stopLoss, use currentAsk as the closed price.
-          const gapSize = currentAsk - stopLoss;
-          if (gapSize > 1.0) { // Large gap detected
-            closedPrice = currentAsk;
-            logger.warn({ id, signal, stopLoss, currentAsk, gapSize }, "⚠️ Weekend gap or high slippage detected on SL hit! Using actual market opening price.");
-          } else {
-            const slippage = Math.max(gapSize, 0); // Normal slippage
-            closedPrice = +(stopLoss + slippage).toFixed(2);
-          }
+          // Realistic simulated slippage: cap at 0.50 points past stop loss to prevent phantom gap losses when tracker starts
+          const slippage = Math.min(Math.max(currentAsk - stopLoss, 0), 0.50);
+          closedPrice = +(stopLoss + slippage).toFixed(2);
           pnlPoints   = +(actualEntry - closedPrice).toFixed(2);
           activeTradeStates.delete(id as string);
         } else if (!matchingOpenPos && !trade.isRealTrade && currentAsk <= trade.takeProfit) {

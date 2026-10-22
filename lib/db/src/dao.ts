@@ -4,7 +4,18 @@ import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, dele
 import fs from 'fs';
 import path from 'path';
 
-const CACHE_FILE = path.resolve(process.cwd(), '.signals_cache.json');
+function getSignalsCacheFilePath(): string {
+  const possiblePaths = [
+    path.resolve(process.cwd(), '.signals_cache.json'),
+    path.resolve(process.cwd(), 'artifacts/api-server', '.signals_cache.json'),
+    path.resolve('/app/applet/artifacts/api-server', '.signals_cache.json'),
+    path.resolve('/app/applet', '.signals_cache.json'),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return path.resolve(process.cwd(), '.signals_cache.json');
+}
 
 async function withTimeout<T>(promise: Promise<T>, ms = 1500): Promise<T> {
   let timer: any;
@@ -18,8 +29,9 @@ let localSignalsCache: Signal[] = [];
 
 function loadLocalSignals(): void {
   try {
-    if (fs.existsSync(CACHE_FILE)) {
-      const raw = fs.readFileSync(CACHE_FILE, 'utf8');
+    const cacheFile = getSignalsCacheFilePath();
+    if (fs.existsSync(cacheFile)) {
+      const raw = fs.readFileSync(cacheFile, 'utf8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         const seenBrokerIds = new Set<string>();
@@ -47,7 +59,8 @@ function loadLocalSignals(): void {
 
 function saveLocalSignals(): void {
   try {
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(localSignalsCache, null, 2), 'utf8');
+    const cacheFile = getSignalsCacheFilePath();
+    fs.writeFileSync(cacheFile, JSON.stringify(localSignalsCache, null, 2), 'utf8');
   } catch (e) {
     console.warn("[DB] Failed writing local signals cache:", e);
   }
