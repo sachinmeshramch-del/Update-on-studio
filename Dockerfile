@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy root package and lockfile
 COPY package.json package-lock.json ./
 
-# Copy all workspace packages so npm workspaces resolve accurately
+# Copy all workspace packages
 COPY artifacts ./artifacts
 COPY lib ./lib
 COPY scripts ./scripts
@@ -28,20 +28,14 @@ ENV PORT=8080
 
 # Copy root package and lockfile
 COPY package.json package-lock.json ./
-COPY artifacts/api-server/package.json ./artifacts/api-server/package.json
-COPY artifacts/gold-swing-ai/package.json ./artifacts/gold-swing-ai/package.json
-COPY lib/api-client-react/package.json ./lib/api-client-react/package.json
-COPY lib/api-spec/package.json ./lib/api-spec/package.json
-COPY lib/api-zod/package.json ./lib/api-zod/package.json
-COPY lib/db/package.json ./lib/db/package.json
 
-# Install production dependencies
-RUN npm ci --omit=dev
+# Copy all node_modules from builder
+COPY --from=builder /app/node_modules ./node_modules
 
-# Copy compiled bundles and distribution assets from builder
-COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
+# Copy workspace directories and built distributions
+COPY --from=builder /app/artifacts ./artifacts
+COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/artifacts/gold-swing-ai/dist ./artifacts/gold-swing-ai/dist
 
 # Expose standard Cloud Run port
 EXPOSE 8080

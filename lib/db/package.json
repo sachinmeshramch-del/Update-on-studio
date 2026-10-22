@@ -8,7 +8,7 @@
     "./schema": "./src/schema/index.ts"
   },
   "dependencies": {
-    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/grpc-js": "^1.14.6",
     "firebase": "^12.18.0",
     "zod": "^3.25.76"
   },
