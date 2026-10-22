@@ -12,7 +12,8 @@ import {
   Zap,
   Target,
   Brain,
-  Layers
+  Layers,
+  TrendingUp
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/firebase/auth-context";
@@ -255,11 +256,33 @@ export function SettingsDialog() {
                   <span>Engine Architecture & Strategy</span>
                 </div>
                 <span className="text-[10px] font-mono text-amber-500">
-                  {formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
+                  {formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, engineMode: "ALPHA_TRADES_SD" })}
+                  className={cn(
+                    "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                    formData.engineMode === "ALPHA_TRADES_SD"
+                      ? "bg-emerald-500/10 border-emerald-500/50 text-foreground"
+                      : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      Alpha Trades Supply & Demand (@alphatradesss)
+                    </span>
+                    {formData.engineMode === "ALPHA_TRADES_SD" && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    15m/1H Supply & Demand zones + counter-trendline break + rejection pinbar wick (1:2.5+ R:R intraday Gold).
+                  </p>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, engineMode: "HYBRID_DUAL" })}

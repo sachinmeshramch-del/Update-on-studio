@@ -23,7 +23,7 @@
     "rsiOversoldThreshold": 28,
     "spikeAtrMultiplier": 2.5
   },
-  "engineMode": "HYBRID_DUAL",
+  "engineMode": "ALPHA_TRADES_SD",
   "orbRiskPerTrade": 2,
   "orbTargetMultiple": 5,
   "orbStopAtrMultiplier": 1.5,

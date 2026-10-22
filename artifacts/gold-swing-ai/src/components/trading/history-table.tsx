@@ -967,10 +967,10 @@ export function HistoryTable() {
     ? allSignals.filter((s: any) => s.timestamp && new Date(s.timestamp) >= todayCutoff && s.signal !== "HOLD")
     : [];
 
-  // Period filter for the table
+  // Period filter for the table, but ALWAYS keep running trades visible
   const cutoff = periodStart(period);
   const periodSignals = cutoff
-    ? allSignals.filter((s: any) => s.timestamp && new Date(s.timestamp) >= cutoff)
+    ? allSignals.filter((s: any) => (s.tradeStatus === "RUNNING") || (s.timestamp && new Date(s.timestamp) >= cutoff))
     : allSignals;
 
   // Type filter

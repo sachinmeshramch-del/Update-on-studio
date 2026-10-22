@@ -311,7 +311,13 @@ export default function BacktestPage() {
   }, [liveBotMode]);
 
   const strategyDetails = useMemo(() => {
-    if (engineMode === "DETERMINISTIC_ORB") {
+    if (engineMode === "ALPHA_TRADES_SD") {
+      return {
+        name: "Active Strategy: Alpha Trades Supply & Demand Strategy (@alphatradesss)",
+        badge: "Supply & Demand",
+        description: "15m & 1H Supply/Demand order block zones + counter-trendline breakout + rejection pinbar wick confirmation with 1:2.5+ R:R intraday Gold trading."
+      };
+    } else if (engineMode === "DETERMINISTIC_ORB") {
       return {
         name: "Active Strategy: Pure Deterministic NY 3h ORB Engine",
         badge: "Pure 3h NY ORB",
@@ -687,7 +693,7 @@ export default function BacktestPage() {
                     Backtest Strategy Engine
                   </span>
                   <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/10 border-amber-500/30 text-amber-500">
-                    {engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : engineMode === "HERMES_ADAPTIVE" ? "Hermes Adaptive AI" : "Hybrid Dual-Engine"}
+                    {engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : engineMode === "HERMES_ADAPTIVE" ? "Hermes Adaptive AI" : "Hybrid Dual-Engine"}
                   </Badge>
                   {engineMode === liveBotMode ? (
                     <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -713,10 +719,11 @@ export default function BacktestPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/40 border border-border">
+              <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/40 border border-border flex-wrap">
                 {[
-                  { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
+                  { id: "ALPHA_TRADES_SD", label: "Alpha Trades S&D", icon: TrendingUp },
                   { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
+                  { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
                   { id: "HERMES_ADAPTIVE", label: "Adaptive AI", icon: Brain },
                 ].map((mode) => {
                   const Icon = mode.icon;

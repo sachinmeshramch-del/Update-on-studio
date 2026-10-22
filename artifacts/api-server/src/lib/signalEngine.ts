@@ -32,6 +32,7 @@ import {
   type OrbStatus,
   type OrbSignalResult
 } from "./deterministicOrbEngine.js";
+import { evaluateAlphaTradesStrategy, type AlphaTradesSignalResult } from "./alphaTradesStrategy.js";
 
 
 
@@ -1883,13 +1884,49 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       dynamicAtrStop,
     };
 
-    // ── Engine Mode & Hybrid Dual-Engine Architecture Evaluation ───────────
+    // ── Engine Mode & Hybrid Multi-Engine Architecture Evaluation ───────────
     const orbStatus = await getDeterministicOrbStatus(currentPrice);
     const orbSignal = await evaluateDeterministicOrb(currentPrice, liveSpread);
+    const alphaTradesSignal = evaluateAlphaTradesStrategy(
+      currentPrice,
+      liveSpread,
+      candlesPrimary,
+      candlesMacro,
+      session
+    );
     const engineMode = settings?.engineMode || "HYBRID_DUAL";
 
-    if (engineMode === "HERMES_ADAPTIVE") {
-      // 1. HERMES ADAPTIVE MODE:
+    if (engineMode === "ALPHA_TRADES_SD") {
+      // 1. PURE ALPHA TRADES SUPPLY & DEMAND STRATEGY MODE:
+      // Focuses strictly on 15m/1H Supply and Demand order blocks, trendline breaks, and rejection wicks.
+      if (alphaTradesSignal) {
+        result.signal = alphaTradesSignal.signal;
+        result.entryPrice = alphaTradesSignal.entryPrice;
+        result.stopLoss = alphaTradesSignal.stopLoss;
+        result.takeProfit = alphaTradesSignal.takeProfit;
+        result.trend = alphaTradesSignal.trend;
+        result.tradeDuration = alphaTradesSignal.tradeDuration;
+        result.signalType = "ALPHA_TRADES_SD" as any;
+        result.confidence = alphaTradesSignal.confidence;
+        result.signalStrength = "STRONG";
+        result.reason = alphaTradesSignal.reason;
+        result.dualEngine = {
+          activeEngine: "ALPHA_TRADES_SD" as any,
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      } else {
+        result.signal = "HOLD";
+        result.confidence = 0;
+        result.reason = `[ALPHA TRADES S&D] HOLD – Monitoring 15m/1H Supply & Demand zones [${session.active}] · Awaiting zone test & rejection confirmation`;
+        result.dualEngine = {
+          activeEngine: "ALPHA_TRADES_SD" as any,
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      }
+    } else if (engineMode === "HERMES_ADAPTIVE") {
+      // 2. HERMES ADAPTIVE MODE:
       // Multi-indicator adaptive confluence engine (SMC + EMA ribbons + RSI + MACD + FVG + Order Blocks).
       // Trades according to dynamic Hermes hyper-parameters without ORB breakout override.
       result.dualEngine = {
@@ -1898,7 +1935,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         orbRange: orbStatus.currentRange
       };
     } else if (engineMode === "DETERMINISTIC_ORB") {
-      // 2. PURE DETERMINISTIC ORB MODE:
+      // 3. PURE DETERMINISTIC ORB MODE:
       // Strictly fires only when an Opening Range Breakout is active. Outside ORB sessions, holds.
       if (orbSignal) {
         result.signal = orbSignal.signal;
@@ -1927,9 +1964,25 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         };
       }
     } else {
-      // 3. HYBRID DUAL-ENGINE MODE (Default / Recommended):
-      // Merges the Deterministic ORB Breakout Engine with Hermes AI Multi-Timeframe Confluence.
-      if (orbSignal) {
+      // 4. HYBRID DUAL-ENGINE MODE (Default / Recommended):
+      // Highest conviction setup priority: Alpha Trades S&D > Deterministic ORB Breakout > SMC Confluence
+      if (alphaTradesSignal) {
+        result.signal = alphaTradesSignal.signal;
+        result.entryPrice = alphaTradesSignal.entryPrice;
+        result.stopLoss = alphaTradesSignal.stopLoss;
+        result.takeProfit = alphaTradesSignal.takeProfit;
+        result.trend = alphaTradesSignal.trend;
+        result.tradeDuration = alphaTradesSignal.tradeDuration;
+        result.signalType = "ALPHA_TRADES_SD" as any;
+        result.confidence = alphaTradesSignal.confidence;
+        result.signalStrength = "STRONG";
+        result.reason = alphaTradesSignal.reason;
+        result.dualEngine = {
+          activeEngine: "ALPHA_TRADES_SD" as any,
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      } else if (orbSignal) {
         const isSynergy = (orbSignal.signal === "LONG" && (trendPrimary === "BULLISH" || result.signal === "LONG")) ||
                           (orbSignal.signal === "SHORT" && (trendPrimary === "BEARISH" || result.signal === "SHORT"));
 

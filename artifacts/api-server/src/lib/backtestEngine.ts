@@ -20,6 +20,7 @@ import {
   toDate,
 } from "./historicalDataManager.js";
 import { logger } from "./logger.js";
+import { evaluateAlphaTradesStrategy } from "./alphaTradesStrategy.js";
 import fs from "fs";
 import path from "path";
 
@@ -46,7 +47,7 @@ export interface BacktestParams {
     | "BREAKEVEN_ONLY" // Move to Breakeven (+ spread buffer) once in profit
     | "PROFIT_TRIGGERED" // Profit-triggered trailing stop
     | "NO_TRAILING"; // Fixed initial SL and TP
-  strategyMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE"; // Active strategy engine
+  strategyMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD"; // Active strategy engine
 }
 
 export interface BacktestTrade {
@@ -649,18 +650,22 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
   }> = [];
 
   const strategyMode = params.strategyMode || "HYBRID_DUAL";
-  const strategyName = strategyMode === "DETERMINISTIC_ORB"
+  const strategyName = strategyMode === "ALPHA_TRADES_SD"
+    ? "Alpha Trades Supply & Demand Engine"
+    : strategyMode === "DETERMINISTIC_ORB"
     ? "Pure Deterministic NY 3h ORB Engine"
     : strategyMode === "HERMES_ADAPTIVE"
     ? "Hermes AI Adaptive Confluence"
     : "Hybrid Dual-Engine Scalper";
 
-  const strategyId = strategyMode === "DETERMINISTIC_ORB"
+  const strategyId = strategyMode === "ALPHA_TRADES_SD"
+    ? "ALPHA_TRADES_SD"
+    : strategyMode === "DETERMINISTIC_ORB"
     ? "DETERMINISTIC_ORB"
     : strategyMode === "HERMES_ADAPTIVE"
     ? "SMC_CONFLUENCE"
     : "DUAL_SYNERGY";
-  const strategyVersion = "v2.4.0";
+  const strategyVersion = "v2.5.0";
 
   logger.info({ tf, count, symbol, trailingVariant, strategyMode }, "[Backtest] Starting quantitative simulation");
 
@@ -682,6 +687,7 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
     const utcH = currDate.getUTCHours();
     const utcM = currDate.getUTCMinutes();
     const totalMinutes = utcH * 60 + utcM;
+    const currentSession = getSessionName(utcH);
 
     // Reset daily ORB state on calendar day transition
     if (dayKey !== currentDayKey) {
@@ -848,6 +854,46 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
           ];
         }
       }
+    } else if (strategyMode === "ALPHA_TRADES_SD") {
+      const alphaSignal = evaluateAlphaTradesStrategy(
+        curr.close,
+        spread,
+        currentSlice,
+        [],
+        {
+          active: currentSession,
+          london: currentSession === "London" || currentSession === "London/NY Overlap",
+          newYork: currentSession === "New York" || currentSession === "London/NY Overlap",
+          asian: currentSession === "Asian",
+        }
+      );
+
+      if (alphaSignal) {
+        signalDir = alphaSignal.signal;
+        patternName = `Alpha Trades ${alphaSignal.zone.type === "DEMAND" ? "Demand" : "Supply"} Zone`;
+        conditionsSatisfiedList = [
+          `Institutional ${alphaSignal.zone.type} Zone ($${alphaSignal.zone.low.toFixed(1)} - $${alphaSignal.zone.high.toFixed(1)})`,
+          alphaSignal.rejectionWickConfirmed ? "Rejection Pinbar Wick Confirmed" : "Zone Reaction Confirmed",
+          alphaSignal.trendlineBreak ? "Counter-Trendline Breakout" : "High-Volume Session Confluence",
+          "1:2.5 Risk-to-Reward Ratio Calibration",
+        ];
+        contributingStrats = [
+          {
+            strategyId: "SUPPLY_DEMAND_ZONES",
+            strategyName: "Institutional Supply & Demand Zones",
+            outcome: signalDir === "LONG" ? "BUY" : "SELL",
+            confidence: alphaSignal.confidence,
+            reason: `Price tested ${alphaSignal.zone.type} zone with rejection`,
+          },
+          {
+            strategyId: "TRENDLINE_BREAK",
+            strategyName: "Counter-Trendline Breakout Engine",
+            outcome: signalDir === "LONG" ? "BUY" : "SELL",
+            confidence: alphaSignal.trendlineBreak ? 88 : 80,
+            reason: alphaSignal.trendlineBreak ? "Counter-trendline pierced with volume" : "Session momentum confluence",
+          },
+        ];
+      }
     } else if (strategyMode === "HERMES_ADAPTIVE") {
       const isTrendBullish = lastEma9 > lastEma21 && curr.close > lastEma50;
       const isTrendBearish = lastEma9 < lastEma21 && curr.close < lastEma50;
@@ -881,12 +927,46 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
       }
     } else {
       // HYBRID DUAL-ENGINE SCALPER (Default):
+      const alphaSignal = evaluateAlphaTradesStrategy(
+        curr.close,
+        spread,
+        currentSlice,
+        [],
+        {
+          active: currentSession,
+          london: currentSession === "London" || currentSession === "London/NY Overlap",
+          newYork: currentSession === "New York" || currentSession === "London/NY Overlap",
+          asian: currentSession === "Asian",
+        }
+      );
+
+      if (alphaSignal) {
+        signalDir = alphaSignal.signal;
+        patternName = `Alpha Trades ${alphaSignal.zone.type === "DEMAND" ? "Demand" : "Supply"} Zone`;
+        conditionsSatisfiedList = [
+          `Alpha Trades S&D Priority: Institutional ${alphaSignal.zone.type} Zone`,
+          alphaSignal.rejectionWickConfirmed ? "Rejection Pinbar Wick Confirmed" : "Zone Reaction Confirmed",
+          "Dual-Engine Priority Execution",
+        ];
+        contributingStrats = [
+          {
+            strategyId: "ALPHA_TRADES_SD",
+            strategyName: "Alpha Trades Supply & Demand",
+            outcome: signalDir === "LONG" ? "BUY" : "SELL",
+            confidence: alphaSignal.confidence,
+            reason: `Institutional ${alphaSignal.zone.type} setup confluence`,
+          },
+        ];
+      }
+
       const candleResult = detectCandlePattern(currentSlice, atr);
       const orderBlocks = detectOrderBlocks(currentSlice);
       const isTrendBullish = lastEma9 > lastEma21 && curr.close > lastEma50;
       const isTrendBearish = lastEma9 < lastEma21 && curr.close < lastEma50;
 
-      patternName = candleResult.pattern || "Trend Flow";
+      if (!signalDir) {
+        patternName = candleResult.pattern || "Trend Flow";
+      }
 
       // Check ORB breakout synergy
       if (!orbFiredToday && nyRangeHigh > 0 && nyRangeLow > 0 && utcH >= 15 && utcH < 19) {

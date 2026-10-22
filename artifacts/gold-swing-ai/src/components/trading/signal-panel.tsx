@@ -70,6 +70,16 @@ function OrbBadge() {
   );
 }
 
+// ── Alpha Trades S&D badge ───────────────────────────────────────────────────
+function AlphaTradesBadge() {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40">
+      <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+      <span className="text-xs font-bold text-emerald-400 tracking-wide">ALPHA TRADES S&D</span>
+    </div>
+  );
+}
+
 // ── Dual Synergy badge ─────────────────────────────────────────────────────────
 function DualSynergyBadge() {
   return (
@@ -333,6 +343,7 @@ export function SignalPanel() {
                 {signalType === "RANGE" && <RangeBadge />}
                 {signalType === "REVERSAL" && <ReversalBadge />}
                 {signalType === "ORB_BREAKOUT" && <OrbBadge />}
+                {(signalType === "ALPHA_TRADES_SD" || signalData.dualEngine?.activeEngine === "ALPHA_TRADES_SD") && <AlphaTradesBadge />}
                 {signalData.dualEngine?.activeEngine === "DUAL_SYNERGY" && <DualSynergyBadge />}
                 {signalStrength && <StrengthBadge strength={signalStrength} />}
                 {cooldownRemaining > 0 && <CooldownTimer initialSeconds={cooldownRemaining} />}

@@ -1,0 +1,4106 @@
+{
+  "runId": "RUN-1792636974046-267",
+  "runTimestamp": "2026-10-22T02:42:54.046Z",
+  "summary": {
+    "totalTrades": 0,
+    "winningTrades": 0,
+    "losingTrades": 0,
+    "winRate": 0,
+    "initialBalance": 150,
+    "finalBalance": 150,
+    "netProfitDollars": 0,
+    "netProfitPercent": 0,
+    "netProfitPoints": 0,
+    "grossProfit": 0,
+    "grossLoss": 0,
+    "profitFactor": 0,
+    "expectancyR": 0,
+    "maxDrawdownDollars": 0,
+    "maxDrawdownPercent": 0,
+    "averageWinDollars": 0,
+    "averageLossDollars": 0,
+    "averageWinPoints": 0,
+    "averageLossPoints": 0,
+    "winLossRatio": 0,
+    "sharpeRatio": 0,
+    "maxConsecutiveWins": 0,
+    "maxConsecutiveLosses": 0,
+    "avgTradeDurationMinutes": 0,
+    "candlesEvaluated": 200,
+    "timeframe": "15m",
+    "dataSource": "MetaApi Historical Cloud Feed (Persisted)",
+    "runnerTradesCount": 0,
+    "intrabarAmbiguitiesCount": 0,
+    "strategyMode": "ALPHA_TRADES_SD",
+    "strategyName": "Alpha Trades Supply & Demand Engine",
+    "totalEligibleSignals": 0,
+    "totalRejectedSignals": 62,
+    "rejectionsByFilter": {
+      "sessionGuard": 62,
+      "patternFilter": 0,
+      "entryConfirmation": 0,
+      "spreadGuard": 0
+    },
+    "availableCandleCount": 200,
+    "earliestCandleUTC": "2026-10-14T23:00:00.000Z",
+    "latestCandleUTC": "2026-10-19T02:45:00.000Z",
+    "dataCompleteness": "PARTIAL",
+    "missingCandlesCount": 0
+  },
+  "breakdownBySession": [],
+  "breakdownByPattern": [],
+  "breakdownByRegime": [],
+  "breakdownByDirection": [],
+  "breakdownByStrategy": [],
+  "monthlyBreakdown": [],
+  "variantComparison": [
+    {
+      "variant": "ASYMMETRIC_RUNNER",
+      "label": "Asymmetric Runner (Live Bot)",
+      "activationThreshold": "Locks Breakeven at +1.0 pt, locks +1.0 pt at +1.3 pts; unlocks Runner at 85% TP",
+      "stopDistanceRule": "Progressive multi-tier: trail 7.0 pts at +12 pts, 10.0 pts at +22 pts, 15.0 pts at +38 pts",
+      "updateFrequency": "Bar-by-bar ratchet upon each closed bar's extreme",
+      "exitRule": "Hit dynamic trailing stop floor, initial SL, or extended runner TP target",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "FIXED_DISTANCE",
+      "label": "Fixed-Distance Trail (4.0 pts)",
+      "activationThreshold": "Activates when peak profit reaches +4.0 points ($4.00/oz)",
+      "stopDistanceRule": "Fixed 4.0 points behind highest high (LONG) or lowest low (SHORT)",
+      "updateFrequency": "Bar-by-bar ratchet (monotonically tightening)",
+      "exitRule": "Bid/Ask touches trailed stop level or initial TP",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "ATR_TRAILING",
+      "label": "ATR Trailing (2.0x ATR)",
+      "activationThreshold": "Activates when favorable excursion reaches 1.5 × ATR",
+      "stopDistanceRule": "Trails at 2.0 × ATR below peak high (LONG) or above peak low (SHORT)",
+      "updateFrequency": "Bar-by-bar dynamic volatility adjustment",
+      "exitRule": "Hit dynamic ATR trailing stop or initial TP",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "BREAKEVEN_ONLY",
+      "label": "Breakeven Only (+0.2 buffer)",
+      "activationThreshold": "Activates when profit reaches max(2.0 pts, 0.5 × initial SL distance)",
+      "stopDistanceRule": "Moves SL to Entry Price + Spread + 0.20 pt friction buffer. No further movement",
+      "updateFrequency": "Single step adjustment",
+      "exitRule": "Hit breakeven buffer or initial Take Profit",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "PROFIT_TRIGGERED",
+      "label": "Profit-Triggered Trail (+1.2 at +2.5)",
+      "activationThreshold": "Activates when favorable price move reaches +2.50 points",
+      "stopDistanceRule": "Locks in +1.20 points of guaranteed profit",
+      "updateFrequency": "Single step adjustment",
+      "exitRule": "Hit profit-locked stop or initial Take Profit",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    },
+    {
+      "variant": "NO_TRAILING",
+      "label": "No Trailing (Fixed TP/SL Baseline)",
+      "activationThreshold": "None (Baseline control)",
+      "stopDistanceRule": "Static initial Stop Loss and initial Take Profit",
+      "updateFrequency": "Static (no update during trade)",
+      "exitRule": "Only exits at initial Stop Loss or initial Take Profit",
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "winRate": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0,
+      "totalTrades": 0,
+      "winningTrades": 0,
+      "losingTrades": 0,
+      "runnerTradesCount": 0,
+      "avgHoldingMinutes": 0
+    }
+  ],
+  "ablationMatrix": [
+    {
+      "id": "ALL_ENABLED",
+      "name": "All 5 Feature Flags Enabled (Optimized Live Bot)",
+      "description": "Baseline benchmark with full confluence, structural stop, confirmation, pattern filter, spread guard, and London/NY session guard",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 12,
+      "signalsRejected": 80,
+      "simulatedTrades": 12,
+      "netProfitDollars": 6.03,
+      "profitFactor": 1.63,
+      "expectancyR": 0.057,
+      "maxDrawdownPercent": 6.14,
+      "winRate": 91.7,
+      "averageTradeDollars": 0.5
+    },
+    {
+      "id": "NO_STRUCTURAL_STOP",
+      "name": "Ablation: Without Structural Stop",
+      "description": "Isolates the effect of dynamic 10-bar swing extreme SL by reverting to static 3.0×ATR stop",
+      "flags": {
+        "structuralStop": false,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 12,
+      "signalsRejected": 80,
+      "simulatedTrades": 12,
+      "netProfitDollars": 6.03,
+      "profitFactor": 1.63,
+      "expectancyR": 0.057,
+      "maxDrawdownPercent": 6.14,
+      "winRate": 91.7,
+      "averageTradeDollars": 0.5
+    },
+    {
+      "id": "NO_ENTRY_CONFIRMATION",
+      "name": "Ablation: Without Entry Confirmation",
+      "description": "Evaluates trading immediately on signal candle close without requiring 2-bar breakout confirmation",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": false,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 32,
+      "signalsRejected": 66,
+      "simulatedTrades": 32,
+      "netProfitDollars": 3.76,
+      "profitFactor": 1.1,
+      "expectancyR": 0.018,
+      "maxDrawdownPercent": 9.95,
+      "winRate": 87.5,
+      "averageTradeDollars": 0.12
+    },
+    {
+      "id": "NO_CONTEXT_PATTERN",
+      "name": "Ablation: Without Context Pattern Filter",
+      "description": "Allows candlestick reversal patterns without requiring Order Block or S/R zone alignment",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": false,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 15,
+      "signalsRejected": 75,
+      "simulatedTrades": 15,
+      "netProfitDollars": 9.03,
+      "profitFactor": 1.95,
+      "expectancyR": 0.067,
+      "maxDrawdownPercent": 6.03,
+      "winRate": 93.3,
+      "averageTradeDollars": 0.6
+    },
+    {
+      "id": "NO_SPREAD_GUARD",
+      "name": "Ablation: Without Spread Friction Guard",
+      "description": "Simulates execution without spread-to-stop loss ratio cap (>8% or >0.60 pts)",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": false,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 12,
+      "signalsRejected": 80,
+      "simulatedTrades": 12,
+      "netProfitDollars": 6.03,
+      "profitFactor": 1.63,
+      "expectancyR": 0.057,
+      "maxDrawdownPercent": 6.14,
+      "winRate": 91.7,
+      "averageTradeDollars": 0.5
+    },
+    {
+      "id": "NO_SESSION_GUARD",
+      "name": "Ablation: Without London/NY Session Guard",
+      "description": "Simulates 24-hour continuous trading including Asian session and rollover hours",
+      "flags": {
+        "structuralStop": true,
+        "entryConfirmation": true,
+        "contextPatternFilter": true,
+        "spreadGuard": true,
+        "sessionFilter": false,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 17,
+      "signalsRejected": 45,
+      "simulatedTrades": 17,
+      "netProfitDollars": 10.33,
+      "profitFactor": 2.09,
+      "expectancyR": 0.068,
+      "maxDrawdownPercent": 6.04,
+      "winRate": 94.1,
+      "averageTradeDollars": 0.61
+    },
+    {
+      "id": "SESSION_SPREAD_ONLY",
+      "name": "Combination: Session + Spread Guard Only",
+      "description": "Lightweight filtering: only executes in London/NY with spread friction guard active",
+      "flags": {
+        "structuralStop": false,
+        "entryConfirmation": false,
+        "contextPatternFilter": false,
+        "spreadGuard": true,
+        "sessionFilter": true,
+        "trailingVariant": "ASYMMETRIC_RUNNER"
+      },
+      "signalsEligible": 35,
+      "signalsRejected": 62,
+      "simulatedTrades": 35,
+      "netProfitDollars": -8.13,
+      "profitFactor": 0.83,
+      "expectancyR": -0.021,
+      "maxDrawdownPercent": 14.64,
+      "winRate": 85.7,
+      "averageTradeDollars": -0.23
+    },
+    {
+      "id": "LEGACY_UNFILTERED",
+      "name": "Legacy Unfiltered Baseline",
+      "description": "All 5 feature flags disabled + fixed TP/SL (no trailing runner logic)",
+      "flags": {
+        "structuralStop": false,
+        "entryConfirmation": false,
+        "contextPatternFilter": false,
+        "spreadGuard": false,
+        "sessionFilter": false,
+        "trailingVariant": "NO_TRAILING"
+      },
+      "signalsEligible": 11,
+      "signalsRejected": 0,
+      "simulatedTrades": 11,
+      "netProfitDollars": -61.75,
+      "profitFactor": 0.28,
+      "expectancyR": -0.591,
+      "maxDrawdownPercent": 41.17,
+      "winRate": 9.1,
+      "averageTradeDollars": -5.61
+    }
+  ],
+  "oosValidation": {
+    "train": {
+      "name": "TRAIN",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "validation": {
+      "name": "VALIDATION",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "test": {
+      "name": "TEST_OOS",
+      "tradeCount": 0,
+      "winRate": 0,
+      "netProfitDollars": 0,
+      "profitFactor": 0,
+      "expectancyR": 0,
+      "maxDrawdownPercent": 0
+    },
+    "flagWarnings": [
+      "Low sample size: Fewer than 20 trades executed; statistical significance is low."
+    ]
+  },
+  "equityCurve": [
+    {
+      "time": "2026-10-14T23:00:00.000Z",
+      "tradeIndex": 0,
+      "balance": 150,
+      "equity": 150,
+      "drawdownDollars": 0,
+      "drawdownPercent": 0
+    }
+  ],
+  "trades": [],
+  "evaluationLogs": [
+    {
+      "id": "EVAL-1",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T11:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.1,
+        "ema9": 4153.98,
+        "ema21": 4151.22,
+        "ema50": 4142.24,
+        "macdHist": -0.687,
+        "atr": 5.72,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-2",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T11:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.1,
+        "ema9": 4152.14,
+        "ema21": 4150.64,
+        "ema50": 4142.34,
+        "macdHist": -1.327,
+        "atr": 5.89,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-3",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T12:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.7,
+        "ema9": 4151.43,
+        "ema21": 4150.45,
+        "ema50": 4142.58,
+        "macdHist": -1.453,
+        "atr": 5.92,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-4",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T12:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 55.3,
+        "ema9": 4151.7,
+        "ema21": 4150.66,
+        "ema50": 4142.98,
+        "macdHist": -1.223,
+        "atr": 5.98,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-5",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T12:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.6,
+        "ema9": 4150.56,
+        "ema21": 4150.24,
+        "ema50": 4143.1,
+        "macdHist": -1.48,
+        "atr": 7.66,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-6",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T12:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.5,
+        "ema9": 4150.81,
+        "ema21": 4150.38,
+        "ema50": 4143.44,
+        "macdHist": -1.219,
+        "atr": 8.04,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-7",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T13:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 58.5,
+        "ema9": 4152.16,
+        "ema21": 4151.03,
+        "ema50": 4144,
+        "macdHist": -0.65,
+        "atr": 8.44,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-8",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T13:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 56.8,
+        "ema9": 4152.94,
+        "ema21": 4151.49,
+        "ema50": 4144.47,
+        "macdHist": -0.379,
+        "atr": 8.87,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-9",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T13:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 57.7,
+        "ema9": 4153.77,
+        "ema21": 4152,
+        "ema50": 4144.96,
+        "macdHist": -0.148,
+        "atr": 9.15,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-10",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T13:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 54.5,
+        "ema9": 4153.9,
+        "ema21": 4152.22,
+        "ema50": 4145.34,
+        "macdHist": -0.184,
+        "atr": 9.13,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-11",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T14:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.9,
+        "ema9": 4152.78,
+        "ema21": 4151.86,
+        "ema50": 4145.45,
+        "macdHist": -0.614,
+        "atr": 9.27,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-12",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T14:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 55.7,
+        "ema9": 4153.52,
+        "ema21": 4152.28,
+        "ema50": 4145.88,
+        "macdHist": -0.347,
+        "atr": 9.82,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-13",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T14:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 55.9,
+        "ema9": 4154.17,
+        "ema21": 4152.69,
+        "ema50": 4146.31,
+        "macdHist": -0.165,
+        "atr": 9.75,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-14",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T14:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 56.7,
+        "ema9": 4154.86,
+        "ema21": 4153.14,
+        "ema50": 4146.75,
+        "macdHist": -0.007,
+        "atr": 9.6,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-15",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T15:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 52.5,
+        "ema9": 4154.7,
+        "ema21": 4153.22,
+        "ema50": 4147.04,
+        "macdHist": -0.153,
+        "atr": 9.53,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-16",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T15:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.2,
+        "ema9": 4154.71,
+        "ema21": 4153.36,
+        "ema50": 4147.34,
+        "macdHist": -0.213,
+        "atr": 9.24,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-17",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T15:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 49.9,
+        "ema9": 4154.14,
+        "ema21": 4153.23,
+        "ema50": 4147.52,
+        "macdHist": -0.44,
+        "atr": 9.13,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-18",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T15:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.3,
+        "ema9": 4153.24,
+        "ema21": 4152.9,
+        "ema50": 4147.6,
+        "macdHist": -0.723,
+        "atr": 8.85,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-19",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T16:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 42.3,
+        "ema9": 4151.54,
+        "ema21": 4152.16,
+        "ema50": 4147.49,
+        "macdHist": -1.188,
+        "atr": 8.69,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-20",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T16:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 49.3,
+        "ema9": 4151.35,
+        "ema21": 4152.02,
+        "ema50": 4147.61,
+        "macdHist": -1.056,
+        "atr": 8.66,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-21",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T16:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.1,
+        "ema9": 4150.78,
+        "ema21": 4151.7,
+        "ema50": 4147.65,
+        "macdHist": -1.064,
+        "atr": 8.32,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-22",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T16:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.9,
+        "ema9": 4150.1,
+        "ema21": 4151.3,
+        "ema50": 4147.64,
+        "macdHist": -1.093,
+        "atr": 8.01,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-23",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T17:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.3,
+        "ema9": 4149.62,
+        "ema21": 4150.98,
+        "ema50": 4147.64,
+        "macdHist": -1.04,
+        "atr": 7.7,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-24",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T17:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.3,
+        "ema9": 4149.38,
+        "ema21": 4150.74,
+        "ema50": 4147.67,
+        "macdHist": -0.911,
+        "atr": 7.56,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-25",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T17:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.5,
+        "ema9": 4150.17,
+        "ema21": 4150.98,
+        "ema50": 4147.89,
+        "macdHist": -0.467,
+        "atr": 7.52,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-26",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T17:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.3,
+        "ema9": 4150.79,
+        "ema21": 4151.19,
+        "ema50": 4148.1,
+        "macdHist": -0.172,
+        "atr": 7.17,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-27",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T18:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 55.5,
+        "ema9": 4151.62,
+        "ema21": 4151.53,
+        "ema50": 4148.37,
+        "macdHist": 0.132,
+        "atr": 7.04,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-28",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T18:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 59,
+        "ema9": 4152.9,
+        "ema21": 4152.12,
+        "ema50": 4148.75,
+        "macdHist": 0.508,
+        "atr": 6.8,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-29",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T18:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 57.6,
+        "ema9": 4153.74,
+        "ema21": 4152.57,
+        "ema50": 4149.08,
+        "macdHist": 0.66,
+        "atr": 6.48,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-30",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T18:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 58.2,
+        "ema9": 4154.52,
+        "ema21": 4153.03,
+        "ema50": 4149.41,
+        "macdHist": 0.749,
+        "atr": 6.17,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-31",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T19:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 62,
+        "ema9": 4155.79,
+        "ema21": 4153.74,
+        "ema50": 4149.86,
+        "macdHist": 0.968,
+        "atr": 5.97,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-32",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T19:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 58.6,
+        "ema9": 4156.42,
+        "ema21": 4154.22,
+        "ema50": 4150.22,
+        "macdHist": 0.927,
+        "atr": 5.8,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-33",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T19:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 69,
+        "ema9": 4159.07,
+        "ema21": 4155.62,
+        "ema50": 4150.98,
+        "macdHist": 1.525,
+        "atr": 6.26,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-34",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T19:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 73,
+        "ema9": 4162.35,
+        "ema21": 4157.42,
+        "ema50": 4151.94,
+        "macdHist": 2.178,
+        "atr": 6.42,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-35",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T20:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 68.9,
+        "ema9": 4164.48,
+        "ema21": 4158.84,
+        "ema50": 4152.77,
+        "macdHist": 2.298,
+        "atr": 6.34,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-36",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T20:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 64.6,
+        "ema9": 4165.62,
+        "ema21": 4159.87,
+        "ema50": 4153.45,
+        "macdHist": 2.054,
+        "atr": 6.21,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-37",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T20:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 64.1,
+        "ema9": 4166.48,
+        "ema21": 4160.79,
+        "ema50": 4154.1,
+        "macdHist": 1.745,
+        "atr": 5.95,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-38",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T20:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 64.9,
+        "ema9": 4167.33,
+        "ema21": 4161.69,
+        "ema50": 4154.75,
+        "macdHist": 1.481,
+        "atr": 5.69,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-39",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T22:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 63.9,
+        "ema9": 4167.9,
+        "ema21": 4162.46,
+        "ema50": 4155.35,
+        "macdHist": 1.169,
+        "atr": 5.5,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-40",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T22:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 59.5,
+        "ema9": 4167.85,
+        "ema21": 4162.93,
+        "ema50": 4155.83,
+        "macdHist": 0.711,
+        "atr": 5.38,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-41",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T22:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 58.1,
+        "ema9": 4167.64,
+        "ema21": 4163.28,
+        "ema50": 4156.26,
+        "macdHist": 0.295,
+        "atr": 5.13,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-42",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T22:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 54.4,
+        "ema9": 4167.02,
+        "ema21": 4163.4,
+        "ema50": 4156.59,
+        "macdHist": -0.164,
+        "atr": 4.98,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-43",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T23:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 53.3,
+        "ema9": 4166.41,
+        "ema21": 4163.45,
+        "ema50": 4156.88,
+        "macdHist": -0.522,
+        "atr": 4.75,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-44",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T23:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 49.9,
+        "ema9": 4165.49,
+        "ema21": 4163.3,
+        "ema50": 4157.07,
+        "macdHist": -0.89,
+        "atr": 4.61,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-45",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T23:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 43.4,
+        "ema9": 4163.85,
+        "ema21": 4162.75,
+        "ema50": 4157.08,
+        "macdHist": -1.403,
+        "atr": 4.69,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-46",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-15T23:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 41.4,
+        "ema9": 4162.22,
+        "ema21": 4162.11,
+        "ema50": 4157.03,
+        "macdHist": -1.783,
+        "atr": 4.58,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-47",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T00:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 40.6,
+        "ema9": 4160.79,
+        "ema21": 4161.47,
+        "ema50": 4156.95,
+        "macdHist": -1.998,
+        "atr": 4.56,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-48",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T00:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 41.1,
+        "ema9": 4159.7,
+        "ema21": 4160.92,
+        "ema50": 4156.89,
+        "macdHist": -2.036,
+        "atr": 4.46,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-49",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T00:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 39.6,
+        "ema9": 4158.62,
+        "ema21": 4160.31,
+        "ema50": 4156.79,
+        "macdHist": -2.038,
+        "atr": 4.47,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-50",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T00:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 43.5,
+        "ema9": 4158.12,
+        "ema21": 4159.93,
+        "ema50": 4156.76,
+        "macdHist": -1.83,
+        "atr": 4.48,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-51",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T01:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 46.7,
+        "ema9": 4158.05,
+        "ema21": 4159.73,
+        "ema50": 4156.8,
+        "macdHist": -1.513,
+        "atr": 4.71,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-52",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T01:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 36.5,
+        "ema9": 4156.51,
+        "ema21": 4158.88,
+        "ema50": 4156.55,
+        "macdHist": -1.712,
+        "atr": 5.1,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-53",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T01:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 36,
+        "ema9": 4155.21,
+        "ema21": 4158.08,
+        "ema50": 4156.29,
+        "macdHist": -1.774,
+        "atr": 5.01,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-54",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T01:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 41.9,
+        "ema9": 4154.76,
+        "ema21": 4157.61,
+        "ema50": 4156.16,
+        "macdHist": -1.531,
+        "atr": 5.14,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-55",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T02:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 47.4,
+        "ema9": 4155.03,
+        "ema21": 4157.47,
+        "ema50": 4156.16,
+        "macdHist": -1.093,
+        "atr": 5.12,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-56",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T02:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.6,
+        "ema9": 4156.38,
+        "ema21": 4157.87,
+        "ema50": 4156.38,
+        "macdHist": -0.393,
+        "atr": 5.4,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-57",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T02:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 56.7,
+        "ema9": 4157.64,
+        "ema21": 4158.31,
+        "ema50": 4156.63,
+        "macdHist": 0.132,
+        "atr": 5.41,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-58",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T02:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 69.2,
+        "ema9": 4161.28,
+        "ema21": 4159.9,
+        "ema50": 4157.38,
+        "macdHist": 1.299,
+        "atr": 6.27,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-59",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T03:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 66.3,
+        "ema9": 4163.81,
+        "ema21": 4161.18,
+        "ema50": 4158.03,
+        "macdHist": 1.847,
+        "atr": 6.16,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-60",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T03:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 60.3,
+        "ema9": 4165.02,
+        "ema21": 4161.96,
+        "ema50": 4158.49,
+        "macdHist": 1.833,
+        "atr": 6.08,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-61",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T03:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.6,
+        "ema9": 4165.28,
+        "ema21": 4162.36,
+        "ema50": 4158.8,
+        "macdHist": 1.498,
+        "atr": 6.17,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-62",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T03:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 68.2,
+        "ema9": 4168.85,
+        "ema21": 4164.25,
+        "ema50": 4159.75,
+        "macdHist": 2.272,
+        "atr": 6.96,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-63",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T04:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 61.1,
+        "ema9": 4170.41,
+        "ema21": 4165.38,
+        "ema50": 4160.42,
+        "macdHist": 2.216,
+        "atr": 7.22,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-64",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T04:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 62.3,
+        "ema9": 4172.03,
+        "ema21": 4166.57,
+        "ema50": 4161.13,
+        "macdHist": 2.163,
+        "atr": 7.12,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-65",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T04:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 58.1,
+        "ema9": 4172.55,
+        "ema21": 4167.3,
+        "ema50": 4161.65,
+        "macdHist": 1.745,
+        "atr": 6.98,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-66",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T04:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 57.9,
+        "ema9": 4172.92,
+        "ema21": 4167.95,
+        "ema50": 4162.15,
+        "macdHist": 1.351,
+        "atr": 6.7,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-67",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T05:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 55.5,
+        "ema9": 4172.78,
+        "ema21": 4168.33,
+        "ema50": 4162.55,
+        "macdHist": 0.865,
+        "atr": 6.66,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-68",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T05:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 54.8,
+        "ema9": 4172.55,
+        "ema21": 4168.64,
+        "ema50": 4162.91,
+        "macdHist": 0.446,
+        "atr": 6.52,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-69",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T05:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 56.5,
+        "ema9": 4172.71,
+        "ema21": 4169.07,
+        "ema50": 4163.32,
+        "macdHist": 0.237,
+        "atr": 6.52,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-70",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T05:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 57.6,
+        "ema9": 4173.08,
+        "ema21": 4169.57,
+        "ema50": 4163.76,
+        "macdHist": 0.137,
+        "atr": 6.53,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-71",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T06:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 51.3,
+        "ema9": 4172.35,
+        "ema21": 4169.55,
+        "ema50": 4163.98,
+        "macdHist": -0.296,
+        "atr": 6.63,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-72",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T06:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 57.5,
+        "ema9": 4173.04,
+        "ema21": 4170.12,
+        "ema50": 4164.44,
+        "macdHist": -0.176,
+        "atr": 6.67,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-73",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T06:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 60.2,
+        "ema9": 4174.21,
+        "ema21": 4170.92,
+        "ema50": 4165.01,
+        "macdHist": 0.072,
+        "atr": 6.61,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-74",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T06:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 57.7,
+        "ema9": 4174.75,
+        "ema21": 4171.46,
+        "ema50": 4165.48,
+        "macdHist": 0.064,
+        "atr": 6.36,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-75",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T07:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 63.5,
+        "ema9": 4176.61,
+        "ema21": 4172.6,
+        "ema50": 4166.2,
+        "macdHist": 0.478,
+        "atr": 6.64,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-76",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T07:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 65.9,
+        "ema9": 4178.76,
+        "ema21": 4173.95,
+        "ema50": 4167.03,
+        "macdHist": 0.892,
+        "atr": 6.52,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-77",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T07:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 61.2,
+        "ema9": 4179.75,
+        "ema21": 4174.83,
+        "ema50": 4167.69,
+        "macdHist": 0.834,
+        "atr": 6.54,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-78",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T07:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 63.4,
+        "ema9": 4181.13,
+        "ema21": 4175.91,
+        "ema50": 4168.43,
+        "macdHist": 0.903,
+        "atr": 6.49,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-79",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T08:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 56.7,
+        "ema9": 4181.11,
+        "ema21": 4176.38,
+        "ema50": 4168.93,
+        "macdHist": 0.503,
+        "atr": 6.58,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-80",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T08:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 59.3,
+        "ema9": 4181.74,
+        "ema21": 4177.09,
+        "ema50": 4169.53,
+        "macdHist": 0.388,
+        "atr": 6.61,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-81",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T08:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 59.7,
+        "ema9": 4182.33,
+        "ema21": 4177.78,
+        "ema50": 4170.12,
+        "macdHist": 0.282,
+        "atr": 6.45,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-82",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T08:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 63,
+        "ema9": 4183.6,
+        "ema21": 4178.77,
+        "ema50": 4170.85,
+        "macdHist": 0.411,
+        "atr": 6.39,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-83",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T09:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.9,
+        "ema9": 4185.1,
+        "ema21": 4179.9,
+        "ema50": 4171.64,
+        "macdHist": 0.585,
+        "atr": 6.33,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-84",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T09:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 54.1,
+        "ema9": 4184.53,
+        "ema21": 4180.11,
+        "ema50": 4172.06,
+        "macdHist": 0.051,
+        "atr": 6.6,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-85",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T09:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 51.7,
+        "ema9": 4183.61,
+        "ema21": 4180.09,
+        "ema50": 4172.37,
+        "macdHist": -0.48,
+        "atr": 6.43,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-86",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T09:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 48.8,
+        "ema9": 4182.28,
+        "ema21": 4179.81,
+        "ema50": 4172.55,
+        "macdHist": -1.02,
+        "atr": 6.39,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-87",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T10:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 53.6,
+        "ema9": 4182.21,
+        "ema21": 4180,
+        "ema50": 4172.92,
+        "macdHist": -1.03,
+        "atr": 6.47,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-88",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T10:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 55.2,
+        "ema9": 4182.51,
+        "ema21": 4180.34,
+        "ema50": 4173.34,
+        "macdHist": -0.907,
+        "atr": 6.28,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-89",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T10:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 52.8,
+        "ema9": 4182.32,
+        "ema21": 4180.45,
+        "ema50": 4173.66,
+        "macdHist": -0.96,
+        "atr": 6.04,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-90",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T10:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.3,
+        "ema9": 4180.66,
+        "ema21": 4179.86,
+        "ema50": 4173.67,
+        "macdHist": -1.457,
+        "atr": 6.22,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-91",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T11:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.8,
+        "ema9": 4179.6,
+        "ema21": 4179.45,
+        "ema50": 4173.74,
+        "macdHist": -1.637,
+        "atr": 6.1,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-92",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T11:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.6,
+        "ema9": 4179.48,
+        "ema21": 4179.41,
+        "ema50": 4173.95,
+        "macdHist": -1.462,
+        "atr": 6.16,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-93",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T11:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 49.4,
+        "ema9": 4179.16,
+        "ema21": 4179.28,
+        "ema50": 4174.1,
+        "macdHist": -1.369,
+        "atr": 5.95,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-94",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T11:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 43.4,
+        "ema9": 4177.68,
+        "ema21": 4178.59,
+        "ema50": 4174.01,
+        "macdHist": -1.655,
+        "atr": 6.03,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-95",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T12:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 46.2,
+        "ema9": 4176.97,
+        "ema21": 4178.18,
+        "ema50": 4174.01,
+        "macdHist": -1.612,
+        "atr": 5.95,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-96",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T12:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 48.1,
+        "ema9": 4176.75,
+        "ema21": 4177.97,
+        "ema50": 4174.09,
+        "macdHist": -1.403,
+        "atr": 6.03,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-97",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T12:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 48,
+        "ema9": 4176.54,
+        "ema21": 4177.77,
+        "ema50": 4174.15,
+        "macdHist": -1.22,
+        "atr": 6.04,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-98",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T12:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 39.3,
+        "ema9": 4174.55,
+        "ema21": 4176.75,
+        "ema50": 4173.85,
+        "macdHist": -1.633,
+        "atr": 6.57,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-99",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T13:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 40.2,
+        "ema9": 4173.09,
+        "ema21": 4175.89,
+        "ema50": 4173.6,
+        "macdHist": -1.765,
+        "atr": 6.47,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-100",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T13:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 34.6,
+        "ema9": 4170.48,
+        "ema21": 4174.45,
+        "ema50": 4173.06,
+        "macdHist": -2.22,
+        "atr": 6.92,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-101",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T13:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 51.7,
+        "ema9": 4171.79,
+        "ema21": 4174.68,
+        "ema50": 4173.22,
+        "macdHist": -1.297,
+        "atr": 8.03,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-102",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T13:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 57.2,
+        "ema9": 4174.39,
+        "ema21": 4175.6,
+        "ema50": 4173.67,
+        "macdHist": -0.147,
+        "atr": 8.65,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-103",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T14:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 59.9,
+        "ema9": 4177.33,
+        "ema21": 4176.83,
+        "ema50": 4174.28,
+        "macdHist": 0.862,
+        "atr": 8.84,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-104",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T14:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 64.3,
+        "ema9": 4181.22,
+        "ema21": 4178.64,
+        "ema50": 4175.16,
+        "macdHist": 1.946,
+        "atr": 8.99,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-105",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T14:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 57,
+        "ema9": 4182.65,
+        "ema21": 4179.53,
+        "ema50": 4175.68,
+        "macdHist": 1.989,
+        "atr": 9.17,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-106",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T14:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 54.5,
+        "ema9": 4183.16,
+        "ema21": 4180.04,
+        "ema50": 4176.05,
+        "macdHist": 1.707,
+        "atr": 8.91,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-107",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T15:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.4,
+        "ema9": 4182.51,
+        "ema21": 4180.03,
+        "ema50": 4176.2,
+        "macdHist": 1.093,
+        "atr": 8.82,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-108",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T15:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.3,
+        "ema9": 4181.09,
+        "ema21": 4179.61,
+        "ema50": 4176.17,
+        "macdHist": 0.357,
+        "atr": 8.75,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-109",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T15:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 45.7,
+        "ema9": 4179.49,
+        "ema21": 4179.02,
+        "ema50": 4176.05,
+        "macdHist": -0.281,
+        "atr": 8.53,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-110",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T15:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 42.2,
+        "ema9": 4177.16,
+        "ema21": 4178,
+        "ema50": 4175.73,
+        "macdHist": -1.011,
+        "atr": 8.52,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-111",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T16:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 42.8,
+        "ema9": 4175.43,
+        "ema21": 4177.14,
+        "ema50": 4175.44,
+        "macdHist": -1.382,
+        "atr": 8.61,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-112",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T16:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 40.5,
+        "ema9": 4173.37,
+        "ema21": 4176.05,
+        "ema50": 4175.04,
+        "macdHist": -1.758,
+        "atr": 8.43,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-113",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T16:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 41.3,
+        "ema9": 4171.89,
+        "ema21": 4175.13,
+        "ema50": 4174.69,
+        "macdHist": -1.85,
+        "atr": 8.4,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-114",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T16:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 38.3,
+        "ema9": 4169.83,
+        "ema21": 4173.9,
+        "ema50": 4174.17,
+        "macdHist": -2.088,
+        "atr": 8.35,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-115",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T17:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 36.1,
+        "ema9": 4167.52,
+        "ema21": 4172.48,
+        "ema50": 4173.55,
+        "macdHist": -2.329,
+        "atr": 8.1,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-116",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T17:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 38.6,
+        "ema9": 4166.1,
+        "ema21": 4171.39,
+        "ema50": 4173.03,
+        "macdHist": -2.204,
+        "atr": 7.88,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-117",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T17:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 43.5,
+        "ema9": 4165.89,
+        "ema21": 4170.81,
+        "ema50": 4172.72,
+        "macdHist": -1.699,
+        "atr": 8.01,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-118",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T17:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 42.2,
+        "ema9": 4165.41,
+        "ema21": 4170.14,
+        "ema50": 4172.36,
+        "macdHist": -1.37,
+        "atr": 7.83,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-119",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T18:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 42.8,
+        "ema9": 4165.11,
+        "ema21": 4169.58,
+        "ema50": 4172.03,
+        "macdHist": -1.037,
+        "atr": 7.67,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-120",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T18:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 38.8,
+        "ema9": 4163.9,
+        "ema21": 4168.62,
+        "ema50": 4171.52,
+        "macdHist": -1.055,
+        "atr": 7.51,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-121",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T18:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 38.5,
+        "ema9": 4162.85,
+        "ema21": 4167.72,
+        "ema50": 4171.02,
+        "macdHist": -1.006,
+        "atr": 7.32,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-122",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T18:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 40.2,
+        "ema9": 4162.28,
+        "ema21": 4167.01,
+        "ema50": 4170.58,
+        "macdHist": -0.806,
+        "atr": 7.1,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-123",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T19:00:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 47.3,
+        "ema9": 4162.99,
+        "ema21": 4166.91,
+        "ema50": 4170.4,
+        "macdHist": -0.227,
+        "atr": 7.13,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-124",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T19:15:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.1,
+        "ema9": 4164.08,
+        "ema21": 4167.04,
+        "ema50": 4170.32,
+        "macdHist": 0.347,
+        "atr": 6.95,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-125",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T19:30:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.4,
+        "ema9": 4165.01,
+        "ema21": 4167.2,
+        "ema50": 4170.26,
+        "macdHist": 0.742,
+        "atr": 6.75,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-126",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T19:45:00.000Z",
+      "timeframe": "15m",
+      "result": "NO_SIGNAL",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "Strategy Confluence Threshold"
+      ],
+      "indicators": {
+        "rsi": 50.3,
+        "ema9": 4165.72,
+        "ema21": 4167.32,
+        "ema50": 4170.19,
+        "macdHist": 0.975,
+        "atr": 6.51,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "No directional signal generated: indicators in neutral/ranging territory",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-127",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T20:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 48.2,
+        "ema9": 4165.96,
+        "ema21": 4167.29,
+        "ema50": 4170.06,
+        "macdHist": 0.996,
+        "atr": 6.23,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-128",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T20:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 50.7,
+        "ema9": 4166.53,
+        "ema21": 4167.42,
+        "ema50": 4170.01,
+        "macdHist": 1.104,
+        "atr": 6.03,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-129",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T20:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 49.6,
+        "ema9": 4166.83,
+        "ema21": 4167.48,
+        "ema50": 4169.93,
+        "macdHist": 1.091,
+        "atr": 5.78,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-130",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-16T20:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 45.4,
+        "ema9": 4166.42,
+        "ema21": 4167.23,
+        "ema50": 4169.73,
+        "macdHist": 0.842,
+        "atr": 5.78,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-131",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T22:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 56.9,
+        "ema9": 4167.97,
+        "ema21": 4167.86,
+        "ema50": 4169.91,
+        "macdHist": 1.265,
+        "atr": 6.75,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-132",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T22:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 59.4,
+        "ema9": 4169.73,
+        "ema21": 4168.67,
+        "ema50": 4170.18,
+        "macdHist": 1.647,
+        "atr": 6.57,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-133",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T22:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 58.9,
+        "ema9": 4171.07,
+        "ema21": 4169.38,
+        "ema50": 4170.42,
+        "macdHist": 1.794,
+        "atr": 6.37,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-134",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T22:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 56.5,
+        "ema9": 4171.82,
+        "ema21": 4169.87,
+        "ema50": 4170.59,
+        "macdHist": 1.699,
+        "atr": 6.12,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-135",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T23:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 57.1,
+        "ema9": 4172.53,
+        "ema21": 4170.37,
+        "ema50": 4170.78,
+        "macdHist": 1.594,
+        "atr": 6.13,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-136",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T23:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 65.4,
+        "ema9": 4174.78,
+        "ema21": 4171.59,
+        "ema50": 4171.29,
+        "macdHist": 1.983,
+        "atr": 6.41,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-137",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T23:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 62.3,
+        "ema9": 4176.17,
+        "ema21": 4172.51,
+        "ema50": 4171.7,
+        "macdHist": 1.994,
+        "atr": 6.32,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-138",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-18T23:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 64.9,
+        "ema9": 4177.87,
+        "ema21": 4173.62,
+        "ema50": 4172.21,
+        "macdHist": 2.077,
+        "atr": 6.28,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-139",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T00:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 59.1,
+        "ema9": 4178.47,
+        "ema21": 4174.28,
+        "ema50": 4172.55,
+        "macdHist": 1.765,
+        "atr": 6.34,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-140",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T00:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 52.2,
+        "ema9": 4177.87,
+        "ema21": 4174.39,
+        "ema50": 4172.66,
+        "macdHist": 1.122,
+        "atr": 6.36,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-141",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T00:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 48.8,
+        "ema9": 4176.82,
+        "ema21": 4174.23,
+        "ema50": 4172.66,
+        "macdHist": 0.459,
+        "atr": 6.3,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-142",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T00:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 50.2,
+        "ema9": 4176.21,
+        "ema21": 4174.18,
+        "ema50": 4172.7,
+        "macdHist": 0.075,
+        "atr": 6.07,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-143",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T01:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 48.2,
+        "ema9": 4175.39,
+        "ema21": 4174,
+        "ema50": 4172.68,
+        "macdHist": -0.292,
+        "atr": 6.51,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-144",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T01:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 42.7,
+        "ema9": 4173.73,
+        "ema21": 4173.37,
+        "ema50": 4172.46,
+        "macdHist": -0.846,
+        "atr": 6.64,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-145",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T01:30:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 48.5,
+        "ema9": 4173.33,
+        "ema21": 4173.22,
+        "ema50": 4172.43,
+        "macdHist": -0.868,
+        "atr": 6.82,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-146",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T01:45:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 51.3,
+        "ema9": 4173.49,
+        "ema21": 4173.3,
+        "ema50": 4172.5,
+        "macdHist": -0.698,
+        "atr": 6.73,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-147",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T02:00:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 58.5,
+        "ema9": 4175.04,
+        "ema21": 4174.02,
+        "ema50": 4172.84,
+        "macdHist": -0.112,
+        "atr": 7.02,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    },
+    {
+      "id": "EVAL-148",
+      "strategyId": "ALPHA_TRADES_SD",
+      "strategyName": "Alpha Trades Supply & Demand Engine",
+      "strategyVersion": "v2.5.0",
+      "candleTimestamp": "2026-10-19T02:15:00.000Z",
+      "timeframe": "15m",
+      "result": "REJECTED",
+      "conditionsSatisfied": [],
+      "conditionsFailed": [
+        "London/NY active market session (07:00-20:00 UTC)"
+      ],
+      "indicators": {
+        "rsi": 47.4,
+        "ema9": 4174.17,
+        "ema21": 4173.72,
+        "ema50": 4172.76,
+        "macdHist": -0.423,
+        "atr": 7.36,
+        "spread": 0.45
+      },
+      "confidenceScore": 0,
+      "rejectionReason": "London/NY Session Guard active: Outside 07:00-20:00 UTC trading window or during Asian/Rollover spread spike",
+      "contributedToFinal": false
+    }
+  ],
+  "testedParams": {
+    "timeframe": "15m",
+    "candleCount": 200,
+    "strategyMode": "ALPHA_TRADES_SD"
+  },
+  "executionCostModel": {
+    "symbol": "GOLD",
+    "contractSize": 100,
+    "pointValueDollars": 100,
+    "spreadPoints": 0.45,
+    "spreadDollarsPerLot": 45,
+    "slippagePoints": 0.08,
+    "slippageDollarsPerLot": 8,
+    "commissionPerLot": 0,
+    "totalRoundTripCostPerLot": 53,
+    "explanation": "Institutional MT5 standard XAUUSD contract: 1 lot = 100 troy oz. 1 point move ($1.00/oz) = $100.00/lot. Spread (0.45 pts) incurs $45.00/lot round-trip. Entry adds slippage ($8.00/lot)."
+  }
+}
