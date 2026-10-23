@@ -624,21 +624,24 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     };
   }
 
-  // ── Feature Session Guard (London & NY only, skip Asian & rollover) ───────
+  // ── Feature Session Guard (London/NY Prime, Asian High-Conviction & Rollover Protection) ───────
   const useSessionFilter = settings.featureSessionFilter !== false;
   const nowUTC = new Date();
   const utcH = nowUTC.getUTCHours();
   const utcM = nowUTC.getUTCMinutes();
   const totalM = utcH * 60 + utcM;
-  const isLondonNYWindow = utcH >= 7 && utcH < 17;
+
+  // Active high-liquidity London (07:00–16:30) & New York (12:30–21:00) window
+  const isLondonNYWindow = utcH >= 7 && utcH < 21;
+
+  // Daily broker rollover settlement window (21:45–22:30 UTC): Spreads spike dramatically
   const isRollover = totalM >= (21 * 60 + 45) && totalM <= (22 * 60 + 30);
-  const isAsian = utcH >= 22 || utcH < 7;
-  const isSessionRestricted = useSessionFilter && (!isLondonNYWindow || isRollover || isAsian);
-  const sessionRestrictionReason = isRollover
-    ? "Rollover (21:45–22:30 UTC)"
-    : isAsian
-    ? "Asian session"
-    : "Off-hours";
+
+  // Asian session: 22:30 UTC to 07:00 UTC
+  const isAsian = !isLondonNYWindow && !isRollover && (utcH >= 22 || utcH < 7);
+
+  // Weekend: Market fully closed
+  const isMarketClosed = !session.marketOpen;
 
   // Uncouple confidence score gating: baseline without arbitrary penalty
   const minConf = effectiveMinConfNormal;
@@ -1789,10 +1792,31 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const sessionNote = `[${session.active}]`;
     let reason: string;
 
-    if (isSessionRestricted) {
+    // Dynamic Session Guard Evaluation
+    let sessionGuardBlocked = false;
+    let sessionGuardReason = "";
+
+    if (useSessionFilter) {
+      if (isMarketClosed) {
+        sessionGuardBlocked = true;
+        sessionGuardReason = "Market Closed for Weekend · Trading resumes Sunday 22:00 UTC";
+      } else if (isRollover) {
+        sessionGuardBlocked = true;
+        sessionGuardReason = "Daily Rollover Spread Guard (21:45–22:30 UTC) · Preserving capital during broker settlement";
+      } else if (isAsian) {
+        const asianMinConf = settings.hermesParameters?.asianSessionMinConfidence ?? 75;
+        // In Asian session, permit trades if confidence meets high conviction threshold (≥ 75%)
+        if (finalSignal !== "HOLD" && confidence < asianMinConf) {
+          sessionGuardBlocked = true;
+          sessionGuardReason = `Asian Session Filter · Requires ≥${asianMinConf}% confidence during lower-liquidity hours (current: ${confidence}%)`;
+        }
+      }
+    }
+
+    if (sessionGuardBlocked) {
       finalSignal = "HOLD";
       confidence = 0;
-      reason = `HOLD – Session Guard: Trading restricted to London & NY (07:00–17:00 UTC) · Inactive during ${sessionRestrictionReason}`;
+      reason = `HOLD – Session Guard: ${sessionGuardReason}`;
     } else if (finalSignal !== "HOLD" && direction !== "HOLD") {
       const parts: string[] = [];
       if      (emaScore >= 35) parts.push(`EMA9/21 ${freshCross ? "CROSSED" : "aligned"}`);
