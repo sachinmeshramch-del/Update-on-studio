@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useGetHistory, useDeleteSignal, useClearHistory } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePriceStream } from "@/hooks/usePriceStream";
 import { useRefreshInterval } from "@/hooks/useRefreshInterval";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -919,6 +920,7 @@ export function HistoryTable() {
       staleTime: refreshInterval > 0 ? Math.min(3000, Math.floor(refreshInterval * 0.7)) : 0,
     } as any,
   });
+  const queryClient = useQueryClient();
   const { data: priceData } = usePriceStream();
   const currentPrice = priceData?.price ?? 0;
 
@@ -944,16 +946,38 @@ export function HistoryTable() {
   }, [typeFilter, period, outcomeFilter, executionFilter, pageSize]);
 
   function handleDelete(id: string) {
+    // Optimistically update React Query cache immediately
+    queryClient.setQueriesData({ queryKey: ["/api/history"] }, (old: any) => {
+      if (!old?.signals) return old;
+      return { ...old, signals: old.signals.filter((s: any) => s.id !== id) };
+    });
     deleteSignal(
       { id },
-      { onSuccess: () => refetch(), onError: () => refetch() }
+      { 
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+          refetch();
+          toast.success("Trade removed from history");
+        }, 
+        onError: () => refetch() 
+      }
     );
   }
 
   function handleClearAll() {
+    // Optimistically empty React Query cache immediately
+    queryClient.setQueriesData({ queryKey: ["/api/history"] }, { signals: [] });
     clearHistory(undefined, {
-      onSuccess: () => { refetch(); setConfirmClear(false); },
-      onError:   () => setConfirmClear(false),
+      onSuccess: () => { 
+        queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+        refetch(); 
+        setConfirmClear(false);
+        toast.success("All trade history permanently cleared");
+      },
+      onError: () => {
+        refetch();
+        setConfirmClear(false);
+      },
     });
   }
 

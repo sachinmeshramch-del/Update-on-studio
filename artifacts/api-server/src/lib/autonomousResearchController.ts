@@ -236,32 +236,6 @@ loadPersistedCampaignState();
 export function discoverExistingStrategies(): DiscoveredStrategy[] {
   return [
     {
-      id: "HERMES_ADAPTIVE",
-      name: "Hermes AI Adaptive Confluence",
-      version: "v2.4.0",
-      category: "PRIMARY_STRATEGY",
-      signalLogicRef: "artifacts/api-server/src/lib/backtestEngine.ts:851 & hermesEngine.ts",
-      supportedTimeframes: ["5m", "15m", "1h"],
-      availableParameters: [
-        { name: "tpRatio", type: "number", min: 1.5, max: 4.0, step: 0.5, default: 2.5, description: "Reward-to-risk ratio target" },
-        { name: "trailingStopVariant", type: "select", options: ["ASYMMETRIC_RUNNER", "FIXED_DISTANCE", "ATR_TRAILING", "BREAKEVEN_ONLY", "PROFIT_TRIGGERED", "NO_TRAILING"], default: "ASYMMETRIC_RUNNER", description: "Exit trailing stop model" },
-        { name: "featureSessionFilter", type: "boolean", default: true, description: "Active London/NY session restriction (07:00-20:00 UTC)" },
-        { name: "featureSpreadGuard", type: "boolean", default: true, description: "Spread filter rejecting spikes > 0.60 pts" },
-      ],
-      requiredWarmup: 50,
-      defaultConfig: {
-        strategyMode: "HERMES_ADAPTIVE",
-        tpRatio: 2.5,
-        trailingStopVariant: "ASYMMETRIC_RUNNER",
-        featureStructuralStop: true,
-        featureEntryConfirmation: true,
-        featureContextPatternFilter: true,
-        featureSpreadGuard: true,
-        featureSessionFilter: true,
-      },
-      validationStatus: "ACTIVE_RESEARCH",
-    },
-    {
       id: "HYBRID_DUAL",
       name: "Optimized Live Bot (Hybrid Dual-Engine Scalper)",
       version: "v2.4.0",
@@ -450,13 +424,13 @@ function generateExperimentPlan(options?: {
       description: "Full production configuration of Optimized Live Bot on current primary timeframe",
     },
     {
-      experimentId: "EXP-STRAT-02-HERMES-ADAPTIVE",
-      strategyId: "HERMES_ADAPTIVE",
-      strategyName: "Hermes AI Adaptive Confluence",
+      experimentId: "EXP-STRAT-02-DETERMINISTIC-ORB",
+      strategyId: "DETERMINISTIC_ORB",
+      strategyName: "Pure Deterministic 3H NY ORB Engine",
       timeframe: primaryTf,
       category: "STRATEGY_COMPARISON",
       params: {
-        strategyMode: "HERMES_ADAPTIVE",
+        strategyMode: "DETERMINISTIC_ORB",
         timeframe: primaryTf,
         candleCount: 800,
         tpRatio: 2.5,
@@ -681,13 +655,13 @@ function generateExperimentPlan(options?: {
       description: "Validation on higher 15-minute timeframe for trend persistence",
     },
     {
-      experimentId: "EXP-TF-15M-HERMES",
-      strategyId: "HERMES_ADAPTIVE",
-      strategyName: "Hermes Adaptive Confluence (15m)",
+      experimentId: "EXP-TF-15M-ORB",
+      strategyId: "DETERMINISTIC_ORB",
+      strategyName: "Deterministic 3H NY ORB (15m)",
       timeframe: "15m",
       category: "STRATEGY_COMPARISON",
       params: {
-        strategyMode: "HERMES_ADAPTIVE",
+        strategyMode: "DETERMINISTIC_ORB",
         timeframe: "15m",
         candleCount: 800,
         tpRatio: 2.5,
@@ -701,7 +675,7 @@ function generateExperimentPlan(options?: {
         slippage: 0.08,
       },
       executionMode: "NORMAL_COST",
-      description: "Hermes Adaptive Confluence on 15m higher timeframe",
+      description: "Deterministic 3H NY ORB on 15m higher timeframe",
     }
   );
 
@@ -731,13 +705,13 @@ function generateExperimentPlan(options?: {
       description: "Execution fragility test: Stressed 0.75 pt spread + 0.18 pt slippage",
     },
     {
-      experimentId: "EXP-STRESS-COST-HERMES",
-      strategyId: "HERMES_ADAPTIVE",
-      strategyName: "Hermes AI Adaptive (Stressed Broker Costs)",
+      experimentId: "EXP-STRESS-COST-ALPHA",
+      strategyId: "ALPHA_TRADES_SD",
+      strategyName: "Alpha Trades S&D (Stressed Broker Costs)",
       timeframe: primaryTf,
       category: "STRESS_TEST",
       params: {
-        strategyMode: "HERMES_ADAPTIVE",
+        strategyMode: "ALPHA_TRADES_SD",
         timeframe: primaryTf,
         candleCount: 800,
         tpRatio: 2.5,

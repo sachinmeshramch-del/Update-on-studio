@@ -210,24 +210,19 @@ export function SettingsDialog() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 overscroll-contain">
-            {/* Auto-Trading Controls */}
-            <div className="flex flex-col gap-2 p-3 sm:p-3.5 bg-muted/40 rounded-xl border border-border/70">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <Label className="font-semibold text-xs sm:text-sm text-red-500 cursor-pointer" htmlFor="auto-trading-real">
-                    Auto Trading (Real)
-                  </Label>
-                  <span className="text-[10px] text-red-500/80 font-medium">Live Execution Enabled</span>
+            {/* Signal-Only Mode Indicator */}
+            <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+                <div>
+                  <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                    Signal-Only Architecture Mode
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Order execution on MT5 is permanently disabled. Signals are generated for analysis only.
+                  </p>
                 </div>
-                <Switch
-                  id="auto-trading-real"
-                  checked={formData.autoTradingRealEnabled ?? false}
-                  onCheckedChange={(c) => handleToggle("autoTradingRealEnabled", c)}
-                />
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                Switches save instantly to database and persist across page reloads.
-              </p>
             </div>
 
 
@@ -324,28 +319,6 @@ export function SettingsDialog() {
                   </div>
                   <p className="text-[10px] text-muted-foreground">
                     100% deterministic rules: 16:00 UTC breakout + EMA50 trend filter + strict 5R target.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, engineMode: "HERMES_ADAPTIVE" })}
-                  className={cn(
-                    "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
-                    formData.engineMode === "HERMES_ADAPTIVE"
-                      ? "bg-amber-500/10 border-amber-500/50 text-foreground"
-                      : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold flex items-center gap-1.5">
-                      <Brain className="w-3.5 h-3.5 text-purple-500" />
-                      Hermes Adaptive Confluence
-                    </span>
-                    {formData.engineMode === "HERMES_ADAPTIVE" && <Check className="w-3.5 h-3.5 text-amber-500" />}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Multi-indicator autonomous self-tuning intraday swing & SMC engine.
                   </p>
                 </button>
               </div>

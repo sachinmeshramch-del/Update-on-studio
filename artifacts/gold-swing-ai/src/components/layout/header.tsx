@@ -178,42 +178,9 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground uppercase">Auto Demo:</span>
-            <button
-              type="button"
-              onClick={() => {
-                const nextVal = !settings?.autoTradingDemoEnabled;
-                toggleMutation.mutate({ autoTradingDemoEnabled: nextVal, autoTradingEnabled: nextVal });
-              }}
-              title="Click to toggle Demo Auto-Trading"
-              className={cn(
-                "font-bold uppercase px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all hover:opacity-80 active:scale-95",
-                settings?.autoTradingDemoEnabled
-                  ? "bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/30 shadow-xs"
-                  : "bg-muted text-muted-foreground/70 border border-border"
-              )}
-            >
-              {settings?.autoTradingDemoEnabled ? "ON" : "OFF"}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground uppercase">Auto Real:</span>
-            <button
-              type="button"
-              onClick={() => {
-                toggleMutation.mutate({ autoTradingRealEnabled: !settings?.autoTradingRealEnabled });
-              }}
-              title="Click to toggle Real Auto-Trading"
-              className={cn(
-                "font-bold uppercase px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all hover:opacity-80 active:scale-95",
-                settings?.autoTradingRealEnabled
-                  ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 shadow-xs"
-                  : "bg-muted text-muted-foreground/70 border border-border"
-              )}
-            >
-              {settings?.autoTradingRealEnabled ? "ON" : "OFF"}
-            </button>
+            <span className="font-bold uppercase px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+              SIGNAL-ONLY
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5">

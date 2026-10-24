@@ -1918,7 +1918,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       candlesMacro,
       session
     );
-    const engineMode = settings?.engineMode || "HYBRID_DUAL";
+    const rawEngineMode = settings?.engineMode as string;
+    const engineMode = (rawEngineMode === "HERMES_ADAPTIVE" ? "HYBRID_DUAL" : rawEngineMode) || "HYBRID_DUAL";
 
     if (engineMode === "ALPHA_TRADES_SD") {
       // 1. PURE ALPHA TRADES SUPPLY & DEMAND STRATEGY MODE:

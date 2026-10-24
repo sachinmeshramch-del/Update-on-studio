@@ -101,10 +101,11 @@ console.error = function (...args) {
         a.includes('failed to restore sticky connection') || 
         a.includes('already running') ||
         a.includes('Cannot subscribe to market data for symbol') ||
+        a.includes('Failed to subscribe') ||
+        a.includes('subscribe timed out') ||
+        a.includes('Please make sure your account is connected') ||
         a.includes('@firebase/firestore') || 
         a.includes('ECONNRESET') ||
-        a.includes('NotFoundError') ||
-        a.includes('does not exist') ||
         a.includes('NotFoundError') ||
         a.includes('does not exist')
     ))) {
@@ -118,9 +119,10 @@ console.error = function (...args) {
         a.message.includes('failed to restore sticky connection') || 
         a.message.includes('already running') ||
         a.message.includes('Cannot subscribe to market data for symbol') ||
+        a.message.includes('Failed to subscribe') ||
+        a.message.includes('subscribe timed out') ||
+        a.message.includes('Please make sure your account is connected') ||
         a.message.includes('ECONNRESET') ||
-        a.message.includes('NotFoundError') ||
-        a.message.includes('does not exist') ||
         a.message.includes('NotFoundError') ||
         a.message.includes('does not exist')
     ))) {
@@ -343,15 +345,22 @@ async function getOrInitRpcConnection(accountId: string) {
 /**
  * Safely subscribe to symbol market data with timeout and broker connection check
  */
-async function subscribeWithTimeout(conn: any, symbol: string, timeoutMs = 8000): Promise<void> {
+async function subscribeWithTimeout(conn: any, symbol: string, timeoutMs = 6000): Promise<void> {
     if (!conn) return;
     if (conn.terminalState && conn.terminalState.connectedToBroker === false) {
-        throw new Error(`Terminal not connected to broker for ${symbol}`);
+        logger.debug({ symbol }, "[MetaApi Feed] Terminal not connected to broker yet, skipping subscribe.");
+        return;
     }
-    await Promise.race([
-        conn.subscribeToMarketData(symbol),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`Subscription timed out after ${timeoutMs}ms for ${symbol}`)), timeoutMs))
-    ]);
+    try {
+        await Promise.race([
+            conn.subscribeToMarketData(symbol).catch((err: any) => {
+                logger.debug({ symbol, err: err?.message || err }, "[MetaApi Feed] Internal subscribeToMarketData caught connection timeout.");
+            }),
+            new Promise((resolve) => setTimeout(resolve, timeoutMs))
+        ]);
+    } catch (e: any) {
+        logger.debug({ symbol, err: e?.message || e }, "[MetaApi Feed] subscribeWithTimeout caught error.");
+    }
 }
 
 /**
@@ -1508,12 +1517,14 @@ export async function safeModifyPositionSLTP(params: {
             );
         } catch (streamErr: any) {
             const errMsg = streamErr?.message || String(streamErr);
-            if (errMsg.includes('POSITION_CLOSED') || errMsg.includes('10004') || errMsg.includes('INVALID_TICKET')) {
+            if (errMsg.includes('POSITION_CLOSED') || errMsg.includes('10004') || errMsg.includes('INVALID_TICKET') || errMsg.includes('Position not found') || errMsg.includes('ERR_NO_POSITION') || errMsg.includes('NO_POSITION')) {
                 markPositionClosing(positionId, "BROKER_REPORTED_CLOSED");
                 liveBrokerPositions.delete(positionId);
                 return { success: false, reason: "POSITION_CLOSED_BY_BROKER" };
+            } else if (errMsg.includes('10025') || errMsg.includes('TRADE_RETCODE_NO_CHANGES') || errMsg.includes('No changes') || errMsg.includes('no modifications')) {
+                return { success: true, reason: "ALREADY_MATCHED", calibratedSL: targetSL, calibratedTP: targetTP };
             } else if (errMsg.includes('Invalid stops') || errMsg.includes('10016') || errMsg.includes('TRADE_RETCODE_INVALID_STOPS')) {
-                logger.info(
+                logger.debug(
                     { positionId, err: errMsg, targetSL, targetTP },
                     "[MetaApi Execution] Broker rejected stop modification due to rapid tick volatility or stopsLevel; deferring update"
                 );
@@ -1536,18 +1547,20 @@ export async function safeModifyPositionSLTP(params: {
             }
         } catch (rpcErr: any) {
             const errMsg = rpcErr?.message || String(rpcErr);
-            if (errMsg.includes('POSITION_CLOSED') || errMsg.includes('10004') || errMsg.includes('INVALID_TICKET')) {
+            if (errMsg.includes('POSITION_CLOSED') || errMsg.includes('10004') || errMsg.includes('INVALID_TICKET') || errMsg.includes('Position not found') || errMsg.includes('ERR_NO_POSITION') || errMsg.includes('NO_POSITION')) {
                 markPositionClosing(positionId, "BROKER_REPORTED_CLOSED");
                 liveBrokerPositions.delete(positionId);
                 return { success: false, reason: "POSITION_CLOSED_BY_BROKER" };
+            } else if (errMsg.includes('10025') || errMsg.includes('TRADE_RETCODE_NO_CHANGES') || errMsg.includes('No changes') || errMsg.includes('no modifications')) {
+                return { success: true, reason: "ALREADY_MATCHED", calibratedSL: targetSL, calibratedTP: targetTP };
             } else if (errMsg.includes('Invalid stops') || errMsg.includes('10016') || errMsg.includes('TRADE_RETCODE_INVALID_STOPS')) {
-                logger.info(
+                logger.debug(
                     { positionId, err: errMsg, targetSL, targetTP },
                     "[MetaApi Execution] Broker rejected stop modification due to rapid tick volatility or stopsLevel; deferring update"
                 );
                 return { success: false, reason: "INVALID_STOPS_REJECTED_BY_BROKER" };
             }
-            logger.warn({ positionId, err: errMsg }, "[MetaApi Execution] Failed to modify position SL/TP via RPC");
+            logger.debug({ positionId, err: errMsg }, "[MetaApi Execution] Position SL/TP modification deferred");
             return { success: false, reason: errMsg };
         }
     }
@@ -1565,28 +1578,20 @@ export async function executeTradeOnAccount(
     intendedEntryPrice?: number,
     signalTimestamp?: number
 ) {
-    if (!token) {
-        throw new Error("META_API_TOKEN is not configured");
-    }
-    if (!accountId || !accountId.trim()) {
-        throw new Error(`MetaApi Account ID is missing in settings`);
-    }
-
-    // ── STRICT SECURITY GUARD: Infallible check against system settings ──
-    const currentSettings = await getSystemSettings().catch(() => null);
-    const isMasterAutoEnabled = currentSettings ? Boolean(currentSettings.autoTradingEnabled) : false;
-    if (!isMasterAutoEnabled) {
-        logger.warn({ accountId, accountType }, "[MetaApi Security Shield] REJECTED execution: Master auto-trading is OFF.");
-        throw new Error("Security Guard: Master auto-trading is OFF in settings.");
-    }
-    if (accountType === "REAL" && (!currentSettings?.autoTradingRealEnabled || currentSettings?.tradingMode !== "REAL")) {
-        logger.warn({ accountId, accountType }, "[MetaApi Security Shield] REJECTED execution: Real auto-trading is disabled.");
-        throw new Error("Security Guard: Real MT5 auto-trading is OFF in settings. Real execution aborted.");
-    }
-    if (accountType === "DEMO" && !currentSettings?.autoTradingDemoEnabled) {
-        logger.warn({ accountId, accountType }, "[MetaApi Security Shield] REJECTED execution: Demo auto-trading is disabled.");
-        throw new Error("Security Guard: Demo MT5 auto-trading is OFF in settings. Demo execution aborted.");
-    }
+    // ── PERMANENT SIGNAL-ONLY SYSTEM SHIELD ──
+    // This application functions strictly as a Signal-Only system. Real broker order execution is permanently disabled.
+    logger.info(
+        { accountId, accountType, direction, stopLoss, takeProfit, volume },
+        "[Signal-Only Shield] Live MT5 order placement permanently disabled. Signal recorded for dashboard analysis only."
+    );
+    return {
+        success: true,
+        executed: false,
+        signalOnly: true,
+        reason: "Signal-Only Mode Active. Broker order placement permanently disabled.",
+        orderId: `sig-only-${Date.now()}`,
+        positionId: `pos-only-${Date.now()}`
+    };
 
     const dispatchStart = Date.now();
     const latencyFromSignal = signalTimestamp ? (dispatchStart - signalTimestamp) : null;
@@ -1881,16 +1886,31 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
             dealsByPos.get(pid)!.push(d);
         }
 
-        const { getRecentSignals, insertSignal, updateTradeStatus } = await import("@workspace/db");
+        const { getRecentSignals, insertSignal, updateTradeStatus, getClearedHistoryTime, getDeletedBrokerPositionIds } = await import("@workspace/db");
         const existingSignals = await getRecentSignals(1000);
+        const clearedHistoryTime = typeof getClearedHistoryTime === "function" ? getClearedHistoryTime() : 0;
+        const deletedBrokerPositionIds = typeof getDeletedBrokerPositionIds === "function" ? getDeletedBrokerPositionIds() : new Set<string>();
         let syncedCount = 0;
 
         for (const [posId, posDeals] of dealsByPos.entries()) {
+            // 1. Skip if user explicitly deleted this specific trade
+            if (deletedBrokerPositionIds.has(String(posId))) {
+                continue;
+            }
+
             const entryDeal = posDeals.find((d: any) => d.entryType === "DEAL_ENTRY_IN" || d.entry === "DEAL_ENTRY_IN") || posDeals[0];
             const exitDeals = posDeals.filter((d: any) => d.entryType === "DEAL_ENTRY_OUT" || d.entry === "DEAL_ENTRY_OUT" || d.entryType === "DEAL_ENTRY_OUT_BY");
             const exitDeal = exitDeals.length > 0 ? exitDeals[exitDeals.length - 1] : null;
 
             if (!entryDeal) continue;
+
+            // 2. Skip if trade occurred before history was cleared by user
+            if (clearedHistoryTime > 0) {
+                const dealTime = exitDeal?.time ? new Date(exitDeal.time).getTime() : new Date(entryDeal.time).getTime();
+                if (dealTime <= clearedHistoryTime) {
+                    continue; // Do not resurrect trades that closed before user cleared history
+                }
+            }
 
             const existing = existingSignals.find(s => s.brokerPositionId && String(s.brokerPositionId) === posId);
 

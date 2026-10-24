@@ -253,34 +253,23 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="p-4 sm:p-6 space-y-6">
-              {/* Auto Trading Switches */}
-              <div className="p-4 bg-muted/30 rounded-xl border border-border/70 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="page-auto-demo" className="font-semibold text-sm cursor-pointer">
-                      Auto Trading (Demo)
-                    </Label>
-                    <p className="text-[11px] text-muted-foreground">Execute simulated trades automatically on signals</p>
+              {/* Signal-Only Mode Indicator */}
+              <div className="p-4 bg-primary/5 rounded-xl border border-primary/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
                   </div>
-                  <Switch
-                    id="page-auto-demo"
-                    checked={formData.autoTradingDemoEnabled ?? false}
-                    onCheckedChange={(c) => handleToggle("autoTradingDemoEnabled", c)}
-                  />
-                </div>
-
-                <div className="pt-3 border-t border-border/50 flex items-center justify-between">
                   <div>
-                    <Label htmlFor="page-auto-real" className="font-semibold text-sm text-red-500 cursor-pointer">
-                      Auto Trading (Real)
-                    </Label>
-                    <p className="text-[11px] text-red-500/80 font-medium">Live capital execution with broker account</p>
+                    <div className="font-semibold text-sm text-foreground flex items-center gap-2">
+                      Signal-Only Architecture Mode
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                        PROTECTED
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Application operates strictly in Signal-Only mode. Real broker order placement is permanently disabled.
+                    </p>
                   </div>
-                  <Switch
-                    id="page-auto-real"
-                    checked={formData.autoTradingRealEnabled ?? false}
-                    onCheckedChange={(c) => handleToggle("autoTradingRealEnabled", c)}
-                  />
                 </div>
               </div>
 
@@ -437,28 +426,6 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       100% deterministic mathematical execution. Fires at 16:00 UTC if price breaks out of the 13:00-15:00 UTC 3-hour window and aligns with EMA50. Strict 5R profit target.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, engineMode: "HERMES_ADAPTIVE" })}
-                    className={cn(
-                      "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
-                      formData.engineMode === "HERMES_ADAPTIVE"
-                        ? "bg-amber-500/10 border-amber-500/50 text-foreground shadow-sm"
-                        : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold flex items-center gap-1.5">
-                        <Brain className="w-3.5 h-3.5 text-purple-500" />
-                        Hermes AI Adaptive Confluence
-                      </span>
-                      {formData.engineMode === "HERMES_ADAPTIVE" && <Check className="w-3.5 h-3.5 text-amber-500" />}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Multi-indicator adaptive confluence engine with autonomous hyper-parameter reflection across sessions and swing reversals.
                     </p>
                   </button>
                 </div>

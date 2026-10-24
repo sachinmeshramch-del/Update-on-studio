@@ -654,8 +654,8 @@ export function AutonomousResearchPanel() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {strategies.map(s => (
-              <div key={s.id} className="p-3.5 rounded-xl bg-black/25 border border-border/80 space-y-2.5">
+            {strategies.map((s, idx) => (
+              <div key={`${s.id}-${idx}`} className="p-3.5 rounded-xl bg-black/25 border border-border/80 space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block font-mono">

@@ -38,23 +38,33 @@ export async function executeTradeWithCapitalManagement(
     passedSettings?: any,
     signalTimestamp?: number
 ) {
-    const settings = passedSettings || (await getSystemSettings());
+    const settings = await getSystemSettings(true).catch(() => passedSettings || null);
+
+    if (!settings) {
+        logger.warn({ accountId, accountType }, "[AutoTrader] Execution BLOCKED: Unable to verify system settings.");
+        return { executed: false, reason: "Unable to verify system settings" };
+    }
+
+    if (settings.tradingState === "PAUSED") {
+        logger.warn({ accountId, accountType }, "[AutoTrader] Execution BLOCKED: Trading state is PAUSED.");
+        return { executed: false, reason: "Trading state is PAUSED in settings" };
+    }
 
     // ── STRICT FAIL-SAFE GUARD: Auto-Trading Enabled Verification ──
-    const isMasterAutoEnabled = settings ? Boolean(settings.autoTradingEnabled) : false;
+    const isMasterAutoEnabled = Boolean(settings.autoTradingEnabled);
     if (!isMasterAutoEnabled) {
         logger.warn({ accountId, accountType }, "[AutoTrader] Execution BLOCKED: Master auto-trading switch is OFF in settings.");
         return { executed: false, reason: "Master auto-trading switch is OFF in settings" };
     }
 
     if (accountType === "REAL") {
-        if (!settings?.autoTradingRealEnabled || settings?.tradingMode !== "REAL") {
+        if (!settings.autoTradingRealEnabled || settings.tradingMode !== "REAL") {
             logger.warn({ accountId }, "[AutoTrader] REAL Execution BLOCKED: autoTradingRealEnabled is FALSE or tradingMode is not REAL.");
             return { executed: false, reason: "Auto-trading on Real MT5 account is DISABLED in settings" };
         }
     } else if (accountType === "DEMO") {
-        if (!settings?.autoTradingDemoEnabled) {
-            logger.warn({ accountId }, "[AutoTrader] DEMO Execution BLOCKED: autoTradingDemoEnabled is FALSE in settings.");
+        if (!settings.autoTradingDemoEnabled || settings.tradingMode !== "DEMO") {
+            logger.warn({ accountId }, "[AutoTrader] DEMO Execution BLOCKED: autoTradingDemoEnabled is FALSE or tradingMode is not DEMO.");
             return { executed: false, reason: "Auto-trading on Demo account is DISABLED in settings" };
         }
     }

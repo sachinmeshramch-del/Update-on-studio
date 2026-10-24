@@ -3,7 +3,6 @@ import { ChartWidget } from "@/components/trading/chart-widget";
 import { SignalPanel } from "@/components/trading/signal-panel";
 import { IndicatorsRow } from "@/components/trading/indicators-row";
 import { HistoryTable } from "@/components/trading/history-table";
-import { HermesCard } from "@/components/trading/hermes-card";
 import { motion } from "framer-motion";
 
 export default function Dashboard() {
@@ -33,15 +32,6 @@ export default function Dashboard() {
             <SignalPanel />
           </motion.div>
         </div>
-
-        {/* Hermes AI Brain Autonomous Reflection Engine */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15 }}
-        >
-          <HermesCard />
-        </motion.div>
 
         {/* Signal History — directly below the signal panel section */}
         <motion.div

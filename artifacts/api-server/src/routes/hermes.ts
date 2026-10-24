@@ -496,9 +496,11 @@ hermesRouter.post("/webhook/tradingview", async (req, res) => {
       `*SL:* ${stopLoss} | *TP:* ${takeProfit}`
     ).catch(() => {});
 
-    // If auto-trading is active, dispatch to MT5 broker
+    // Check master switch + mode switches before dispatching to MT5 broker
     const accountId = settings.tradingMode === "REAL" ? settings.realAccountId : settings.demoAccountId;
-    const isAutoEnabled = settings.tradingMode === "REAL" ? settings.autoTradingRealEnabled : settings.autoTradingDemoEnabled;
+    const isMasterAuto = Boolean(settings.autoTradingEnabled);
+    const isModeAuto = settings.tradingMode === "REAL" ? Boolean(settings.autoTradingRealEnabled) : Boolean(settings.autoTradingDemoEnabled);
+    const isAutoEnabled = isMasterAuto && isModeAuto && settings.tradingState !== "PAUSED";
 
     let executionResult = null;
     if (isAutoEnabled && accountId) {

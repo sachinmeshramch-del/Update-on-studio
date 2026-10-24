@@ -25,6 +25,73 @@ async function withTimeout<T>(promise: Promise<T>, ms = 1500): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+interface HistoryMetaState {
+  clearedHistoryAt: string | null;
+  deletedBrokerPositionIds: string[];
+  isHistoryClearedPermanently: boolean;
+}
+
+function getHistoryMetaFilePath(): string {
+  const candidateDirs = [
+    process.cwd(),
+    path.resolve(process.cwd(), 'artifacts/api-server'),
+    path.resolve(process.cwd(), '..'),
+    path.resolve(process.cwd(), '../..')
+  ];
+  for (const d of candidateDirs) {
+    const p = path.resolve(d, '.history_meta.json');
+    if (fs.existsSync(p)) return p;
+  }
+  return path.resolve(process.cwd(), '.history_meta.json');
+}
+
+let historyMetaState: HistoryMetaState = {
+  clearedHistoryAt: null,
+  deletedBrokerPositionIds: [],
+  isHistoryClearedPermanently: false
+};
+
+function loadHistoryMeta(): void {
+  try {
+    const p = getHistoryMetaFilePath();
+    if (fs.existsSync(p)) {
+      const raw = fs.readFileSync(p, 'utf8');
+      const data = JSON.parse(raw);
+      if (data && typeof data === 'object') {
+        historyMetaState = {
+          clearedHistoryAt: data.clearedHistoryAt || null,
+          deletedBrokerPositionIds: Array.isArray(data.deletedBrokerPositionIds) ? data.deletedBrokerPositionIds : [],
+          isHistoryClearedPermanently: !!data.isHistoryClearedPermanently
+        };
+      }
+    }
+  } catch {}
+}
+
+function saveHistoryMeta(): void {
+  try {
+    const p = getHistoryMetaFilePath();
+    fs.writeFileSync(p, JSON.stringify(historyMetaState, null, 2), 'utf8');
+  } catch (e) {
+    console.warn("[DB] Failed saving history metadata:", e);
+  }
+}
+
+loadHistoryMeta();
+
+export function getClearedHistoryTime(): number {
+  if (!historyMetaState.clearedHistoryAt) return 0;
+  return new Date(historyMetaState.clearedHistoryAt).getTime();
+}
+
+export function getDeletedBrokerPositionIds(): Set<string> {
+  return new Set(historyMetaState.deletedBrokerPositionIds.map(String));
+}
+
+export function isHistoryClearedPermanently(): boolean {
+  return historyMetaState.isHistoryClearedPermanently;
+}
+
 let localSignalsCache: Signal[] = [];
 
 function loadLocalSignals(): void {
@@ -33,7 +100,11 @@ function loadLocalSignals(): void {
     if (fs.existsSync(cacheFile)) {
       const raw = fs.readFileSync(cacheFile, 'utf8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
+        if (parsed.length === 0) {
+          localSignalsCache = [];
+          return;
+        }
         const seenBrokerIds = new Set<string>();
         const deduped: any[] = [];
         for (const item of parsed) {
@@ -122,6 +193,11 @@ export async function getClosedTrades(limitCount: number): Promise<Signal[]> {
 }
 
 export async function insertSignal(signalData: InsertSignal & { createdAt?: Date }): Promise<void> {
+  // STRICT BACKTEST ISOLATION: Backtest results or simulated historical runs MUST NOT be saved into the live history table!
+  if ((signalData as any).isBacktestResult || (signalData as any).executionType === "BACKTEST" || (signalData as any).executionType === "SIMULATED") {
+    return;
+  }
+
   const createdAt = (signalData as any).createdAt ? new Date((signalData as any).createdAt) : new Date();
   const closedAt = (signalData as any).closedAt ? new Date((signalData as any).closedAt) : ((signalData as any).closedAt ?? null);
 
@@ -409,31 +485,36 @@ export async function seedHistoricalTrades(): Promise<number> {
   ];
 
   loadLocalSignals();
-  if (localSignalsCache.length === 0) {
-    localSignalsCache = sampleTrades.map((t, idx) => ({
-      ...t,
-      id: `seed-${idx}-${Date.now()}`
-    } as Signal));
-    saveLocalSignals();
-  }
-
-  return sampleTrades.length;
+  return 0; // Seeding disabled permanently to prevent historical sample trades in live history
 }
 
-// Immediately load cache or seed upon startup
+// Immediately load cache upon startup
 loadLocalSignals();
-if (localSignalsCache.length === 0) {
-  seedHistoricalTrades().catch(() => null);
-}
 
 export async function getRecentSignals(limitCount: number): Promise<Signal[]> {
-  if (localSignalsCache.length === 0) {
-    await seedHistoricalTrades();
-  }
-  return localSignalsCache.slice(0, limitCount);
+  // STRICT PERMANENT ISOLATION: Main Live History Table strictly excludes any simulated seed, backtest, or non-live signal records.
+  const liveSignalsOnly = localSignalsCache.filter(s =>
+    s.executionType !== "SIMULATED" &&
+    s.executionType !== "BACKTEST" &&
+    (s as any).isBacktestResult !== true &&
+    (s as any).isSimulated !== true &&
+    !String(s.id || "").startsWith("seed-") &&
+    !String(s.reason || "").toLowerCase().includes("backtest") &&
+    !String(s.executionReason || "").toLowerCase().includes("backtest")
+  );
+  return liveSignalsOnly.slice(0, limitCount);
 }
 
 export async function deleteSignalById(id: string): Promise<boolean> {
+  const target = localSignalsCache.find(s => s.id === id);
+  if (target?.brokerPositionId) {
+    const pid = String(target.brokerPositionId);
+    if (!historyMetaState.deletedBrokerPositionIds.includes(pid)) {
+      historyMetaState.deletedBrokerPositionIds.push(pid);
+      saveHistoryMeta();
+    }
+  }
+
   const initialLen = localSignalsCache.length;
   localSignalsCache = localSignalsCache.filter(s => s.id !== id);
   if (localSignalsCache.length !== initialLen) {
@@ -445,8 +526,22 @@ export async function deleteSignalById(id: string): Promise<boolean> {
 
 export async function clearAllHistory(): Promise<number> {
   const count = localSignalsCache.length;
+
+  // Collect all brokerPositionIds so broker sync never resurrects them
+  const posIdsToBlacklist = localSignalsCache
+    .map(s => s.brokerPositionId)
+    .filter(Boolean)
+    .map(String);
+
+  const merged = new Set([...historyMetaState.deletedBrokerPositionIds, ...posIdsToBlacklist]);
+  historyMetaState.deletedBrokerPositionIds = Array.from(merged);
+  historyMetaState.clearedHistoryAt = new Date().toISOString();
+  historyMetaState.isHistoryClearedPermanently = true;
+  saveHistoryMeta();
+
   localSignalsCache = [];
   saveLocalSignals();
+
   (async () => {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'signals')), 1500);
@@ -457,6 +552,7 @@ export async function clearAllHistory(): Promise<number> {
       }
     } catch {}
   })().catch(() => null);
+
   return count;
 }
 
@@ -556,15 +652,15 @@ let lastSettingsFetch = 0;
 const SETTINGS_CACHE_TTL = 300_000; // 5 minutes fast memory cache
 
 export const DEFAULT_HERMES_PARAMETERS: HermesParameters = {
-  minConfidenceNormal: 50,
-  minConfidenceStrong: 65,
-  minConfidenceReversal: 60,
-  minConfidenceRange: 55,
+  minConfidenceNormal: 72,
+  minConfidenceStrong: 82,
+  minConfidenceReversal: 78,
+  minConfidenceRange: 75,
   spikeAtrMultiplier: 2.5,
   rsiOversoldThreshold: 30,
   rsiOverboughtThreshold: 70,
-  minAtrFilter: 1.2,
-  asianSessionMinConfidence: 55,
+  minAtrFilter: 1.5,
+  asianSessionMinConfidence: 78,
 };
 
 export async function getSystemSettings(forceRefresh = false): Promise<SystemSettings> {
@@ -586,9 +682,9 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         disableCooldowns: false,
         demoAccountId: '',
         realAccountId: process.env.META_ACCOUNT_ID || '',
-        autoTradingDemoEnabled: true,
-        autoTradingRealEnabled: true,
-        autoTradingEnabled: true,
+        autoTradingDemoEnabled: false,
+        autoTradingRealEnabled: false,
+        autoTradingEnabled: false,
         metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD',
         dashboardPasscode: 'goldswing2024',
         hermesEnabled: true,
@@ -608,7 +704,7 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         featureSpreadGuard: true,
         featureSessionFilter: true,
         tradingState: 'ACTIVE',
-        ...(baselineSettings || {}), // PRESERVES engineMode and all customized settings!
+        ...(baselineSettings || {}),
       };
       cachedSettings = defaultSettings;
       lastSettingsFetch = now;
@@ -626,7 +722,12 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       hermesStrategyVersion: raw.hermesStrategyVersion ?? 'v1.0.0',
       hermesParameters: {
         ...DEFAULT_HERMES_PARAMETERS,
-        ...(raw.hermesParameters || {})
+        ...(raw.hermesParameters || {}),
+        minConfidenceNormal: Math.max(72, raw.hermesParameters?.minConfidenceNormal ?? 72),
+        minConfidenceStrong: Math.max(82, raw.hermesParameters?.minConfidenceStrong ?? 82),
+        minConfidenceReversal: Math.max(78, raw.hermesParameters?.minConfidenceReversal ?? 78),
+        minConfidenceRange: Math.max(75, raw.hermesParameters?.minConfidenceRange ?? 75),
+        asianSessionMinConfidence: Math.max(78, raw.hermesParameters?.asianSessionMinConfidence ?? 78),
       },
       engineMode: raw.engineMode ?? baselineSettings?.engineMode ?? 'HYBRID_DUAL',
       orbRiskPerTrade: raw.orbRiskPerTrade ?? 2.0,
@@ -641,8 +742,30 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       featureSessionFilter: raw.featureSessionFilter ?? true,
       tradingState: raw.tradingState ?? 'ACTIVE',
       ...baselineSettings,
-      ...raw,
+      ...raw, // Raw user preferences in DB MUST override baseline disk defaults
     } as SystemSettings;
+
+    // Enforce high-conviction anti-overtrading confidence thresholds (72%+)
+    if (settings.hermesParameters) {
+      settings.hermesParameters = {
+        ...DEFAULT_HERMES_PARAMETERS,
+        ...settings.hermesParameters,
+        minConfidenceNormal: Math.max(72, settings.hermesParameters.minConfidenceNormal || 72),
+        minConfidenceStrong: Math.max(82, settings.hermesParameters.minConfidenceStrong || 82),
+        minConfidenceReversal: Math.max(78, settings.hermesParameters.minConfidenceReversal || 78),
+        minConfidenceRange: Math.max(75, settings.hermesParameters.minConfidenceRange || 75),
+        asianSessionMinConfidence: Math.max(78, settings.hermesParameters.asianSessionMinConfidence || 78),
+      };
+    }
+
+    // Enforce master switch consistency
+    if (settings.autoTradingEnabled === false) {
+      settings.autoTradingRealEnabled = false;
+      settings.autoTradingDemoEnabled = false;
+    } else if (settings.autoTradingRealEnabled === false && settings.autoTradingDemoEnabled === false) {
+      settings.autoTradingEnabled = false;
+    }
+
     cachedSettings = settings;
     lastSettingsFetch = now;
     saveLocalSettings(settings);
@@ -653,9 +776,9 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       disableCooldowns: false,
       demoAccountId: '',
       realAccountId: process.env.META_ACCOUNT_ID || '',
-      autoTradingDemoEnabled: true,
-      autoTradingRealEnabled: true,
-      autoTradingEnabled: true,
+      autoTradingDemoEnabled: false,
+      autoTradingRealEnabled: false,
+      autoTradingEnabled: false,
       metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD',
       dashboardPasscode: 'goldswing2024',
       hermesEnabled: true,
@@ -675,8 +798,12 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       featureSpreadGuard: true,
       featureSessionFilter: true,
       tradingState: 'ACTIVE',
-      ...(baselineSettings || {}), // PRESERVES user's engineMode!
+      ...(baselineSettings || {}),
     };
+    if (fallbackSettings.autoTradingEnabled === false) {
+      fallbackSettings.autoTradingRealEnabled = false;
+      fallbackSettings.autoTradingDemoEnabled = false;
+    }
     cachedSettings = fallbackSettings;
     lastSettingsFetch = now;
     saveLocalSettings(fallbackSettings);
@@ -689,6 +816,20 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   const id = current.id || 'general';
   
   const updated = { ...current, ...settings };
+
+  // Explicitly keep master switch synchronized with mode switches
+  if (settings.autoTradingEnabled === false) {
+    updated.autoTradingEnabled = false;
+    updated.autoTradingRealEnabled = false;
+    updated.autoTradingDemoEnabled = false;
+  } else if (settings.autoTradingRealEnabled === false && updated.autoTradingDemoEnabled === false) {
+    updated.autoTradingEnabled = false;
+  } else if (settings.autoTradingDemoEnabled === false && updated.autoTradingRealEnabled === false) {
+    updated.autoTradingEnabled = false;
+  } else if (settings.autoTradingRealEnabled === true || settings.autoTradingDemoEnabled === true || settings.autoTradingEnabled === true) {
+    updated.autoTradingEnabled = true;
+  }
+
   delete updated.id; // don't write id into document
   
   cachedSettings = { ...updated, id };

@@ -47,7 +47,7 @@ export interface BacktestParams {
     | "BREAKEVEN_ONLY" // Move to Breakeven (+ spread buffer) once in profit
     | "PROFIT_TRIGGERED" // Profit-triggered trailing stop
     | "NO_TRAILING"; // Fixed initial SL and TP
-  strategyMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD"; // Active strategy engine
+  strategyMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "ALPHA_TRADES_SD"; // Active strategy engine
 }
 
 export interface BacktestTrade {
@@ -340,6 +340,14 @@ function simulateSingleTrade(
     const bar = candles[j];
     exitBarIndex = j;
 
+    // Friday Afternoon Session Close Guard: Close all open positions before weekend (20:30 UTC)
+    const barDate = new Date(bar.time > 1000000000000 ? bar.time : bar.time * 1000);
+    if (barDate.getUTCDay() === 5 && (barDate.getUTCHours() * 60 + barDate.getUTCMinutes()) >= 20 * 60 + 30) {
+      tradeExitPrice = signalDir === "LONG" ? Number((bar.close - spread / 2).toFixed(2)) : Number((bar.close + spread / 2).toFixed(2));
+      exitReason = "TRAILING_STOP";
+      break;
+    }
+
     if (signalDir === "LONG") {
       const bidLow = bar.low - spread / 2;
       const bidHigh = bar.high - spread / 2;
@@ -354,35 +362,41 @@ function simulateSingleTrade(
       }
       peakProfitPoints = Math.max(0, peakFavorablePrice - entryPrice);
 
-      // Trailing stop updates
+      // Trailing stop updates (Calibrated for Gold market breathing room)
       if (trailingVariant === "ASYMMETRIC_RUNNER") {
-        if (!runnerUnlocked && (peakProfitPoints >= tpDist * 0.85 || bidHigh >= initialTakeProfit - 0.30)) {
+        if (!runnerUnlocked && (peakProfitPoints >= tpDist * 0.80 || bidHigh >= initialTakeProfit - 0.50)) {
           runnerUnlocked = true;
-          const runnerExtension = Math.max(tpDist * 4.0, 25.0);
+          const runnerExtension = Math.max(tpDist * 3.5, 25.0);
           currentTakeProfit = Number((entryPrice + runnerExtension).toFixed(2));
         }
-        const breakEvenPrice = Number((entryPrice + spread + 0.20).toFixed(2));
-        const profitLock1pt = Number((entryPrice + 1.00).toFixed(2));
+        const breakEvenPrice = Number((entryPrice + spread + 0.40).toFixed(2));
 
-        if (peakProfitPoints >= 1.30) {
-          currentStopLoss = Math.max(currentStopLoss, profitLock1pt);
-        } else if (peakProfitPoints >= 1.00) {
+        // ── 4-TIER FIXED PROFIT-PROTECTION & ASYMMETRIC RUNNER ──
+        // Tier 1: Capital Protection / Breakeven at +4.50 pts (covers spread + 0.40 pt buffer)
+        // Tier 2: Secured Profit Lock at +6.50 pts (locks +2.50 pts guaranteed profit)
+        // Tier 3: Mid-Runner Lock at +10.0 pts (locks +5.00 pts)
+        // Tier 4: Strong Runner Lock at +15.0 pts (locks +8.50 pts)
+        if (peakProfitPoints >= 15.0) {
+          currentStopLoss = Math.max(currentStopLoss, Number((entryPrice + 8.50).toFixed(2)));
+        } else if (peakProfitPoints >= 10.0) {
+          currentStopLoss = Math.max(currentStopLoss, Number((entryPrice + 5.00).toFixed(2)));
+        } else if (peakProfitPoints >= 6.50) {
+          currentStopLoss = Math.max(currentStopLoss, Number((entryPrice + 2.50).toFixed(2)));
+        } else if (peakProfitPoints >= 4.50) {
           currentStopLoss = Math.max(currentStopLoss, breakEvenPrice);
         }
 
         if (runnerUnlocked) {
-          const minLockedFloor = Number((entryPrice + Math.max(6.00, tpDist * 0.50)).toFixed(2));
+          const minLockedFloor = Number((entryPrice + Math.max(8.00, tpDist * 0.50)).toFixed(2));
           currentStopLoss = Math.max(currentStopLoss, minLockedFloor);
 
-          if (peakProfitPoints >= 38.0) {
-            currentStopLoss = Math.max(currentStopLoss, Number((peakFavorablePrice - 15.0).toFixed(2)));
-          } else if (peakProfitPoints >= 22.0) {
+          if (peakProfitPoints >= 30.0) {
             currentStopLoss = Math.max(currentStopLoss, Number((peakFavorablePrice - 10.0).toFixed(2)));
-          } else if (peakProfitPoints >= 12.0) {
+          } else if (peakProfitPoints >= 18.0) {
             currentStopLoss = Math.max(currentStopLoss, Number((peakFavorablePrice - 7.0).toFixed(2)));
+          } else if (peakProfitPoints >= 12.0) {
+            currentStopLoss = Math.max(currentStopLoss, Number((peakFavorablePrice - 5.0).toFixed(2)));
           }
-        } else if (peakProfitPoints >= 10.0) {
-          currentStopLoss = Math.max(currentStopLoss, Number((entryPrice + peakProfitPoints * 0.5).toFixed(2)));
         }
       } else if (trailingVariant === "FIXED_DISTANCE") {
         if (peakProfitPoints >= 4.0) {
@@ -442,33 +456,39 @@ function simulateSingleTrade(
       peakProfitPoints = Math.max(0, entryPrice - peakFavorablePrice);
 
       if (trailingVariant === "ASYMMETRIC_RUNNER") {
-        if (!runnerUnlocked && (peakProfitPoints >= tpDist * 0.85 || askLow <= initialTakeProfit + 0.30)) {
+        if (!runnerUnlocked && (peakProfitPoints >= tpDist * 0.80 || askLow <= initialTakeProfit + 0.50)) {
           runnerUnlocked = true;
-          const runnerExtension = Math.max(tpDist * 4.0, 25.0);
+          const runnerExtension = Math.max(tpDist * 3.5, 25.0);
           currentTakeProfit = Number((entryPrice - runnerExtension).toFixed(2));
         }
-        const breakEvenPrice = Number((entryPrice - spread - 0.20).toFixed(2));
-        const profitLock1pt = Number((entryPrice - 1.00).toFixed(2));
+        const breakEvenPrice = Number((entryPrice - spread - 0.40).toFixed(2));
 
-        if (peakProfitPoints >= 1.30) {
-          currentStopLoss = Math.min(currentStopLoss, profitLock1pt);
-        } else if (peakProfitPoints >= 1.00) {
+        // ── 4-TIER FIXED PROFIT-PROTECTION & ASYMMETRIC RUNNER ──
+        // Tier 1: Capital Protection / Breakeven at +4.50 pts (covers spread + 0.40 pt buffer)
+        // Tier 2: Secured Profit Lock at +6.50 pts (locks +2.50 pts guaranteed profit)
+        // Tier 3: Mid-Runner Lock at +10.0 pts (locks +5.00 pts)
+        // Tier 4: Strong Runner Lock at +15.0 pts (locks +8.50 pts)
+        if (peakProfitPoints >= 15.0) {
+          currentStopLoss = Math.min(currentStopLoss, Number((entryPrice - 8.50).toFixed(2)));
+        } else if (peakProfitPoints >= 10.0) {
+          currentStopLoss = Math.min(currentStopLoss, Number((entryPrice - 5.00).toFixed(2)));
+        } else if (peakProfitPoints >= 6.50) {
+          currentStopLoss = Math.min(currentStopLoss, Number((entryPrice - 2.50).toFixed(2)));
+        } else if (peakProfitPoints >= 4.50) {
           currentStopLoss = Math.min(currentStopLoss, breakEvenPrice);
         }
 
         if (runnerUnlocked) {
-          const minLockedFloor = Number((entryPrice - Math.max(6.00, tpDist * 0.50)).toFixed(2));
+          const minLockedFloor = Number((entryPrice - Math.max(8.00, tpDist * 0.50)).toFixed(2));
           currentStopLoss = Math.min(currentStopLoss, minLockedFloor);
 
-          if (peakProfitPoints >= 38.0) {
-            currentStopLoss = Math.min(currentStopLoss, Number((peakFavorablePrice + 15.0).toFixed(2)));
-          } else if (peakProfitPoints >= 22.0) {
+          if (peakProfitPoints >= 30.0) {
             currentStopLoss = Math.min(currentStopLoss, Number((peakFavorablePrice + 10.0).toFixed(2)));
-          } else if (peakProfitPoints >= 12.0) {
+          } else if (peakProfitPoints >= 18.0) {
             currentStopLoss = Math.min(currentStopLoss, Number((peakFavorablePrice + 7.0).toFixed(2)));
+          } else if (peakProfitPoints >= 12.0) {
+            currentStopLoss = Math.min(currentStopLoss, Number((peakFavorablePrice + 5.0).toFixed(2)));
           }
-        } else if (peakProfitPoints >= 10.0) {
-          currentStopLoss = Math.min(currentStopLoss, Number((entryPrice - peakProfitPoints * 0.5).toFixed(2)));
         }
       } else if (trailingVariant === "FIXED_DISTANCE") {
         if (peakProfitPoints >= 4.0) {
@@ -649,21 +669,18 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
     lots: number;
   }> = [];
 
-  const strategyMode = params.strategyMode || "HYBRID_DUAL";
+  const rawMode = params.strategyMode as string;
+  const strategyMode = (rawMode === "HERMES_ADAPTIVE" ? "HYBRID_DUAL" : rawMode) || "HYBRID_DUAL";
   const strategyName = strategyMode === "ALPHA_TRADES_SD"
     ? "Alpha Trades Supply & Demand Engine"
     : strategyMode === "DETERMINISTIC_ORB"
     ? "Pure Deterministic NY 3h ORB Engine"
-    : strategyMode === "HERMES_ADAPTIVE"
-    ? "Hermes AI Adaptive Confluence"
     : "Hybrid Dual-Engine Scalper";
 
   const strategyId = strategyMode === "ALPHA_TRADES_SD"
     ? "ALPHA_TRADES_SD"
     : strategyMode === "DETERMINISTIC_ORB"
     ? "DETERMINISTIC_ORB"
-    : strategyMode === "HERMES_ADAPTIVE"
-    ? "SMC_CONFLUENCE"
     : "DUAL_SYNERGY";
   const strategyVersion = "v2.5.0";
 
@@ -781,6 +798,14 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
         i++;
         continue;
       }
+    }
+
+    // 1.5 Price Anomaly & Synthetic Gap Filter:
+    // Reject candles with abnormal gaps (> 25 pts) caused by historical dataset discontinuities
+    const prevBar = candles[i - 1];
+    if (prevBar && (Math.abs(curr.close - prevBar.close) > 25.0 || Math.abs(curr.high - curr.low) > 40.0)) {
+      i++;
+      continue;
     }
 
     if (!atr || atr <= 0.2) {
@@ -927,6 +952,9 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
       }
     } else {
       // HYBRID DUAL-ENGINE SCALPER (Default):
+      const isTrendBullish = lastEma9 > lastEma21 && curr.close > lastEma50;
+      const isTrendBearish = lastEma9 < lastEma21 && curr.close < lastEma50;
+
       const alphaSignal = evaluateAlphaTradesStrategy(
         curr.close,
         spread,
@@ -940,29 +968,31 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
         }
       );
 
+      // Macro Trend Filter: Never take counter-trend Supply & Demand entries
       if (alphaSignal) {
-        signalDir = alphaSignal.signal;
-        patternName = `Alpha Trades ${alphaSignal.zone.type === "DEMAND" ? "Demand" : "Supply"} Zone`;
-        conditionsSatisfiedList = [
-          `Alpha Trades S&D Priority: Institutional ${alphaSignal.zone.type} Zone`,
-          alphaSignal.rejectionWickConfirmed ? "Rejection Pinbar Wick Confirmed" : "Zone Reaction Confirmed",
-          "Dual-Engine Priority Execution",
-        ];
-        contributingStrats = [
-          {
-            strategyId: "ALPHA_TRADES_SD",
-            strategyName: "Alpha Trades Supply & Demand",
-            outcome: signalDir === "LONG" ? "BUY" : "SELL",
-            confidence: alphaSignal.confidence,
-            reason: `Institutional ${alphaSignal.zone.type} setup confluence`,
-          },
-        ];
+        const matchesMacro = alphaSignal.signal === "LONG" ? isTrendBullish : isTrendBearish;
+        if (matchesMacro) {
+          signalDir = alphaSignal.signal;
+          patternName = `Alpha Trades ${alphaSignal.zone.type === "DEMAND" ? "Demand" : "Supply"} Zone`;
+          conditionsSatisfiedList = [
+            `Alpha Trades S&D Priority: Institutional ${alphaSignal.zone.type} Zone`,
+            alphaSignal.rejectionWickConfirmed ? "Rejection Pinbar Wick Confirmed" : "Zone Reaction Confirmed",
+            "Macro Trend Aligned",
+          ];
+          contributingStrats = [
+            {
+              strategyId: "ALPHA_TRADES_SD",
+              strategyName: "Alpha Trades Supply & Demand",
+              outcome: signalDir === "LONG" ? "BUY" : "SELL",
+              confidence: alphaSignal.confidence,
+              reason: `Institutional ${alphaSignal.zone.type} setup confluence aligned with macro trend`,
+            },
+          ];
+        }
       }
 
       const candleResult = detectCandlePattern(currentSlice, atr);
       const orderBlocks = detectOrderBlocks(currentSlice);
-      const isTrendBullish = lastEma9 > lastEma21 && curr.close > lastEma50;
-      const isTrendBearish = lastEma9 < lastEma21 && curr.close < lastEma50;
 
       if (!signalDir) {
         patternName = candleResult.pattern || "Trend Flow";
@@ -1022,31 +1052,32 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
               }
             }
 
-            if (candleResult.pattern === "Bullish Engulfing" || candleResult.pattern === "Hammer") {
-              if (!isTrendBullish && lastEma9 < lastEma21) {
+            // Macro Trend Guard: Never buy below EMA50 in a downtrend, never short above EMA50 in an uptrend
+            if (candleResult.bias === "BULLISH") {
+              if (!isTrendBullish) {
                 rejectionsByFilter.patternFilter++;
                 totalRejectedSignals++;
                 logEvaluation(
                   "REJECTED",
                   [candleResult.pattern],
-                  ["EMA 9/21 Bullish Trend"],
+                  ["Macro EMA50 Bullish Alignment"],
                   45,
-                  "Context Pattern Filter: Bullish reversal pattern rejected against prevailing EMA downtrend",
+                  "Macro Trend Guard: Bullish pattern rejected while market is below EMA50 downtrend",
                   false
                 );
                 i++;
                 continue;
               }
-            } else if (candleResult.pattern === "Bearish Engulfing" || candleResult.pattern === "Shooting Star") {
-              if (!isTrendBearish && lastEma9 > lastEma21) {
+            } else if (candleResult.bias === "BEARISH") {
+              if (!isTrendBearish) {
                 rejectionsByFilter.patternFilter++;
                 totalRejectedSignals++;
                 logEvaluation(
                   "REJECTED",
                   [candleResult.pattern],
-                  ["EMA 9/21 Bearish Trend"],
+                  ["Macro EMA50 Bearish Alignment"],
                   45,
-                  "Context Pattern Filter: Bearish reversal pattern rejected against prevailing EMA uptrend",
+                  "Macro Trend Guard: Bearish pattern rejected while market is above EMA50 uptrend",
                   false
                 );
                 i++;
@@ -1065,29 +1096,29 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
             { strategyId: "CANDLESTICK_CONFLUENCE", strategyName: "Price Action Pattern Engine", outcome: signalDir === "LONG" ? "BUY" : "SELL", confidence: 80, reason: `${candleResult.pattern} detected` },
             { strategyId: "ORDER_BLOCKS", strategyName: "15m Institutional Order Blocks", outcome: signalDir === "LONG" ? "BUY" : "SELL", confidence: 78, reason: "Mitigation zone alignment" },
           ];
-        } else if (isTrendBullish && lastRsi >= 40 && lastRsi <= 64 && lastMacdHist >= -0.2) {
+        } else if (isTrendBullish && curr.close > lastEma50 && curr.low >= (lastEma21 - 2.0) && lastRsi >= 48 && lastRsi <= 64 && lastMacdHist >= 0.05) {
           signalDir = "LONG";
-          patternName = "EMA Trend Follow";
+          patternName = "SMC Trend Alignment";
           conditionsSatisfiedList = [
-            "EMA 9/21/50 Bullish Alignment",
-            `RSI (40-64): ${lastRsi}`,
-            `MACD Hist: ${lastMacdHist}`,
+            "EMA 9/21/50 Bullish Alignment + Dynamic EMA21 Support Retest",
+            `RSI (48-64 Momentum): ${lastRsi}`,
+            `MACD Positive Momentum: +${lastMacdHist}`,
           ];
           contributingStrats = [
-            { strategyId: "EMA_RIBBON", strategyName: "EMA 9/21/50 Alignment", outcome: "BUY", confidence: 82, reason: "Bullish ribbon stack" },
-            { strategyId: "RSI_MOMENTUM", strategyName: "RSI Sweet-Spot Engine", outcome: "BUY", confidence: 78, reason: `RSI ${lastRsi} in bullish zone` },
+            { strategyId: "EMA_RIBBON", strategyName: "EMA 9/21/50 Alignment", outcome: "BUY", confidence: 86, reason: "Bullish ribbon stack with EMA21 support confirmation" },
+            { strategyId: "RSI_MOMENTUM", strategyName: "RSI Momentum Expansion", outcome: "BUY", confidence: 82, reason: `RSI ${lastRsi} expanding in institutional buy zone` },
           ];
-        } else if (isTrendBearish && lastRsi >= 36 && lastRsi <= 60 && lastMacdHist <= 0.2) {
+        } else if (isTrendBearish && curr.close < lastEma50 && curr.high <= (lastEma21 + 2.0) && lastRsi >= 36 && lastRsi <= 52 && lastMacdHist <= -0.05) {
           signalDir = "SHORT";
-          patternName = "EMA Trend Follow";
+          patternName = "SMC Trend Alignment";
           conditionsSatisfiedList = [
-            "EMA 9/21/50 Bearish Alignment",
-            `RSI (36-60): ${lastRsi}`,
-            `MACD Hist: ${lastMacdHist}`,
+            "EMA 9/21/50 Bearish Alignment + Dynamic EMA21 Resistance Retest",
+            `RSI (36-52 Momentum): ${lastRsi}`,
+            `MACD Negative Momentum: ${lastMacdHist}`,
           ];
           contributingStrats = [
-            { strategyId: "EMA_RIBBON", strategyName: "EMA 9/21/50 Alignment", outcome: "SELL", confidence: 82, reason: "Bearish ribbon stack" },
-            { strategyId: "RSI_MOMENTUM", strategyName: "RSI Sweet-Spot Engine", outcome: "SELL", confidence: 78, reason: `RSI ${lastRsi} in bearish zone` },
+            { strategyId: "EMA_RIBBON", strategyName: "EMA 9/21/50 Alignment", outcome: "SELL", confidence: 86, reason: "Bearish ribbon stack with EMA21 resistance confirmation" },
+            { strategyId: "RSI_MOMENTUM", strategyName: "RSI Momentum Expansion", outcome: "SELL", confidence: 82, reason: `RSI ${lastRsi} declining in institutional sell zone` },
           ];
         }
       }

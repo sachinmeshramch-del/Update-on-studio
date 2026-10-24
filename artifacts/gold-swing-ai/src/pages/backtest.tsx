@@ -721,10 +721,9 @@ export default function BacktestPage() {
 
               <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/40 border border-border flex-wrap">
                 {[
-                  { id: "ALPHA_TRADES_SD", label: "Alpha Trades S&D", icon: TrendingUp },
                   { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
                   { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
-                  { id: "HERMES_ADAPTIVE", label: "Adaptive AI", icon: Brain },
+                  { id: "ALPHA_TRADES_SD", label: "Alpha Trades S&D", icon: TrendingUp },
                 ].map((mode) => {
                   const Icon = mode.icon;
                   const isSelected = engineMode === mode.id;
