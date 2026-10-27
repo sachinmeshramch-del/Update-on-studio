@@ -37,7 +37,7 @@ interface Settings {
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
   dashboardPasscode?: string;
-  engineMode?: "ALPHA_TRADES_SD" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+  engineMode?: "ICT_SILVER_BULLET" | "ALPHA_TRADES_SD" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
   orbRiskPerTrade?: number;
   orbTargetMultiple?: number;
   orbStopAtrMultiplier?: number;
@@ -143,10 +143,7 @@ export default function SettingsPage() {
   });
 
   const handleToggle = (key: "autoTradingDemoEnabled" | "autoTradingRealEnabled", checked: boolean) => {
-    const updated = { ...formData, [key]: checked };
-    if (key === "autoTradingDemoEnabled") {
-      updated.autoTradingEnabled = checked;
-    }
+    const updated = { ...formData, [key]: checked, autoTradingEnabled: checked };
     setFormData(updated);
     mutation.mutate(updated);
   };
@@ -358,11 +355,32 @@ export default function SettingsPage() {
                     <span>Engine Architecture & Strategy</span>
                   </div>
                   <span className="text-[11px] font-mono text-amber-500">
-                    {formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
+                    {formData.engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "HYBRID_DUAL" ? "Hybrid Dual-Engine" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, engineMode: "ICT_SILVER_BULLET" })}
+                    className={cn(
+                      "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
+                      formData.engineMode === "ICT_SILVER_BULLET"
+                        ? "bg-amber-500/10 border-amber-500/50 text-foreground shadow-sm"
+                        : "bg-background/50 border-border text-muted-foreground hover:border-border/80"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5" />
+                        ICT Silver Bullet & Liquidity Sweep Strategy
+                      </span>
+                      {formData.engineMode === "ICT_SILVER_BULLET" && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Asian/London liquidity sweep detector + 3-candle Fair Value Gap (FVG) displacement + 1:3.0 Risk-to-Reward ratio.
+                    </p>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, engineMode: "ALPHA_TRADES_SD" })}

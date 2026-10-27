@@ -33,6 +33,7 @@ import {
   type OrbSignalResult
 } from "./deterministicOrbEngine.js";
 import { evaluateAlphaTradesStrategy, type AlphaTradesSignalResult } from "./alphaTradesStrategy.js";
+import { evaluateIctSilverBulletStrategy } from "./ictSilverBulletStrategy.js";
 
 
 
@@ -1038,16 +1039,12 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     const useContextPatternFilter = settings.featureContextPatternFilter !== false;
     if (useContextPatternFilter && candleResult.pattern !== null && candleResult.bias !== null) {
       // 1. Drop Dragonfly Doji and Gravestone Doji from generating standalone signals
-      // Only permit them if price is currently inside a detected 15m Order Block or at Key S/R
+      // Standalone Dojis represent market hesitation with zero displacement on 15m Gold
       const isDoji = candleResult.pattern === "Dragonfly Doji" || candleResult.pattern === "Gravestone Doji";
       if (isDoji) {
-        const inOB = (bullishOB?.inZone || bearishOB?.inZone) ?? false;
-        const atSR = candleResult.confluenceMet || isNearSR(currentPrice, candlesPrimary, atr);
-        if (!inOB && !atSR) {
-          logger.info({ pattern: candleResult.pattern }, "[ContextFilter] Dropping Doji: Not inside Order Block or at Key S/R");
-          candleResult.pattern = null;
-          candleResult.bias = null;
-        }
+        logger.info({ pattern: candleResult.pattern }, "[ContextFilter] Dropping Doji: Indecision bar lacking institutional displacement");
+        candleResult.pattern = null;
+        candleResult.bias = null;
       }
 
       // 2. Require Bullish/Bearish Engulfing and Hammers/Shooting Stars to align with the 15m structural trend (trendPrimary)
@@ -1734,6 +1731,30 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
           suppressionReason = `Filtered by High Spread/Low Volatility (Spread: ${liveSpread.toFixed(2)})`;
         }
       }
+
+      // 3. SMC Dealing Range Premium vs. Discount Rule (ICT 50% Rule)
+      if (finalSignal !== "HOLD" && candlesPrimary && candlesPrimary.length >= 32) {
+        const lookback = candlesPrimary.slice(-32);
+        const rangeHigh = Math.max(...lookback.map(b => b.high));
+        const rangeLow = Math.min(...lookback.map(b => b.low));
+        const swingSpan = rangeHigh - rangeLow;
+        const equilibrium = (rangeHigh + rangeLow) / 2;
+
+        if (swingSpan >= 8.0) {
+          const premiumThreshold = equilibrium + (rangeHigh - equilibrium) * 0.32;
+          const discountThreshold = equilibrium - (equilibrium - rangeLow) * 0.32;
+
+          if (finalSignal === "LONG" && currentPrice > premiumThreshold) {
+            logger.warn({ currentPrice, equilibrium, rangeHigh, premiumThreshold }, "[SMC Dealing Range] LONG suppressed in deep Premium zone");
+            finalSignal = "HOLD";
+            suppressionReason = `SMC Rule: LONG blocked in extreme Premium zone ($${currentPrice.toFixed(2)} > $${premiumThreshold.toFixed(2)}). Waiting for discount pullback.`;
+          } else if (finalSignal === "SHORT" && currentPrice < discountThreshold) {
+            logger.warn({ currentPrice, equilibrium, rangeLow, discountThreshold }, "[SMC Dealing Range] SHORT suppressed in deep Discount zone");
+            finalSignal = "HOLD";
+            suppressionReason = `SMC Rule: SHORT blocked in extreme Discount zone ($${currentPrice.toFixed(2)} < $${discountThreshold.toFixed(2)}). Waiting for premium retrace.`;
+          }
+        }
+      }
     }
 
     // ── SL / TP: Dynamic ATR Stop-Loss Calculator for Gold (Anti-Liquidation Engine) ──
@@ -1797,9 +1818,21 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
     let sessionGuardReason = "";
 
     if (useSessionFilter) {
+      const nowUtc = new Date();
+      const utcH = nowUtc.getUTCHours();
+      const utcM = nowUtc.getUTCMinutes();
+      const utcDay = nowUtc.getUTCDay();
+      const totalMins = utcH * 60 + utcM;
+
       if (isMarketClosed) {
         sessionGuardBlocked = true;
         sessionGuardReason = "Market Closed for Weekend · Trading resumes Sunday 22:00 UTC";
+      } else if (utcDay === 5 && utcH >= 18) {
+        sessionGuardBlocked = true;
+        sessionGuardReason = "Friday Late-Session Cutoff (after 18:00 UTC) · Avoiding weekend holding risk and squaring chop";
+      } else if (totalMins >= 13 * 60 + 15 && totalMins <= 13 * 60 + 45) {
+        sessionGuardBlocked = true;
+        sessionGuardReason = "US Economic News & NY Open Judas Swing Blackout (13:15–13:45 UTC) · Protecting capital from news whipsaws";
       } else if (isRollover) {
         sessionGuardBlocked = true;
         sessionGuardReason = "Daily Rollover Spread Guard (21:45–22:30 UTC) · Preserving capital during broker settlement";
@@ -1918,12 +1951,47 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       candlesMacro,
       session
     );
+    const ictSilverBulletSignal = evaluateIctSilverBulletStrategy(
+      currentPrice,
+      liveSpread,
+      candlesPrimary,
+      candlesMacro,
+      session
+    );
     const rawEngineMode = settings?.engineMode as string;
     const engineMode = (rawEngineMode === "HERMES_ADAPTIVE" ? "HYBRID_DUAL" : rawEngineMode) || "HYBRID_DUAL";
 
-    if (engineMode === "ALPHA_TRADES_SD") {
-      // 1. PURE ALPHA TRADES SUPPLY & DEMAND STRATEGY MODE:
-      // Focuses strictly on 15m/1H Supply and Demand order blocks, trendline breaks, and rejection wicks.
+    if (engineMode === "ICT_SILVER_BULLET") {
+      // 1. PURE ICT SILVER BULLET & LIQUIDITY SWEEP MODE:
+      // Focuses strictly on Asian/London liquidity sweeps, 3-bar FVG displacement, and 1:3 R:R setups.
+      if (ictSilverBulletSignal) {
+        result.signal = ictSilverBulletSignal.signal;
+        result.entryPrice = ictSilverBulletSignal.entryPrice;
+        result.stopLoss = ictSilverBulletSignal.stopLoss;
+        result.takeProfit = ictSilverBulletSignal.takeProfit;
+        result.trend = ictSilverBulletSignal.trend;
+        result.tradeDuration = ictSilverBulletSignal.tradeDuration;
+        result.signalType = "ICT_SILVER_BULLET" as any;
+        result.confidence = ictSilverBulletSignal.confidence;
+        result.signalStrength = "STRONG";
+        result.reason = ictSilverBulletSignal.reason;
+        result.dualEngine = {
+          activeEngine: "ICT_SILVER_BULLET" as any,
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      } else {
+        result.signal = "HOLD";
+        result.confidence = 0;
+        result.reason = `[ICT SILVER BULLET] HOLD – Monitoring Asian/London Liquidity Sweeps [${session.active}] · Awaiting FVG & Displacement Confirmation`;
+        result.dualEngine = {
+          activeEngine: "ICT_SILVER_BULLET" as any,
+          orbStatus,
+          orbRange: orbStatus.currentRange
+        };
+      }
+    } else if (engineMode === "ALPHA_TRADES_SD") {
+      // 2. PURE ALPHA TRADES SUPPLY & DEMAND STRATEGY MODE:
       if (alphaTradesSignal) {
         result.signal = alphaTradesSignal.signal;
         result.entryPrice = alphaTradesSignal.entryPrice;
@@ -1950,18 +2018,8 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
           orbRange: orbStatus.currentRange
         };
       }
-    } else if (engineMode === "HERMES_ADAPTIVE") {
-      // 2. HERMES ADAPTIVE MODE:
-      // Multi-indicator adaptive confluence engine (SMC + EMA ribbons + RSI + MACD + FVG + Order Blocks).
-      // Trades according to dynamic Hermes hyper-parameters without ORB breakout override.
-      result.dualEngine = {
-        activeEngine: "SMC_CONFLUENCE",
-        orbStatus,
-        orbRange: orbStatus.currentRange
-      };
     } else if (engineMode === "DETERMINISTIC_ORB") {
       // 3. PURE DETERMINISTIC ORB MODE:
-      // Strictly fires only when an Opening Range Breakout is active. Outside ORB sessions, holds.
       if (orbSignal) {
         result.signal = orbSignal.signal;
         result.entryPrice = orbSignal.entryPrice;
@@ -1989,8 +2047,9 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
         };
       }
     } else {
-      // 4. HYBRID DUAL-ENGINE MODE (Default / Recommended):
-      // Highest conviction setup priority: Alpha Trades S&D > Deterministic ORB Breakout > SMC Confluence
+      // 4. HYBRID DUAL-ENGINE MODE (Alpha Trades S&D + Deterministic 3h NY ORB Breakout):
+      // Pure Dual-Engine Scalper: Alpha Trades S&D > Deterministic ORB Breakout with SMC Trend Confluence
+      // Note: ICT Silver Bullet is completely isolated into its own dedicated strategy mode (ICT_SILVER_BULLET).
       if (alphaTradesSignal) {
         result.signal = alphaTradesSignal.signal;
         result.entryPrice = alphaTradesSignal.entryPrice;
@@ -2138,4 +2197,12 @@ export function commitSignal(signal: SignalResult) {
 
 export function getLatestCachedSignal(): SignalResult | null {
     return cachedSignal;
+}
+
+export function getLastSignalState(): LastSignalState | null {
+    return lastSignalState;
+}
+
+export function getLastSignalTime(): number {
+    return lastSignalTime;
 }

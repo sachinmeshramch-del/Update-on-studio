@@ -19,8 +19,28 @@ import { resetDailyTradingHalt, getDailyTradingStats } from "../lib/autoTrader.j
 
 router.put("/", async (req, res) => {
   try {
-    const newSettings = req.body;
+    const newSettings = { ...req.body };
     const oldSettings = await getSystemSettings();
+
+    // Strict Bidirectional synchronization of Auto-Trading flags
+    if (newSettings.autoTradingEnabled === false) {
+      newSettings.autoTradingEnabled = false;
+      newSettings.autoTradingRealEnabled = false;
+      newSettings.autoTradingDemoEnabled = false;
+    } else if (newSettings.autoTradingEnabled === true) {
+      newSettings.autoTradingEnabled = true;
+      const mode = newSettings.tradingMode || oldSettings.tradingMode || "REAL";
+      if (mode === "REAL") {
+        newSettings.autoTradingRealEnabled = true;
+      } else {
+        newSettings.autoTradingDemoEnabled = true;
+      }
+    } else if (newSettings.autoTradingRealEnabled === true || newSettings.autoTradingDemoEnabled === true) {
+      newSettings.autoTradingEnabled = true;
+    } else if (newSettings.autoTradingRealEnabled === false && newSettings.autoTradingDemoEnabled === false) {
+      newSettings.autoTradingEnabled = false;
+    }
+
     const settings = await updateSystemSettings(newSettings);
     
     // Always reset any daily trading halt when settings are refreshed/updated

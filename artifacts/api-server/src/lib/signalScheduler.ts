@@ -210,49 +210,46 @@ async function runScheduledSignal(): Promise<void> {
     let brokerPositionId: string | null = null;
     const signalDetectedAt = Date.now();
 
-    // Strict Auto-Trading Gating
-    const isMasterAutoEnabled = settings ? Boolean(settings.autoTradingEnabled) : false;
+    // Unified Auto-Trading Strict Gating
     const currentMode = settings?.tradingMode === "REAL" ? "REAL" : "DEMO";
-    const isRealAutoEnabled = settings ? Boolean(settings.autoTradingRealEnabled) : false;
-    const isDemoAutoEnabled = settings ? Boolean(settings.autoTradingDemoEnabled) : false;
+    const isMasterAuto = Boolean(settings?.autoTradingEnabled);
+    const isModeAuto = currentMode === "REAL"
+      ? Boolean(settings?.autoTradingRealEnabled)
+      : Boolean(settings?.autoTradingDemoEnabled);
+
+    const isTargetAutoEnabled = isMasterAuto && isModeAuto && settings?.tradingState !== "PAUSED";
 
     try {
-      if (isMasterAutoEnabled) {
+      if (isTargetAutoEnabled) {
         if (currentMode === "REAL") {
-          // REAL MODE: Only execute if autoTradingRealEnabled is EXPLICITLY true
-          if (isRealAutoEnabled) {
-            const realId = settings.realAccountId?.trim();
-            if (realId) {
-              logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Dispatching trade to REAL MT5 account...");
-              tradePromises.push(
-                executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
-                  .catch((realErr: any) => {
-                    logger.error({ err: realErr?.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed");
-                    return { executed: false, error: realErr?.message || String(realErr) };
-                  })
-              );
-            } else {
-              logger.warn("[MetaApi Execution] Real Auto-Trading is ON, but Real Account ID is not configured.");
-            }
+          const realId = settings?.realAccountId?.trim();
+          if (realId) {
+            logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: realId }, "[MetaApi Execution] Dispatching trade to REAL MT5 account...");
+            tradePromises.push(
+              executeTradeWithCapitalManagement(realId, "REAL", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
+                .catch((realErr: any) => {
+                  logger.error({ err: realErr?.message || realErr, accountId: realId }, "[MetaApi Execution] REAL trade execution failed");
+                  return { executed: false, error: realErr?.message || String(realErr) };
+                })
+            );
           } else {
-            logger.info("[MetaApi Execution] Real Auto-Trading is OFF (autoTradingRealEnabled is false) — skipping execution.");
+            logger.warn("[MetaApi Execution] Real Auto-Trading is ON, but Real Account ID is not configured.");
           }
         } else {
-          // DEMO MODE: Only execute on demo account, NEVER touch real account
-          if (isDemoAutoEnabled) {
-            const demoId = settings.demoAccountId?.trim();
-            if (demoId) {
-              logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Dispatching trade to DEMO MT5 account...");
-              tradePromises.push(
-                executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
-                  .catch((demoErr: any) => {
-                    logger.error({ err: demoErr?.message || demoErr, accountId: demoId }, "[MetaApi Execution] DEMO trade execution failed");
-                    return { executed: false, error: demoErr?.message || String(demoErr) };
-                  })
-              );
-            }
+          const demoId = settings?.demoAccountId?.trim() || settings?.realAccountId?.trim();
+          if (demoId) {
+            logger.info({ direction: signal.signal, entry: signal.entryPrice, sl: signal.stopLoss, tp: signal.takeProfit, accountId: demoId }, "[MetaApi Execution] Dispatching trade to DEMO MT5 account...");
+            tradePromises.push(
+              executeTradeWithCapitalManagement(demoId, "DEMO", signal.signal, signal.stopLoss, signal.takeProfit, signal.entryPrice, settings, signalDetectedAt)
+                .catch((demoErr: any) => {
+                  logger.error({ err: demoErr?.message || demoErr, accountId: demoId }, "[MetaApi Execution] DEMO trade execution failed");
+                  return { executed: false, error: demoErr?.message || String(demoErr) };
+                })
+            );
           }
         }
+      } else {
+        logger.info({ currentMode }, "[MetaApi Execution] Auto-Trading is OFF for current mode — signal recorded as Signal-Only.");
       }
     } catch (e: any) {
       logger.error({ err: e.message || e }, "Failed to evaluate auto-trade execution");
@@ -280,12 +277,8 @@ async function runScheduledSignal(): Promise<void> {
         }
       }
     } else {
-      if (!isMasterAutoEnabled) {
-        executionReason = "Auto-Trading is globally OFF in Settings (Signal Only).";
-      } else if (currentMode === "REAL" && !isRealAutoEnabled) {
-        executionReason = "Auto-Trading on Real MT5 is OFF in Settings (Signal Only).";
-      } else if (currentMode === "DEMO" && !isDemoAutoEnabled) {
-        executionReason = "Auto-Trading on Demo MT5 is OFF in Settings (Signal Only).";
+      if (!isTargetAutoEnabled) {
+        executionReason = `Auto-Trading is OFF for ${currentMode} mode in Settings (Signal Only).`;
       } else {
         executionReason = "Signal Only — Account ID not configured for execution.";
       }

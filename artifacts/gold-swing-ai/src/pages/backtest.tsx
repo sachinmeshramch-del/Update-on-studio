@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
 import { AutonomousResearchPanel } from "@/components/trading/autonomous-research-panel";
+import { BacktestVisualizer } from "@/components/trading/backtest-visualizer";
 
 interface BacktestSummary {
   totalTrades: number;
@@ -69,6 +70,12 @@ interface BacktestSummary {
   intrabarAmbiguitiesCount?: number;
   strategyMode?: string;
   strategyName?: string;
+  lotSize?: number;
+  lotSizeMode?: "FIXED" | "DYNAMIC_RISK";
+  leverage?: number;
+  avgRequiredMargin?: number;
+  maxMarginUsagePercent?: number;
+  pointValueDollars?: number;
   totalEligibleSignals?: number;
   totalRejectedSignals?: number;
   rejectionsByFilter?: Record<string, number>;
@@ -102,6 +109,10 @@ interface BacktestTrade {
   intrabarAmbiguity?: boolean;
   strategyMode?: string;
   strategyName?: string;
+  lotSize?: number;
+  requiredMargin?: number;
+  marginUsagePercent?: number;
+  leverage?: number;
   strategyId?: string;
   strategyVersion?: string;
   confidenceScore?: number;
@@ -266,6 +277,42 @@ export default function BacktestPage() {
   const [riskPercent, setRiskPercent] = useState<number>(1.0);
   const [spread, setSpread] = useState<number>(0.45);
 
+  // Lot Sizing & Leverage Simulator (Backtesting Engine Only)
+  const [lotSizeMode, setLotSizeMode] = useState<"FIXED" | "DYNAMIC_RISK">(() => {
+    try {
+      return (localStorage.getItem("gold_swing_backtest_lot_mode") as any) || "FIXED";
+    } catch {
+      return "FIXED";
+    }
+  });
+  const [customLotSize, setCustomLotSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("gold_swing_backtest_custom_lot");
+      return saved ? Number(saved) : 0.01;
+    } catch {
+      return 0.01;
+    }
+  });
+  const [leverage, setLeverage] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("gold_swing_backtest_leverage");
+      return saved ? Number(saved) : 1000;
+    } catch {
+      return 1000;
+    }
+  });
+
+  const { data: priceFeed } = useQuery<{ price?: number }>({
+    queryKey: ["priceFeed"],
+    queryFn: () => fetch("/api/price").then(r => r.json()).catch(() => ({ price: 4110 })),
+    staleTime: 5000,
+  });
+  const livePrice = priceFeed?.price || 4110;
+  // Spot Gold required margin formula: (Lots * 100 * Price) / Leverage
+  const estimatedMarginDollars = Number(((customLotSize * 100 * livePrice) / leverage).toFixed(2));
+  const estimatedMarginPercent = initialBalance > 0 ? Number(((estimatedMarginDollars / initialBalance) * 100).toFixed(2)) : 0;
+  const pointValueDollars = Number((customLotSize * 100).toFixed(2));
+
   // Strategy Feature Flags
   const [featureStructuralStop, setFeatureStructuralStop] = useState<boolean>(true);
   const [featureEntryConfirmation, setFeatureEntryConfirmation] = useState<boolean>(true);
@@ -311,7 +358,13 @@ export default function BacktestPage() {
   }, [liveBotMode]);
 
   const strategyDetails = useMemo(() => {
-    if (engineMode === "ALPHA_TRADES_SD") {
+    if (engineMode === "ICT_SILVER_BULLET") {
+      return {
+        name: "Active Strategy: ICT Silver Bullet & Liquidity Sweep Strategy",
+        badge: "ICT Silver Bullet",
+        description: "Asian/London session liquidity sweep detector + 3-bar Fair Value Gap (FVG) displacement + 1:3.0 Risk-to-Reward ratio target with tight structural stops."
+      };
+    } else if (engineMode === "ALPHA_TRADES_SD") {
       return {
         name: "Active Strategy: Alpha Trades Supply & Demand Strategy (@alphatradesss)",
         badge: "Supply & Demand",
@@ -444,6 +497,9 @@ export default function BacktestPage() {
         initialBalance,
         riskPercent,
         spread,
+        lotSizeMode,
+        customLotSize,
+        leverage,
         featureStructuralStop,
         featureEntryConfirmation,
         featureContextPatternFilter,
@@ -460,7 +516,14 @@ export default function BacktestPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(resText);
+      } catch (jsonErr) {
+        throw new Error(`Server returned invalid response (${res.status} ${res.statusText}): ${resText.slice(0, 150)}`);
+      }
+
       if (!res.ok || data.success === false) {
         throw new Error(data.error || "Backtest failed");
       }
@@ -511,10 +574,12 @@ export default function BacktestPage() {
   function exportBacktestCsv() {
     if (!result?.trades || result.trades.length === 0) return;
     const headers = [
-      "TradeId,EntryTime,ExitTime,Direction,Pattern,Session,Regime,EntryPrice,StopLoss,TakeProfit,ExitPrice,PnLPoints,PnLDollars,ROutcome,Outcome,MAEPoints,MFEPoints,DurationMinutes,BalanceAfter,RunnerActivated,ExitReason"
+      "TradeId,EntryTime,ExitTime,Direction,Pattern,Session,Regime,LotSize,Leverage,RequiredMargin,MarginUsagePercent,EntryPrice,StopLoss,TakeProfit,ExitPrice,PnLPoints,PnLDollars,ROutcome,Outcome,MAEPoints,MFEPoints,DurationMinutes,BalanceAfter,RunnerActivated,ExitReason"
     ];
     const rows = result.trades.map(t => [
       t.id, t.entryTime, t.exitTime, t.direction, `"${t.pattern}"`, t.session, t.regime,
+      t.lotSize ?? customLotSize ?? 0.01, t.leverage ?? leverage ?? 1000,
+      t.requiredMargin ?? estimatedMarginDollars, t.marginUsagePercent ?? estimatedMarginPercent,
       t.entryPrice, t.stopLoss, t.takeProfit, t.exitPrice, t.pnlPoints, t.pnlDollars,
       t.rOutcome, t.outcome, t.maePoints, t.mfePoints, t.durationMinutes, t.balanceAfter,
       t.runnerActivated ? "TRUE" : "FALSE", t.exitReason
@@ -693,7 +758,7 @@ export default function BacktestPage() {
                     Backtest Strategy Engine
                   </span>
                   <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/10 border-amber-500/30 text-amber-500">
-                    {engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : engineMode === "HERMES_ADAPTIVE" ? "Hermes Adaptive AI" : "Hybrid Dual-Engine"}
+                    {engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : engineMode === "HERMES_ADAPTIVE" ? "Hermes Adaptive AI" : "Hybrid Dual-Engine"}
                   </Badge>
                   {engineMode === liveBotMode ? (
                     <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -722,6 +787,7 @@ export default function BacktestPage() {
               <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/40 border border-border flex-wrap">
                 {[
                   { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
+                  { id: "ICT_SILVER_BULLET", label: "ICT Silver Bullet", icon: Sparkles },
                   { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
                   { id: "ALPHA_TRADES_SD", label: "Alpha Trades S&D", icon: TrendingUp },
                 ].map((mode) => {
@@ -796,6 +862,248 @@ export default function BacktestPage() {
               </div>
             </div>
 
+            {/* Interactive Lot Sizing & Leverage Simulator Card (Modeled after User's Broker Interface) */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-black/50 via-blue-950/20 to-black/40 border border-blue-500/35 shadow-lg space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Position Sizing & Leverage Simulator
+                  </span>
+                  <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-semibold">
+                    Backtest Engine Only
+                  </Badge>
+                </div>
+
+                {/* Mode Segmented Switcher matching screenshot Quantity vs Lots */}
+                <div className="flex items-center p-1 rounded-xl bg-black/60 border border-border">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLotSizeMode("DYNAMIC_RISK");
+                      localStorage.setItem("gold_swing_backtest_lot_mode", "DYNAMIC_RISK");
+                    }}
+                    className={cn(
+                      "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                      lotSizeMode === "DYNAMIC_RISK"
+                        ? "bg-white text-black shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Quantity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLotSizeMode("FIXED");
+                      localStorage.setItem("gold_swing_backtest_lot_mode", "FIXED");
+                    }}
+                    className={cn(
+                      "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                      lotSizeMode === "FIXED"
+                        ? "bg-white text-black shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Lots
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                {/* Main Interactive Amount Box (Direct visual match to user's uploaded image) */}
+                <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-black/40 border-2 border-blue-400/60 shadow-inner space-y-3.5 relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {lotSizeMode === "FIXED" ? "Amount" : "Risk Quantity"}
+                    </span>
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      XAUUSD Contract: 1.00 Lot = 100 oz (${(livePrice * 100).toLocaleString()})
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    {lotSizeMode === "FIXED" ? (
+                      <>
+                        <div className="flex items-baseline gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            max="50.00"
+                            value={customLotSize}
+                            onChange={(e) => {
+                              const val = Math.max(0.01, Number(e.target.value));
+                              setCustomLotSize(val);
+                              localStorage.setItem("gold_swing_backtest_custom_lot", String(val));
+                            }}
+                            className="text-2xl sm:text-3xl font-bold font-mono text-foreground bg-transparent border-none focus:outline-none w-28"
+                          />
+                          <span className="text-xl sm:text-2xl font-bold text-foreground">Lot(s)</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 p-1 bg-black/60 rounded-xl border border-border/80">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextVal = Math.max(0.01, Number((customLotSize - 0.01).toFixed(2)));
+                              setCustomLotSize(nextVal);
+                              localStorage.setItem("gold_swing_backtest_custom_lot", String(nextVal));
+                            }}
+                            className="w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-foreground font-bold text-lg active:scale-95 transition-all cursor-pointer"
+                            title="Decrease lot size by 0.01"
+                          >
+                            −
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextVal = Number((customLotSize + 0.01).toFixed(2));
+                              setCustomLotSize(nextVal);
+                              localStorage.setItem("gold_swing_backtest_custom_lot", String(nextVal));
+                            }}
+                            className="w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-foreground font-bold text-lg active:scale-95 transition-all cursor-pointer"
+                            title="Increase lot size by 0.01"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-baseline gap-2">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0.1"
+                            max="25.0"
+                            value={riskPercent}
+                            onChange={(e) => setRiskPercent(Math.max(0.1, Number(e.target.value)))}
+                            className="text-2xl sm:text-3xl font-bold font-mono text-foreground bg-transparent border-none focus:outline-none w-28"
+                          />
+                          <span className="text-xl sm:text-2xl font-bold text-foreground">% Risk</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-mono font-bold text-amber-400 block">
+                            ${((initialBalance * riskPercent) / 100).toFixed(2)} Risk per Trade
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            Dynamic lots calculated per structural stop distance
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Required Margin readout and blue progress bar from screenshot */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-foreground/90">
+                        Required Margin <strong className="text-blue-400 font-mono font-bold">${estimatedMarginDollars}</strong>
+                      </span>
+                      <span className="font-mono font-bold text-foreground">
+                        {estimatedMarginPercent}%
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-zinc-800/80 rounded-full h-2 relative overflow-hidden flex items-center">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-300",
+                          estimatedMarginPercent > 50
+                            ? "bg-rose-500"
+                            : estimatedMarginPercent > 25
+                            ? "bg-amber-500"
+                            : "bg-blue-500"
+                        )}
+                        style={{ width: `${Math.min(100, Math.max(2, estimatedMarginPercent))}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Lot Presets */}
+                  {lotSizeMode === "FIXED" && (
+                    <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase mr-1">Presets:</span>
+                      {[0.01, 0.02, 0.05, 0.10, 0.20, 0.50, 1.00].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            setCustomLotSize(preset);
+                            localStorage.setItem("gold_swing_backtest_custom_lot", String(preset));
+                          }}
+                          className={cn(
+                            "px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all cursor-pointer",
+                            customLotSize === preset
+                              ? "bg-blue-500 text-white shadow-sm"
+                              : "bg-black/30 hover:bg-black/60 text-muted-foreground hover:text-foreground border border-border/60"
+                          )}
+                        >
+                          {preset.toFixed(2)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Leverage & Point Value Card */}
+                <div className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-black/35 border border-border/80 space-y-3.5">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground">
+                        Account Leverage
+                      </label>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        Margin Formula: (Lots×100×Price)/Lev
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[100, 200, 500, 1000, 2000].map((lev) => (
+                        <button
+                          key={lev}
+                          type="button"
+                          onClick={() => {
+                            setLeverage(lev);
+                            localStorage.setItem("gold_swing_backtest_leverage", String(lev));
+                          }}
+                          className={cn(
+                            "py-1.5 px-1 rounded-lg text-xs font-mono font-bold transition-all text-center cursor-pointer",
+                            leverage === lev
+                              ? "bg-amber-500 text-black shadow-sm"
+                              : "bg-black/40 hover:bg-black/70 text-muted-foreground hover:text-foreground border border-border/60"
+                          )}
+                        >
+                          1:{lev}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-border/60 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Point Value (1.00 pt move):</span>
+                      <span className="font-mono font-bold text-emerald-400">
+                        ${pointValueDollars} / pt
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Notional Position Value:</span>
+                      <span className="font-mono font-bold text-foreground">
+                        ${(customLotSize * 100 * livePrice).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Spot Gold Price Reference:</span>
+                      <span className="font-mono font-bold text-amber-400">
+                        ${formatPrice(livePrice)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Main Parameters Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               <div>
@@ -807,6 +1115,7 @@ export default function BacktestPage() {
                 >
                   <option value="15m">15m (Primary Intraday Structure)</option>
                   <option value="1h">1h (Macro Trend Anchor)</option>
+                  <option value="4h">4h (Multi-Day Swing Anchor)</option>
                   <option value="5m">5m (Entry Refinement)</option>
                   <option value="1m">1m (Fast Execution)</option>
                 </select>
@@ -819,11 +1128,12 @@ export default function BacktestPage() {
                   onChange={(e) => setCandleCount(Number(e.target.value))}
                   className="w-full bg-black/20 border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:border-amber-500"
                 >
-                  <option value={300}>300 candles (~1 day)</option>
-                  <option value={600}>600 candles (~2 days)</option>
-                  <option value={1000}>1,000 candles (~3.5 days)</option>
-                  <option value={2000}>2,000 candles (~1 week)</option>
-                  <option value={3000}>3,000 candles (Max available)</option>
+                  <option value={1000}>1,000 candles (~2 weeks on 15m)</option>
+                  <option value={2000}>2,000 candles (~1 Month on 15m)</option>
+                  <option value={6000}>6,000 candles (~3 Months on 15m / 12 Mo on 1h)</option>
+                  <option value={12000}>12,000 candles (~6 Months on 15m)</option>
+                  <option value={24000}>24,000 candles (12 Months / 1 Year on 15m)</option>
+                  <option value={30000}>30,000 candles (~15 Months Max)</option>
                 </select>
               </div>
 
@@ -954,7 +1264,21 @@ export default function BacktestPage() {
         {result && (
           <div className="space-y-6">
             {/* KPI Metrics Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+              <Card className="border-border bg-card/60 p-4">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Tested Sizing</span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-mono font-bold text-amber-400">
+                    {result.summary.lotSize != null ? `${result.summary.lotSize} Lot` : "0.01 Lot"}
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-0.5 flex items-center justify-between">
+                  <span>1:{result.summary.leverage || 1000}</span>
+                  <span>•</span>
+                  <span>${result.summary.pointValueDollars ?? (result.summary.lotSize ? result.summary.lotSize * 100 : 1)}/pt</span>
+                </div>
+              </Card>
+
               <Card className="border-border bg-card/60 p-4">
                 <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Win Rate</span>
                 <div className="flex items-baseline gap-1.5 mt-1">
@@ -1065,6 +1389,19 @@ export default function BacktestPage() {
               </div>
             )}
 
+            {/* Interactive Backtest Visualizer Studio (Hero Placement) */}
+            {result.trades.length > 0 && (
+              <BacktestVisualizer
+                initialBalance={result.summary.initialBalance ?? 150}
+                finalBalance={result.summary.finalBalance ?? 0}
+                trades={result.trades as any}
+                equityCurve={result.equityCurve as any}
+                summary={result.summary as any}
+                sessionBreakdown={result.sessionBreakdown}
+                monthlyBreakdown={result.monthlyBreakdown}
+              />
+            )}
+
             {/* Navigation Tabs for Views */}
             <div className="flex items-center justify-between border-b border-border pb-2 gap-2 flex-wrap">
               <div className="flex items-center gap-1 flex-wrap">
@@ -1075,7 +1412,7 @@ export default function BacktestPage() {
                   { id: "EVAL_LOG", label: `Evaluation Log (${result.evaluationLogs?.length || 0})`, icon: Activity },
                   { id: "ABLATION", label: "Filter Ablation Matrix (8 Scenarios)", icon: Filter },
                   { id: "VARIANTS", label: "Fair Trailing Comparison (6 Modes)", icon: Sliders },
-                  { id: "EQUITY", label: "Equity & Drawdown Curves", icon: TrendingUp },
+                  { id: "EQUITY", label: "Equity & Drawdown Visualizer", icon: TrendingUp },
                   { id: "VALIDATION", label: "OOS Split (60/20/20)", icon: ShieldCheck },
                   { id: "MONTHLY", label: `Monthly Results (${result.monthlyBreakdown?.length || 0})`, icon: Calendar },
                   { id: "COST_MODEL", label: "Spread & Cost Model", icon: Info },
@@ -1156,6 +1493,7 @@ export default function BacktestPage() {
                         <th className="p-3">SL</th>
                         <th className="p-3">TP</th>
                         <th className="p-3">Exit</th>
+                        <th className="p-3 text-right">Size / Margin</th>
                         <th className="p-3 text-right">PnL (pts)</th>
                         <th className="p-3 text-right">PnL ($)</th>
                         <th className="p-3 text-right">R</th>
@@ -1195,6 +1533,15 @@ export default function BacktestPage() {
                           <td className="p-3 text-rose-400">{formatPrice(t.stopLoss)}</td>
                           <td className="p-3 text-emerald-400">{formatPrice(t.takeProfit)}</td>
                           <td className="p-3 text-foreground">{formatPrice(t.exitPrice)}</td>
+                          <td className="p-3 text-right font-mono">
+                            <div className="font-bold text-foreground">
+                              {t.lotSize != null ? `${t.lotSize.toFixed(2)} Lot` : "0.01 Lot"}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {t.requiredMargin != null ? `$${t.requiredMargin.toFixed(2)}` : "--"}
+                              {t.marginUsagePercent != null ? ` (${t.marginUsagePercent.toFixed(1)}%)` : ""}
+                            </div>
+                          </td>
                           <td className={`p-3 text-right font-bold ${t.pnlPoints >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                             {t.pnlPoints >= 0 ? "+" : ""}{t.pnlPoints.toFixed(2)}
                           </td>
@@ -1608,74 +1955,17 @@ export default function BacktestPage() {
               </div>
             )}
 
-            {/* Tab 6: Dual Charts (Equity Progression + Underwater Drawdown) */}
-            {activeTab === "EQUITY" && svgChart && (
-              <div className="space-y-4">
-                <Card className="border-border bg-card/60 p-5 overflow-hidden">
-                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-foreground">Account Equity Progression ($)</h3>
-                      <p className="text-xs text-muted-foreground">Chronological balance progression across simulated historical trades</p>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs font-mono">
-                      <div>
-                        <span className="text-muted-foreground">Start: </span>
-                        <span className="font-bold text-foreground">${Number(result.summary.initialBalance ?? 150).toLocaleString()}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">End: </span>
-                        <span className={`font-bold ${(result.summary.finalBalance ?? 0) >= (result.summary.initialBalance ?? 0) ? "text-emerald-400" : "text-rose-400"}`}>
-                          ${Number(result.summary.finalBalance ?? 0).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox={`0 0 ${svgChart.width} ${svgChart.height}`} className="w-full h-56 overflow-visible">
-                      <line x1="20" y1="20" x2="780" y2="20" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4" />
-                      <line x1="20" y1="120" x2="780" y2="120" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4" />
-                      <line x1="20" y1="220" x2="780" y2="220" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4" />
-                      <polyline
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="2.5"
-                        points={svgChart.points}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </Card>
-
-                <Card className="border-border bg-card/60 p-5 overflow-hidden">
-                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-foreground">Underwater Drawdown Chart (% From Peak)</h3>
-                      <p className="text-xs text-muted-foreground">Historical equity dip from all-time highs during backtesting</p>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs font-mono">
-                      <span className="text-muted-foreground">Maximum Drawdown:</span>
-                      <span className="font-bold text-rose-400">-{result.summary.maxDrawdownPercent}% (-${result.summary.maxDrawdownDollars})</span>
-                    </div>
-                  </div>
-
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox={`0 0 ${svgChart.width} ${svgChart.height}`} className="w-full h-44 overflow-visible">
-                      <line x1="20" y1="20" x2="780" y2="20" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.4" />
-                      <line x1="20" y1="120" x2="780" y2="120" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4" />
-                      <polyline
-                        fill="none"
-                        stroke="#f43f5e"
-                        strokeWidth="2.5"
-                        points={svgChart.ddPoints}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </Card>
-              </div>
+            {/* Tab 6: Interactive Backtest Visualizer (Equity Curve, Replay, Distribution, Inspector) */}
+            {activeTab === "EQUITY" && (
+              <BacktestVisualizer
+                initialBalance={result.summary.initialBalance ?? 150}
+                finalBalance={result.summary.finalBalance ?? 0}
+                trades={result.trades as any}
+                equityCurve={result.equityCurve as any}
+                summary={result.summary as any}
+                sessionBreakdown={result.sessionBreakdown}
+                monthlyBreakdown={result.monthlyBreakdown}
+              />
             )}
 
             {/* Tab 7: Out-of-Sample (OOS) Validation */}
@@ -2029,6 +2319,25 @@ export default function BacktestPage() {
                       <div className="bg-black/20 p-2.5 rounded-lg border border-border">
                         <span className="text-[10px] text-muted-foreground block font-sans">Take Profit</span>
                         <span className="font-bold text-emerald-400">{formatPrice(selectedTrade.takeProfit)}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2 font-mono text-xs">
+                      <div className="bg-black/20 p-2.5 rounded-lg border border-border">
+                        <span className="text-[10px] text-muted-foreground block font-sans">Tested Lot</span>
+                        <span className="font-bold text-amber-400">{selectedTrade.lotSize != null ? `${selectedTrade.lotSize} Lot` : "0.01 Lot"}</span>
+                      </div>
+                      <div className="bg-black/20 p-2.5 rounded-lg border border-border">
+                        <span className="text-[10px] text-muted-foreground block font-sans">Leverage</span>
+                        <span className="font-bold text-foreground">1:{selectedTrade.leverage || 1000}</span>
+                      </div>
+                      <div className="bg-black/20 p-2.5 rounded-lg border border-border">
+                        <span className="text-[10px] text-muted-foreground block font-sans">Req. Margin</span>
+                        <span className="font-bold text-foreground">{selectedTrade.requiredMargin != null ? `$${selectedTrade.requiredMargin.toFixed(2)}` : "--"}</span>
+                      </div>
+                      <div className="bg-black/20 p-2.5 rounded-lg border border-border">
+                        <span className="text-[10px] text-muted-foreground block font-sans">Margin Usage</span>
+                        <span className="font-bold text-sky-400">{selectedTrade.marginUsagePercent != null ? `${selectedTrade.marginUsagePercent.toFixed(2)}%` : "--"}</span>
                       </div>
                     </div>
 

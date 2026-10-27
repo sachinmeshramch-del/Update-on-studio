@@ -397,8 +397,8 @@ hermesRouter.get("/orb-state", async (req, res) => {
 hermesRouter.post("/set-engine-mode", async (req, res) => {
   try {
     const { engineMode } = req.body;
-    if (!["HYBRID_DUAL", "DETERMINISTIC_ORB", "HERMES_ADAPTIVE", "ALPHA_TRADES_SD"].includes(engineMode)) {
-      return res.status(400).json({ error: "Invalid engineMode. Must be HYBRID_DUAL, DETERMINISTIC_ORB, HERMES_ADAPTIVE, or ALPHA_TRADES_SD." });
+    if (!["HYBRID_DUAL", "DETERMINISTIC_ORB", "HERMES_ADAPTIVE", "ALPHA_TRADES_SD", "ICT_SILVER_BULLET"].includes(engineMode)) {
+      return res.status(400).json({ error: "Invalid engineMode. Must be HYBRID_DUAL, DETERMINISTIC_ORB, HERMES_ADAPTIVE, ALPHA_TRADES_SD, or ICT_SILVER_BULLET." });
     }
     const { updateSystemSettings } = await import("@workspace/db");
     const updated = await updateSystemSettings({ engineMode });

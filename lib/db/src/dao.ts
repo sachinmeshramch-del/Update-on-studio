@@ -4,13 +4,17 @@ import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, dele
 import fs from 'fs';
 import path from 'path';
 
-function getSignalsCacheFilePath(): string {
-  const possiblePaths = [
+function getAllSignalsCacheFilePaths(): string[] {
+  return Array.from(new Set([
     path.resolve(process.cwd(), '.signals_cache.json'),
     path.resolve(process.cwd(), 'artifacts/api-server', '.signals_cache.json'),
     path.resolve('/app/applet/artifacts/api-server', '.signals_cache.json'),
     path.resolve('/app/applet', '.signals_cache.json'),
-  ];
+  ]));
+}
+
+function getSignalsCacheFilePath(): string {
+  const possiblePaths = getAllSignalsCacheFilePaths();
   for (const p of possiblePaths) {
     if (fs.existsSync(p)) return p;
   }
@@ -92,37 +96,72 @@ export function isHistoryClearedPermanently(): boolean {
   return historyMetaState.isHistoryClearedPermanently;
 }
 
+export function resetClearedHistoryMeta(): void {
+  historyMetaState.clearedHistoryAt = null;
+  historyMetaState.deletedBrokerPositionIds = [];
+  historyMetaState.isHistoryClearedPermanently = false;
+  saveHistoryMeta();
+}
+
 let localSignalsCache: Signal[] = [];
+let isFirestoreSignalsLoaded = false;
+let isFirestoreLoadingInFlight = false;
 
 function loadLocalSignals(): void {
   try {
-    const cacheFile = getSignalsCacheFilePath();
-    if (fs.existsSync(cacheFile)) {
-      const raw = fs.readFileSync(cacheFile, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        if (parsed.length === 0) {
-          localSignalsCache = [];
-          return;
-        }
-        const seenBrokerIds = new Set<string>();
-        const deduped: any[] = [];
-        for (const item of parsed) {
-          if (item.brokerPositionId) {
-            const key = String(item.brokerPositionId);
-            if (seenBrokerIds.has(key)) continue;
-            seenBrokerIds.add(key);
+    const candidateFiles = getAllSignalsCacheFilePaths();
+    const allParsedSignals: any[] = [];
+    for (const file of candidateFiles) {
+      if (fs.existsSync(file)) {
+        try {
+          const raw = fs.readFileSync(file, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            allParsedSignals.push(...parsed);
           }
-          deduped.push(item);
-        }
-        localSignalsCache = deduped.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-          closedAt: item.closedAt ? new Date(item.closedAt) : null,
-        }));
-        return;
+        } catch {}
       }
     }
+    if (allParsedSignals.length === 0) {
+      return;
+    }
+
+    const seenIds = new Set<string>();
+    const seenBrokerIds = new Set<string>();
+    const deduped: Signal[] = [];
+
+    for (const item of allParsedSignals) {
+      if (!item || typeof item !== 'object') continue;
+      const id = String(item.id || '');
+      const brokerId = item.brokerPositionId ? String(item.brokerPositionId) : null;
+
+      if (id && seenIds.has(id)) continue;
+      if (brokerId && seenBrokerIds.has(brokerId)) continue;
+
+      // Prevent duplicate trades created at the same minute with identical direction and price
+      const sTime = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+      const isDuplicateTimeAndPrice = deduped.some(existing => {
+        const exTime = existing.createdAt ? new Date(existing.createdAt).getTime() : 0;
+        if (Math.abs(sTime - exTime) < 60_000 && existing.signal === item.signal) {
+          const priceDiff = Math.abs((existing.entryPrice || 0) - (item.entryPrice || 0));
+          return priceDiff <= 1.5;
+        }
+        return false;
+      });
+      if (isDuplicateTimeAndPrice) continue;
+
+      if (id) seenIds.add(id);
+      if (brokerId) seenBrokerIds.add(brokerId);
+
+      deduped.push({
+        ...item,
+        createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+        closedAt: item.closedAt ? new Date(item.closedAt) : null,
+      } as Signal);
+    }
+
+    deduped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    localSignalsCache = deduped;
   } catch (e) {
     console.warn("[DB] Failed reading local signals cache:", e);
   }
@@ -130,10 +169,67 @@ function loadLocalSignals(): void {
 
 function saveLocalSignals(): void {
   try {
-    const cacheFile = getSignalsCacheFilePath();
-    fs.writeFileSync(cacheFile, JSON.stringify(localSignalsCache, null, 2), 'utf8');
+    const candidateFiles = getAllSignalsCacheFilePaths();
+    const payload = JSON.stringify(localSignalsCache, null, 2);
+    for (const file of candidateFiles) {
+      try {
+        const dir = path.dirname(file);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(file, payload, 'utf8');
+      } catch {}
+    }
   } catch (e) {
     console.warn("[DB] Failed writing local signals cache:", e);
+  }
+}
+
+export async function loadFirestoreSignals(): Promise<void> {
+  if (isFirestoreSignalsLoaded || isFirestoreLoadingInFlight) return;
+  isFirestoreLoadingInFlight = true;
+  try {
+    const q = query(collection(db, 'signals'), orderBy('createdAt', 'desc'), limit(500));
+    const snap = await withTimeout(getDocs(q), 3000).catch(() => null);
+    if (snap && !snap.empty) {
+      const fsSignals: Signal[] = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
+          closedAt: data.closedAt?.toDate ? data.closedAt.toDate() : (data.closedAt ? new Date(data.closedAt) : null),
+        } as Signal;
+      });
+
+      const seenIds = new Set<string>(localSignalsCache.map(s => String(s.id)));
+      const seenBrokerIds = new Set<string>(
+        localSignalsCache.map(s => s.brokerPositionId).filter(Boolean).map(String)
+      );
+
+      let addedCount = 0;
+      for (const sig of fsSignals) {
+        const id = String(sig.id);
+        const brokerId = sig.brokerPositionId ? String(sig.brokerPositionId) : null;
+        if (seenIds.has(id)) continue;
+        if (brokerId && seenBrokerIds.has(brokerId)) continue;
+
+        seenIds.add(id);
+        if (brokerId) seenBrokerIds.add(brokerId);
+
+        localSignalsCache.push(sig);
+        addedCount++;
+      }
+
+      if (addedCount > 0) {
+        localSignalsCache.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        saveLocalSignals();
+        console.log(`[DB] Restored ${addedCount} historical signals from Firestore upon server startup/refresh.`);
+      }
+    }
+    isFirestoreSignalsLoaded = true;
+  } catch (e) {
+    console.warn("[DB] Note: Could not query Firestore signals on startup:", e);
+  } finally {
+    isFirestoreLoadingInFlight = false;
   }
 }
 
@@ -175,7 +271,7 @@ export async function getRunningTrades(): Promise<Signal[]> {
 }
 
 export async function updateTradeStatus(id: string, tradeStatus: string, closedPrice: number, pnlPoints: number): Promise<void> {
-  const item = localSignalsCache.find(s => s.id === id);
+  const item = localSignalsCache.find(s => s.id === id || (s.brokerPositionId && String(s.brokerPositionId) === String(id)));
   if (item) {
     item.tradeStatus = tradeStatus;
     item.closedPrice = closedPrice;
@@ -183,7 +279,8 @@ export async function updateTradeStatus(id: string, tradeStatus: string, closedP
     item.closedAt = new Date();
     saveLocalSignals();
   }
-  withTimeout(updateDoc(doc(db, 'signals', id), {
+  const targetDocId = item?.id || id;
+  withTimeout(updateDoc(doc(db, 'signals', targetDocId), {
     tradeStatus, closedPrice, pnlPoints, closedAt: new Date()
   }), 1500).catch(() => null);
 }
@@ -193,26 +290,52 @@ export async function getClosedTrades(limitCount: number): Promise<Signal[]> {
 }
 
 export async function insertSignal(signalData: InsertSignal & { createdAt?: Date }): Promise<void> {
-  // STRICT BACKTEST ISOLATION: Backtest results or simulated historical runs MUST NOT be saved into the live history table!
-  if ((signalData as any).isBacktestResult || (signalData as any).executionType === "BACKTEST" || (signalData as any).executionType === "SIMULATED") {
+  // STRICT BACKTEST ISOLATION: Backtesting engine results MUST NOT be saved into the live signal history table!
+  if ((signalData as any).isBacktestResult || (signalData as any).executionType === "BACKTEST" || (signalData as any).isBacktest === true) {
     return;
   }
 
   const createdAt = (signalData as any).createdAt ? new Date((signalData as any).createdAt) : new Date();
   const closedAt = (signalData as any).closedAt ? new Date((signalData as any).closedAt) : ((signalData as any).closedAt ?? null);
 
-  if (signalData.brokerPositionId) {
-    const existingIdx = localSignalsCache.findIndex(s => s.brokerPositionId && String(s.brokerPositionId) === String(signalData.brokerPositionId));
-    if (existingIdx !== -1) {
-      localSignalsCache[existingIdx] = {
-        ...localSignalsCache[existingIdx],
-        ...signalData,
-        createdAt: localSignalsCache[existingIdx].createdAt || createdAt,
-        closedAt: closedAt || localSignalsCache[existingIdx].closedAt,
-      } as Signal;
-      saveLocalSignals();
-      return;
+  // 1. Match by ID, Broker Position ID, or same direction & entry price within 60s
+  const targetId = (signalData as any).id;
+  const existingIdx = localSignalsCache.findIndex(s => {
+    if (targetId && s.id === targetId) return true;
+    if (signalData.brokerPositionId && s.brokerPositionId && String(s.brokerPositionId) === String(signalData.brokerPositionId)) return true;
+    
+    // Prevent duplicate trades triggered at the same time (within 60s) with same direction and entry price
+    const sTime = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+    const timeDiff = Math.abs(createdAt.getTime() - sTime);
+    if (timeDiff < 60_000 && s.signal === signalData.signal) {
+      const priceDiff = Math.abs((s.entryPrice || 0) - (signalData.entryPrice || 0));
+      if (priceDiff <= 1.5) {
+        return true;
+      }
     }
+    return false;
+  });
+
+  if (existingIdx !== -1) {
+    const existing = localSignalsCache[existingIdx];
+    localSignalsCache[existingIdx] = {
+      ...existing,
+      ...signalData,
+      id: existing.id,
+      createdAt: existing.createdAt || createdAt,
+      closedAt: closedAt || existing.closedAt,
+      // Retain richer analytical reason if current is generic
+      reason: (existing.reason && !existing.reason.startsWith("AutoTrader Execution") && !existing.reason.startsWith("Session Triggered"))
+        ? existing.reason
+        : (signalData.reason || existing.reason),
+      brokerPositionId: signalData.brokerPositionId || existing.brokerPositionId,
+      isRealTrade: Boolean(signalData.isRealTrade ?? existing.isRealTrade),
+      executionStatus: signalData.executionStatus || existing.executionStatus,
+      executionReason: signalData.executionReason || existing.executionReason,
+      executionType: signalData.executionType || existing.executionType,
+    } as Signal;
+    saveLocalSignals();
+    return;
   }
 
   const id = `sig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -492,15 +615,20 @@ export async function seedHistoricalTrades(): Promise<number> {
 loadLocalSignals();
 
 export async function getRecentSignals(limitCount: number): Promise<Signal[]> {
-  // STRICT PERMANENT ISOLATION: Main Live History Table strictly excludes any simulated seed, backtest, or non-live signal records.
+  if (!isFirestoreSignalsLoaded && localSignalsCache.length === 0) {
+    await loadFirestoreSignals().catch(() => {});
+  } else if (!isFirestoreSignalsLoaded) {
+    loadFirestoreSignals().catch(() => {});
+  }
+
+  // Return all live bot signals and MT5 executed trades, excluding only backtest runner results
   const liveSignalsOnly = localSignalsCache.filter(s =>
-    s.executionType !== "SIMULATED" &&
     s.executionType !== "BACKTEST" &&
     (s as any).isBacktestResult !== true &&
-    (s as any).isSimulated !== true &&
+    (s as any).isBacktest !== true &&
     !String(s.id || "").startsWith("seed-") &&
-    !String(s.reason || "").toLowerCase().includes("backtest") &&
-    !String(s.executionReason || "").toLowerCase().includes("backtest")
+    !String(s.reason || "").toLowerCase().includes("backtest run") &&
+    !String(s.executionReason || "").toLowerCase().includes("backtest run")
   );
   return liveSignalsOnly.slice(0, limitCount);
 }
@@ -572,31 +700,34 @@ export async function clearSimulatedBacktestTrades(): Promise<number> {
 }
 
 export async function updateTradeStopLoss(id: string, stopLoss: number): Promise<void> {
-  const item = localSignalsCache.find(s => s.id === id);
+  const item = localSignalsCache.find(s => s.id === id || (s.brokerPositionId && String(s.brokerPositionId) === String(id)));
   if (item) {
     item.stopLoss = stopLoss;
     saveLocalSignals();
   }
-  withTimeout(updateDoc(doc(db, 'signals', id), { stopLoss }), 1500).catch(() => null);
+  const targetDocId = item?.id || id;
+  withTimeout(updateDoc(doc(db, 'signals', targetDocId), { stopLoss }), 1500).catch(() => null);
 }
 
 export async function updateTradeStopLossAndTakeProfit(id: string, stopLoss: number, takeProfit: number): Promise<void> {
-  const item = localSignalsCache.find(s => s.id === id);
+  const item = localSignalsCache.find(s => s.id === id || (s.brokerPositionId && String(s.brokerPositionId) === String(id)));
   if (item) {
     item.stopLoss = stopLoss;
     item.takeProfit = takeProfit;
     saveLocalSignals();
   }
-  withTimeout(updateDoc(doc(db, 'signals', id), { stopLoss, takeProfit }), 1500).catch(() => null);
+  const targetDocId = item?.id || id;
+  withTimeout(updateDoc(doc(db, 'signals', targetDocId), { stopLoss, takeProfit }), 1500).catch(() => null);
 }
 
 export async function updateTradeEntryPrice(id: string, entryPrice: number): Promise<void> {
-  const item = localSignalsCache.find(s => s.id === id);
+  const item = localSignalsCache.find(s => s.id === id || (s.brokerPositionId && String(s.brokerPositionId) === String(id)));
   if (item) {
     item.entryPrice = entryPrice;
     saveLocalSignals();
   }
-  withTimeout(updateDoc(doc(db, 'signals', id), { entryPrice }), 1500).catch(() => null);
+  const targetDocId = item?.id || id;
+  withTimeout(updateDoc(doc(db, 'signals', targetDocId), { entryPrice }), 1500).catch(() => null);
 }
 
 import { SystemSettings } from './schema/index';
@@ -640,8 +771,20 @@ function loadLocalSettings(): Partial<SystemSettings> | null {
 
 function saveLocalSettings(settings: SystemSettings): void {
   try {
-    const file = getSettingsFilePath();
-    fs.writeFileSync(file, JSON.stringify(settings, null, 2), 'utf8');
+    const payload = JSON.stringify(settings, null, 2);
+    const candidatePaths = [
+      path.resolve(process.cwd(), SETTINGS_FILE_NAME),
+      path.resolve(process.cwd(), 'artifacts/api-server', SETTINGS_FILE_NAME),
+      path.resolve('/app/applet/artifacts/api-server', SETTINGS_FILE_NAME),
+      path.resolve('/app/applet', SETTINGS_FILE_NAME),
+    ];
+    for (const file of candidatePaths) {
+      try {
+        const dir = path.dirname(file);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(file, payload, 'utf8');
+      } catch {}
+    }
   } catch (e) {
     console.warn('[DB] Failed writing local settings cache:', e);
   }
@@ -649,7 +792,7 @@ function saveLocalSettings(settings: SystemSettings): void {
 
 let cachedSettings: SystemSettings | null = null;
 let lastSettingsFetch = 0;
-const SETTINGS_CACHE_TTL = 300_000; // 5 minutes fast memory cache
+const SETTINGS_CACHE_TTL = 1_000; // 1 second fast memory cache for immediate responsiveness
 
 export const DEFAULT_HERMES_PARAMETERS: HermesParameters = {
   minConfidenceNormal: 72,
@@ -682,9 +825,9 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         disableCooldowns: false,
         demoAccountId: '',
         realAccountId: process.env.META_ACCOUNT_ID || '',
-        autoTradingDemoEnabled: false,
-        autoTradingRealEnabled: false,
-        autoTradingEnabled: false,
+        autoTradingDemoEnabled: diskSettings?.autoTradingDemoEnabled ?? false,
+        autoTradingRealEnabled: diskSettings?.autoTradingRealEnabled ?? false,
+        autoTradingEnabled: diskSettings?.autoTradingEnabled ?? false,
         metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD',
         dashboardPasscode: 'goldswing2024',
         hermesEnabled: true,
@@ -776,9 +919,9 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       disableCooldowns: false,
       demoAccountId: '',
       realAccountId: process.env.META_ACCOUNT_ID || '',
-      autoTradingDemoEnabled: false,
-      autoTradingRealEnabled: false,
-      autoTradingEnabled: false,
+      autoTradingDemoEnabled: diskSettings?.autoTradingDemoEnabled ?? false,
+      autoTradingRealEnabled: diskSettings?.autoTradingRealEnabled ?? false,
+      autoTradingEnabled: diskSettings?.autoTradingEnabled ?? false,
       metaApiSymbol: process.env.META_API_SYMBOL || 'XAUUSD',
       dashboardPasscode: 'goldswing2024',
       hermesEnabled: true,

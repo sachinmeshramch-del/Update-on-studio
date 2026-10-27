@@ -82,12 +82,12 @@ export function detectSupplyDemandZones(
         const zoneLow = +c.low.toFixed(2);
         const zoneHigh = +Math.max(c.open, c.close).toFixed(2);
         
-        // Mitigation check: did a subsequent candle close completely below the zone low?
-        const isMitigated = future.some(fc => fc.close < zoneLow);
+        // Mitigation check: did a subsequent candle close completely below or heavily breach the zone?
+        const isMitigated = future.some(fc => fc.close < zoneLow || fc.low < zoneLow - 0.8 * atr);
         if (!isMitigated && zoneHigh > zoneLow) {
           const touches = future.filter(fc => fc.low <= zoneHigh && fc.close >= zoneLow).length;
-          // Alpha Trades prefers fresh zones or first/second touch
-          if (touches <= 2) {
+          // Alpha Trades strictly prefers pristine fresh zones (first test only)
+          if (touches <= 1) {
             demandZones.push({
               type: "DEMAND",
               high: zoneHigh,
@@ -123,11 +123,12 @@ export function detectSupplyDemandZones(
         const zoneHigh = +c.high.toFixed(2);
         const zoneLow = +Math.min(c.open, c.close).toFixed(2);
 
-        // Mitigation check: did a subsequent candle close completely above the zone high?
-        const isMitigated = future.some(fc => fc.close > zoneHigh);
+        // Mitigation check: did a subsequent candle close completely above or heavily breach the zone?
+        const isMitigated = future.some(fc => fc.close > zoneHigh || fc.high > zoneHigh + 0.8 * atr);
         if (!isMitigated && zoneHigh > zoneLow) {
           const touches = future.filter(fc => fc.high >= zoneLow && fc.close <= zoneHigh).length;
-          if (touches <= 2) {
+          // Alpha Trades strictly prefers pristine fresh zones (first test only)
+          if (touches <= 1) {
             supplyZones.push({
               type: "SUPPLY",
               high: zoneHigh,
@@ -219,19 +220,19 @@ export function detectRejectionConfirmation(
   const checkCandle = (c: OHLCCandle) => {
     const range = Math.max(0.2, c.high - c.low);
     if (direction === "LONG") {
-      // Long lower wick into or near demand zone
+      // Long lower wick into or near demand zone showing institutional buying absorption
       const lowerWick = Math.min(c.open, c.close) - c.low;
       const wickRatio = lowerWick / range;
       const piercedZone = c.low <= zone.high && c.close >= zone.low;
-      const isHammerOrBullClose = wickRatio >= 0.35 || c.close > c.open;
-      return piercedZone && isHammerOrBullClose;
+      const hasRejectionWick = wickRatio >= 0.28 || (c.close > c.open && lowerWick >= 1.20);
+      return piercedZone && hasRejectionWick;
     } else {
-      // Long upper wick into or near supply zone
+      // Long upper wick into or near supply zone showing institutional selling defense
       const upperWick = c.high - Math.max(c.open, c.close);
       const wickRatio = upperWick / range;
       const piercedZone = c.high >= zone.low && c.close <= zone.high;
-      const isShootingStarOrBearClose = wickRatio >= 0.35 || c.close < c.open;
-      return piercedZone && isShootingStarOrBearClose;
+      const hasRejectionWick = wickRatio >= 0.28 || (c.close < c.open && upperWick >= 1.20);
+      return piercedZone && hasRejectionWick;
     }
   };
 

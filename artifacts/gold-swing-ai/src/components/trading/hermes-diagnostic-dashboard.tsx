@@ -27,6 +27,7 @@ import {
   Sliders,
   History,
   Target,
+  Crosshair,
   Sparkles,
   Terminal,
   Radio,
@@ -168,7 +169,7 @@ interface DiagnosticReport {
     circuitBreakerActive: boolean;
     tradeDuration: string;
   } | null;
-  engineMode?: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+  engineMode?: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD";
   orbState?: {
     engineName: string;
     activeSession: string;
@@ -384,7 +385,7 @@ export function HermesDiagnosticDashboard({
   });
 
   const setEngineModeMutation = useMutation({
-    mutationFn: async (mode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE") => {
+    mutationFn: async (mode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD") => {
       setLocalEngineMode(mode);
       if (typeof window !== "undefined") {
         localStorage.setItem("gold_swing_engine_mode", mode);
@@ -723,9 +724,10 @@ export function HermesDiagnosticDashboard({
                       </div>
 
                       {/* Engine Selector Buttons */}
-                      <div className="flex items-center gap-1.5 p-1 rounded-lg bg-zinc-900/80 border border-zinc-800">
+                      <div className="flex items-center gap-1.5 p-1 rounded-lg bg-zinc-900/80 border border-zinc-800 flex-wrap">
                         {(
                           [
+                            { id: "ICT_SILVER_BULLET", label: "Silver Bullet", icon: Crosshair },
                             { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
                             { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
                             { id: "HERMES_ADAPTIVE", label: "Adaptive", icon: Brain },
@@ -741,7 +743,9 @@ export function HermesDiagnosticDashboard({
                               className={cn(
                                 "px-2.5 py-1 rounded text-[11px] font-medium transition-all flex items-center gap-1.5 cursor-pointer",
                                 active
-                                  ? "bg-amber-500 text-black font-bold shadow-sm"
+                                  ? mode.id === "ICT_SILVER_BULLET"
+                                    ? "bg-amber-400 text-black font-bold shadow-sm ring-1 ring-amber-300"
+                                    : "bg-amber-500 text-black font-bold shadow-sm"
                                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                               )}
                             >

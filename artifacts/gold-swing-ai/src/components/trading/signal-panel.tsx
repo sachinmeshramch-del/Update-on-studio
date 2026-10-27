@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { CooldownTimer } from "./cooldown-timer";
 import { QuickAutoTrade } from "./quick-auto-trade";
+import { StrategySelector } from "./strategy-selector";
 import { useRefreshInterval } from "@/hooks/useRefreshInterval";
 import { motion } from "framer-motion";
 
@@ -201,6 +202,30 @@ export function SignalPanel() {
     prevSignalIdRef.current = currentId;
   }, [signalData, soundEnabled]);
 
+  const [isTriggeringBroker, setIsTriggeringBroker] = useState(false);
+
+  const handleTriggerTradeOnBroker = async () => {
+    setIsTriggeringBroker(true);
+    try {
+      const res = await fetch("/api/trade/trigger-running-trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message || "Successfully triggered current signal on MT5 Broker!");
+        queryClient.invalidateQueries({ queryKey: ["/api/trading/running-trade"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/trading/history"] });
+      } else {
+        toast.error(data.error || "Broker rejected execution");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to trigger trade on broker");
+    } finally {
+      setIsTriggeringBroker(false);
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -289,6 +314,9 @@ export function SignalPanel() {
 
         {/* ── Quick Auto-Trading Control Bar ─────────────────────────────── */}
         <QuickAutoTrade variant="panel" />
+
+        {/* ── Strategy Switching Selector Control (Silver Bullet / Hybrid / ORB) ── */}
+        <StrategySelector variant="panel" />
 
         {/* ── Header: Session + Signal + Confidence ────────────────────────── */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -586,6 +614,28 @@ export function SignalPanel() {
             <span className="text-[10px] text-muted-foreground font-mono">R:R {rrRatio}</span>
           </div>
         </div>
+
+        {/* ── Force Trigger Running Signal on Broker Button ───────────────── */}
+        {signal !== "HOLD" && !isCircuitBreaker && (
+          <button
+            type="button"
+            onClick={handleTriggerTradeOnBroker}
+            disabled={isTriggeringBroker}
+            className="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black shadow-lg shadow-emerald-500/20 transition-all cursor-pointer flex items-center justify-center gap-2 border border-emerald-400/40 disabled:opacity-50"
+          >
+            {isTriggeringBroker ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Dispatching Trade to MT5 Broker...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4 fill-black" />
+                <span>⚡ Trigger Current {signal} Trade on Broker Now</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* ── Hybrid Dual-Engine Architecture Card ─────────────────────────── */}
         <div className="rounded-xl border border-border/80 bg-black/40 p-3.5 flex flex-col gap-2">

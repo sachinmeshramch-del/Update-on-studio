@@ -914,10 +914,10 @@ export function HistoryTable() {
   const { refreshInterval } = useRefreshInterval();
   const { data, isLoading, isError, refetch } = useGetHistory({
     query: {
-      refetchInterval: refreshInterval > 0 ? Math.max(refreshInterval, 5000) : false,
+      refetchInterval: refreshInterval > 0 ? Math.max(refreshInterval, 3000) : 5000,
       refetchIntervalInBackground: true,
       refetchOnWindowFocus: true,
-      staleTime: refreshInterval > 0 ? Math.min(3000, Math.floor(refreshInterval * 0.7)) : 0,
+      staleTime: refreshInterval > 0 ? Math.min(2000, Math.floor(refreshInterval * 0.7)) : 2000,
     } as any,
   });
   const queryClient = useQueryClient();
@@ -929,13 +929,14 @@ export function HistoryTable() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [tradeToClose, setTradeToClose] = useState<string | null>(null);
   const [isClosingTrade, setIsClosingTrade] = useState(false);
+  const [isSyncingBroker, setIsSyncingBroker] = useState(false);
   const [typeFilter, setTypeFilter]     = useState<SignalFilter>("ALL");
-  const [period, setPeriod]             = useState<Period>("TODAY");
+  const [period, setPeriod]             = useState<Period>("ALL");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
   const [executionFilter, setExecutionFilter] = useState<ExecutionFilter>("ALL");
 
-  // Compact pagination state (Default 5 trades at a time)
-  const [pageSize, setPageSize]       = useState<number>(5);
+  // Default to 25 trades per page so recent trades are immediately visible
+  const [pageSize, setPageSize]       = useState<number>(25);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isTodayModalOpen, setIsTodayModalOpen] = useState<boolean>(false);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState<boolean>(false);
@@ -1125,6 +1126,37 @@ export function HistoryTable() {
               <span>Export CSV</span>
             </button>
 
+            {/* Quick Button: Restore Today's Trades & Sync Broker Positions */}
+            <button
+              onClick={async () => {
+                if (isSyncingBroker) return;
+                setIsSyncingBroker(true);
+                const toastId = toast.loading("Restoring today's trades & syncing MT5 positions...");
+                try {
+                  const res = await fetch("/api/history/restore-today", { method: "POST" });
+                  const data = await res.json();
+                  queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+                  await refetch();
+                  toast.success(
+                    data.message || (data.restoredCount > 0
+                      ? `Restored ${data.restoredCount} trade(s) into history table!`
+                      : "History table is up to date with MT5 broker."),
+                    { id: toastId }
+                  );
+                } catch {
+                  toast.error("Failed to restore broker trades. Retrying in background...", { id: toastId });
+                } finally {
+                  setIsSyncingBroker(false);
+                }
+              }}
+              disabled={isSyncingBroker}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all shadow-sm active:scale-95 ml-1 disabled:opacity-50"
+              title="Restore any trades triggered today from MT5 broker deals, open positions, and engine memory"
+            >
+              <RotateCcw className={cn("w-3.5 h-3.5 text-emerald-400", isSyncingBroker && "animate-spin")} />
+              <span>{isSyncingBroker ? "Restoring..." : "Restore Today / Sync MT5"}</span>
+            </button>
+
             {/* Type filter tabs */}
             <div className="flex items-center gap-1 ml-0 sm:ml-1">
               {(["ALL", "TREND_FOLLOW", "REVERSAL"] as SignalFilter[]).map(f => (
@@ -1271,6 +1303,30 @@ export function HistoryTable() {
                             )}>
                                 {(row.isRealTrade || row.executionStatus === "EXECUTED" || row.brokerPositionId) ? "LIVE" : "SIM"}
                             </Badge>
+                            {status === "RUNNING" && !row.isRealTrade && row.executionStatus !== "EXECUTED" && !row.brokerPositionId && (
+                              <button
+                                onClick={async () => {
+                                  const toastId = toast.loading("Dispatching trade to MT5 broker...");
+                                  try {
+                                    const res = await fetch(`/api/signals/${row.id}/dispatch-mt5`, { method: "POST" });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      toast.success(data.message || "Trade executed on MT5!", { id: toastId });
+                                      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+                                      await refetch();
+                                    } else {
+                                      toast.error(data.error || "MT5 rejected trade execution", { id: toastId });
+                                    }
+                                  } catch {
+                                    toast.error("Failed to connect to MT5 dispatch", { id: toastId });
+                                  }
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-all shadow-sm flex items-center gap-1 active:scale-95"
+                                title="Instantly trigger and dispatch this running signal to your MT5 account"
+                              >
+                                ⚡ Trigger MT5
+                              </button>
+                            )}
                             {status === "RUNNING" && (
                               <button
                                 onClick={() => setTradeToClose(row.id)}

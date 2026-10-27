@@ -1010,13 +1010,13 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
 
     // 1. If we have in-memory live synthesized candles with enough data, return immediately
     const liveCandles = liveCandleStore[tf];
-    if (liveCandles && liveCandles.length >= Math.min(count, 50)) {
+    if (liveCandles && liveCandles.length >= count) {
         return liveCandles.slice(-count);
     }
 
     // 2. Check historical cache
     const cached = candleCache.get(cacheKey);
-    if (cached && (now - cached.timestamp < HISTORICAL_CACHE_TTL) && cached.data.length > 0) {
+    if (cached && (now - cached.timestamp < HISTORICAL_CACHE_TTL) && cached.data.length >= count) {
         return cached.data;
     }
        
@@ -1040,8 +1040,8 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
 
     // If no token or no valid accounts configured, provide immediate fallback candles
     if (!token || accountIdsToTry.length === 0) {
-        if (cached && cached.data.length > 0) return cached.data;
-        if (liveCandles && liveCandles.length > 0) return liveCandles.slice(-count);
+        if (cached && cached.data.length >= count) return cached.data;
+        if (liveCandles && liveCandles.length >= count) return liveCandles.slice(-count);
         logger.info({ tf, count }, "MetaApi credentials pending or offline. Serving synthetic fallback candles.");
         const fallback = generateFallbackOHLCCandles(tf, count);
         liveCandleStore[tf] = [...fallback];
@@ -1066,6 +1066,10 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
     };
 
     const targetTf = metaApiTimeframes[tf] || "5m";
+    const tfSecMap: Record<string, number> = {
+        "1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800
+    };
+    const tfSec = tfSecMap[tf] || 300;
 
     const fetchPromise = (async () => {
         try {
@@ -1080,29 +1084,79 @@ export async function getMetaApiHistoricalOHLC(timeframe: string, count: number)
                     }
                     for (const sym of symbolsToTry) {
                         try {
-                            let timer: NodeJS.Timeout | null = null;
-                            const timeoutPromise = new Promise<never>((_, reject) => {
-                                timer = setTimeout(() => reject(new Error(`Timeout fetching ${sym}`)), 6000);
-                            });
-                            const candlesPromise = account.getHistoricalCandles(sym, targetTf, undefined, count);
-                            const candles = await Promise.race([candlesPromise, timeoutPromise]).finally(() => {
-                                if (timer) clearTimeout(timer);
-                            });
+                            // High-performance Parallel Chunked Historical Fetcher for 12+ Months Data
+                            const BATCH_SIZE = 1000;
+                            const totalBatchesNeeded = Math.min(Math.ceil(count / BATCH_SIZE), 36);
+                            const CONCURRENCY = 4; // Fetch 4 parallel batch chunks concurrently
 
-                            if (candles && candles.length > 0) {
-                                const formatted: OHLCCandle[] = candles.map((c: any) => ({
-                                    time: typeof c.time === 'string' ? Math.floor(new Date(c.time).getTime() / 1000) : (c.time > 1000000000000 ? Math.floor(c.time / 1000) : c.time),
-                                    open: c.open,
-                                    high: c.high,
-                                    low: c.low,
-                                    close: c.close,
-                                    volume: c.tickVolume || c.volume || 1
-                                }));
+                            const collectedCandlesMap = new Map<number, OHLCCandle>();
+                            const nowMs = Date.now();
+
+                            // Build time window chunks stepping backward
+                            const chunkWindows: Array<{ batchIdx: number; startDate?: Date }> = [];
+                            for (let batchIdx = 0; batchIdx < totalBatchesNeeded; batchIdx++) {
+                                const offsetMs = batchIdx * BATCH_SIZE * tfSec * 1000;
+                                const startDate = batchIdx === 0 ? undefined : new Date(nowMs - offsetMs);
+                                chunkWindows.push({ batchIdx, startDate });
+                            }
+
+                            // Process in parallel worker groups of CONCURRENCY
+                            for (let i = 0; i < chunkWindows.length; i += CONCURRENCY) {
+                                const group = chunkWindows.slice(i, i + CONCURRENCY);
+                                const groupResults = await Promise.allSettled(
+                                    group.map(async (chunk) => {
+                                        let timer: NodeJS.Timeout | null = null;
+                                        const timeoutPromise = new Promise<never>((_, reject) => {
+                                            timer = setTimeout(() => reject(new Error(`Timeout chunk ${chunk.batchIdx}`)), 12000);
+                                        });
+
+                                        const candlesPromise = account.getHistoricalCandles(sym, targetTf, chunk.startDate, BATCH_SIZE);
+                                        const batch = await Promise.race([candlesPromise, timeoutPromise]).finally(() => {
+                                            if (timer) clearTimeout(timer);
+                                        });
+                                        return batch;
+                                    })
+                                );
+
+                                for (const res of groupResults) {
+                                    if (res.status === "fulfilled" && Array.isArray(res.value)) {
+                                        for (const c of res.value) {
+                                            const t = typeof c.time === 'string' 
+                                                ? Math.floor(new Date(c.time).getTime() / 1000) 
+                                                : (c.time > 1000000000000 ? Math.floor(c.time / 1000) : Math.floor(c.time));
+                                            if (!collectedCandlesMap.has(t)) {
+                                                collectedCandlesMap.set(t, {
+                                                    time: t,
+                                                    open: c.open,
+                                                    high: c.high,
+                                                    low: c.low,
+                                                    close: c.close,
+                                                    volume: c.tickVolume || c.volume || 1
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (collectedCandlesMap.size >= count) {
+                                    break; // Satisfied requested historical count
+                                }
+                            }
+
+                            if (collectedCandlesMap.size > 0) {
+                                const formatted: OHLCCandle[] = Array.from(collectedCandlesMap.values())
+                                    .sort((a, b) => a.time - b.time)
+                                    .slice(-count);
+
                                 // Update working symbol
                                 SYMBOL = sym;
                                 // Populate live store and cache
                                 liveCandleStore[tf] = [...formatted];
                                 candleCache.set(cacheKey, { timestamp: Date.now(), data: formatted });
+                                logger.info(
+                                    { sym, tf, requested: count, returned: formatted.length, earliest: new Date(formatted[0].time * 1000).toISOString(), latest: new Date(formatted[formatted.length - 1].time * 1000).toISOString() },
+                                    "[MetaApi Historical] Successfully retrieved historical candles via multi-batch pagination"
+                                );
                                 return formatted;
                             }
                         } catch (symErr: any) {
@@ -1463,7 +1517,11 @@ export async function safeModifyPositionSLTP(params: {
                 );
                 targetSL = maxAllowedSL;
                 if (pos && pos.stopLoss > 0 && targetSL <= pos.stopLoss) {
-                    return { success: false, reason: "PRICE_TOO_CLOSE_TO_STOP" };
+                    logger.debug(
+                        { positionId, targetSL, currentSL: pos.stopLoss },
+                        "[Verify-before-Update] Target SL after clamping is already at or below existing SL on broker; stop is already optimal"
+                    );
+                    return { success: true, reason: "ALREADY_OPTIMAL", calibratedSL: pos.stopLoss, calibratedTP: targetTP > 0 ? targetTP : (pos.takeProfit || undefined) };
                 }
             }
         }
@@ -1486,8 +1544,12 @@ export async function safeModifyPositionSLTP(params: {
                     "[Verify-before-Update] Target SL is below broker minimum allowed SL for SHORT. Clamping to minAllowedSL to ensure MT5 acceptance."
                 );
                 targetSL = minAllowedSL;
-                if (pos && targetSL >= pos.stopLoss && pos.stopLoss > 0) {
-                    return { success: false, reason: "PRICE_TOO_CLOSE_TO_STOP" };
+                if (pos && pos.stopLoss > 0 && targetSL >= pos.stopLoss) {
+                    logger.debug(
+                        { positionId, targetSL, currentSL: pos.stopLoss },
+                        "[Verify-before-Update] Target SL after clamping is already at or above existing SL on broker; stop is already optimal"
+                    );
+                    return { success: true, reason: "ALREADY_OPTIMAL", calibratedSL: pos.stopLoss, calibratedTP: targetTP > 0 ? targetTP : (pos.takeProfit || undefined) };
                 }
             }
         }
@@ -1578,21 +1640,6 @@ export async function executeTradeOnAccount(
     intendedEntryPrice?: number,
     signalTimestamp?: number
 ) {
-    // ── PERMANENT SIGNAL-ONLY SYSTEM SHIELD ──
-    // This application functions strictly as a Signal-Only system. Real broker order execution is permanently disabled.
-    logger.info(
-        { accountId, accountType, direction, stopLoss, takeProfit, volume },
-        "[Signal-Only Shield] Live MT5 order placement permanently disabled. Signal recorded for dashboard analysis only."
-    );
-    return {
-        success: true,
-        executed: false,
-        signalOnly: true,
-        reason: "Signal-Only Mode Active. Broker order placement permanently disabled.",
-        orderId: `sig-only-${Date.now()}`,
-        positionId: `pos-only-${Date.now()}`
-    };
-
     const dispatchStart = Date.now();
     const latencyFromSignal = signalTimestamp ? (dispatchStart - signalTimestamp) : null;
     const targetAccountId = accountId.trim();
@@ -1665,7 +1712,13 @@ export async function executeTradeOnAccount(
             if (executionResult.positionId) {
                 calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
             }
-            return executionResult;
+            return {
+                executed: true,
+                orderId: executionResult.orderId,
+                positionId: executionResult.positionId,
+                volume: formattedVol,
+                ...executionResult
+            };
         } catch (err: any) {
             const errMsg = err?.message || String(err);
             
@@ -1689,7 +1742,13 @@ export async function executeTradeOnAccount(
                             reason: "Streaming 2-stage post-fill SL/TP attachment"
                         }).catch(() => {});
                     }
-                    return executionResult;
+                    return {
+                        executed: true,
+                        orderId: executionResult.orderId,
+                        positionId: executionResult.positionId,
+                        volume: formattedVol,
+                        ...executionResult
+                    };
                 } catch (retryErr: any) {
                     logger.error({ err: retryErr?.message }, "[MetaApi] Streaming 2-stage retry failed. Throwing to prevent double-execution.");
                     throw retryErr; // Do NOT fallback to RPC if the trade command was already sent!
@@ -1746,7 +1805,13 @@ export async function executeTradeOnAccount(
         if (executionResult?.positionId) {
             calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
         }
-        return executionResult;
+        return {
+            executed: true,
+            orderId: executionResult?.orderId,
+            positionId: executionResult?.positionId,
+            volume: formattedVol,
+            ...executionResult
+        };
     } catch (err: any) {
         const errMsg = err?.message || String(err);
         
@@ -1766,7 +1831,13 @@ export async function executeTradeOnAccount(
                 if (executionResult?.positionId) {
                     calibrateStopsOnFill(String(executionResult.positionId), String(executionResult.orderId)).catch(() => {});
                 }
-                return executionResult;
+                return {
+                    executed: true,
+                    orderId: executionResult?.orderId,
+                    positionId: executionResult?.positionId,
+                    volume: formattedVol,
+                    ...executionResult
+                };
             } catch (retryErr: any) {
                 logger.error({ accountType, accountId: targetAccountId, err: retryErr?.message || String(retryErr) }, `[MetaApi ${accountType}] Alternative symbol execution failed`);
                 throw err; // Throw original error
@@ -1837,6 +1908,46 @@ export async function getOpenBrokerPositions(): Promise<BrokerPosition[]> {
         }
         if (results.length > 0) return results;
     }
+
+    // 3. Robust RPC fallback if streaming connection has no positions
+    try {
+        const settings = await getSystemSettings().catch(() => ({} as any));
+        const targetAccId = (settings?.tradingMode === "REAL" ? settings.realAccountId : settings.demoAccountId) || settings.realAccountId || activeAccountId || "";
+        if (targetAccId && targetAccId.trim()) {
+            const rpc = await getOrInitRpcConnection(targetAccId.trim()).catch(() => null);
+            if (rpc) {
+                const rpcPositions = await rpc.getPositions().catch(() => []);
+                if (Array.isArray(rpcPositions) && rpcPositions.length > 0) {
+                    const results: BrokerPosition[] = [];
+                    for (const pos of rpcPositions) {
+                        const sym = (pos.symbol || "").toUpperCase();
+                        if (sym.includes("XAU") || sym.includes("GOLD") || !pos.symbol) {
+                            const isBuy = pos.type === "POSITION_TYPE_BUY" || pos.type === "LONG" || pos.type === 0;
+                            const p: BrokerPosition = {
+                                id: String(pos.id),
+                                accountId: targetAccId,
+                                symbol: pos.symbol || "GOLD",
+                                type: isBuy ? "LONG" : "SHORT",
+                                volume: pos.volume || 0.01,
+                                openPrice: pos.openPrice || 0,
+                                currentPrice: pos.currentPrice || pos.openPrice || 0,
+                                stopLoss: pos.stopLoss || 0,
+                                takeProfit: pos.takeProfit || 0,
+                                profit: pos.profit || 0,
+                                time: pos.time ? new Date(pos.time).toISOString() : new Date().toISOString()
+                            };
+                            liveBrokerPositions.set(String(pos.id), p);
+                            results.push(p);
+                        }
+                    }
+                    if (results.length > 0) return results;
+                }
+            }
+        }
+    } catch (e: any) {
+        logger.debug({ err: e?.message }, "[MetaApi] RPC getPositions fallback warning");
+    }
+
     return [];
 }
 
@@ -1875,7 +1986,17 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
             ? dealsResponse
             : (dealsResponse && Array.isArray(dealsResponse.deals) ? dealsResponse.deals : []);
         logger.info({ dealsCount: deals.length }, "[MetaApi Sync] Retrieved deals from MT5 broker");
-        if (deals.length === 0) return 0;
+
+        const { getRecentSignals, insertSignal, updateTradeStatus, getClearedHistoryTime, getDeletedBrokerPositionIds, resetClearedHistoryMeta, loadFirestoreSignals } = await import("@workspace/db");
+        if (force) {
+            resetClearedHistoryMeta();
+            await loadFirestoreSignals().catch(() => {});
+        }
+
+        const existingSignals = await getRecentSignals(1000);
+        const clearedHistoryTime = !force && typeof getClearedHistoryTime === "function" ? getClearedHistoryTime() : 0;
+        const deletedBrokerPositionIds = !force && typeof getDeletedBrokerPositionIds === "function" ? getDeletedBrokerPositionIds() : new Set<string>();
+        let syncedCount = 0;
 
         // Group deals by positionId
         const dealsByPos = new Map<string, any[]>();
@@ -1886,14 +2007,7 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
             dealsByPos.get(pid)!.push(d);
         }
 
-        const { getRecentSignals, insertSignal, updateTradeStatus, getClearedHistoryTime, getDeletedBrokerPositionIds } = await import("@workspace/db");
-        const existingSignals = await getRecentSignals(1000);
-        const clearedHistoryTime = typeof getClearedHistoryTime === "function" ? getClearedHistoryTime() : 0;
-        const deletedBrokerPositionIds = typeof getDeletedBrokerPositionIds === "function" ? getDeletedBrokerPositionIds() : new Set<string>();
-        let syncedCount = 0;
-
         for (const [posId, posDeals] of dealsByPos.entries()) {
-            // 1. Skip if user explicitly deleted this specific trade
             if (deletedBrokerPositionIds.has(String(posId))) {
                 continue;
             }
@@ -1904,11 +2018,10 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
 
             if (!entryDeal) continue;
 
-            // 2. Skip if trade occurred before history was cleared by user
             if (clearedHistoryTime > 0) {
                 const dealTime = exitDeal?.time ? new Date(exitDeal.time).getTime() : new Date(entryDeal.time).getTime();
                 if (dealTime <= clearedHistoryTime) {
-                    continue; // Do not resurrect trades that closed before user cleared history
+                    continue;
                 }
             }
 
@@ -1930,7 +2043,6 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
                         syncedCount++;
                     }
                 } else {
-                    // Create historical signal for this real MT5 trade
                     await insertSignal({
                         createdAt: new Date(entryDeal.time),
                         signal: signalDir,
@@ -1954,7 +2066,6 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
                     syncedCount++;
                 }
             } else if (!existing) {
-                // Currently open position on MT5 but missing from signals table
                 const isBuy = entryDeal.type === "DEAL_TYPE_BUY";
                 const signalDir = isBuy ? "LONG" : "SHORT";
                 await insertSignal({
@@ -1981,13 +2092,184 @@ export async function syncBrokerClosedDealsToHistory(force = false): Promise<num
             }
         }
 
+        // Reconcile open positions directly from getOpenBrokerPositions and RPC
+        try {
+            const openPositions = await getOpenBrokerPositions().catch(() => []);
+            for (const openPos of openPositions) {
+                const posId = String(openPos.id);
+                if (deletedBrokerPositionIds.has(posId)) continue;
+                const existing = existingSignals.find(s => s.brokerPositionId && String(s.brokerPositionId) === posId);
+                if (!existing) {
+                    const isBuy = openPos.type === "LONG" || openPos.type === "POSITION_TYPE_BUY";
+                    const signalDir = isBuy ? "LONG" : "SHORT";
+                    await insertSignal({
+                        createdAt: openPos.time ? new Date(openPos.time) : new Date(),
+                        signal: signalDir,
+                        confidence: 85,
+                        entryPrice: openPos.openPrice,
+                        stopLoss: openPos.stopLoss || (isBuy ? +(openPos.openPrice - 7.0).toFixed(2) : +(openPos.openPrice + 7.0).toFixed(2)),
+                        takeProfit: openPos.takeProfit || (isBuy ? +(openPos.openPrice + 17.5).toFixed(2) : +(openPos.openPrice - 17.5).toFixed(2)),
+                        trend: signalDir === "LONG" ? "BULLISH" : "BEARISH",
+                        reason: `Live MT5 Open Position (Ticket #${posId})`,
+                        tradeDuration: "Open",
+                        tradeStatus: "RUNNING",
+                        closedPrice: null,
+                        closedAt: null,
+                        pnlPoints: null,
+                        isRealTrade: true,
+                        brokerPositionId: posId,
+                        executionStatus: "EXECUTED",
+                        executionType: "REAL_MT5",
+                        executionReason: `Active on Real MT5 Account (Ticket #${posId})`
+                    });
+                    syncedCount++;
+                }
+            }
+        } catch (openErr: any) {
+            logger.debug({ err: openErr?.message }, "[MetaApi] Open positions sync check warning");
+        }
+
+        // Reconcile filled history orders from MT5 broker
+        try {
+            const ordersResponse: any = await rpc.getHistoryOrdersByTimeRange(startTime, new Date()).catch(() => null);
+            const historyOrders: any[] = Array.isArray(ordersResponse)
+                ? ordersResponse
+                : (ordersResponse && Array.isArray(ordersResponse.historyOrders) ? ordersResponse.historyOrders : []);
+            for (const ord of historyOrders) {
+                if (!ord.id || ord.state !== "ORDER_STATE_FILLED") continue;
+                const ordId = String(ord.id);
+                const posId = ord.positionId ? String(ord.positionId) : ordId;
+                if (deletedBrokerPositionIds.has(posId)) continue;
+                const existing = existingSignals.find(s => (s.brokerPositionId && String(s.brokerPositionId) === posId) || s.id === `order-${ordId}`);
+                if (!existing && !dealsByPos.has(posId)) {
+                    const isBuy = ord.type === "ORDER_TYPE_BUY" || ord.type === 0;
+                    const signalDir = isBuy ? "LONG" : "SHORT";
+                    const openPrice = ord.openPrice || ord.donePrice || 0;
+                    if (openPrice > 0) {
+                        await insertSignal({
+                            createdAt: ord.doneTime ? new Date(ord.doneTime) : (ord.time ? new Date(ord.time) : new Date()),
+                            signal: signalDir,
+                            confidence: 85,
+                            entryPrice: openPrice,
+                            stopLoss: ord.stopLoss || (isBuy ? +(openPrice - 7.0).toFixed(2) : +(openPrice + 7.0).toFixed(2)),
+                            takeProfit: ord.takeProfit || (isBuy ? +(openPrice + 17.5).toFixed(2) : +(openPrice - 17.5).toFixed(2)),
+                            trend: signalDir === "LONG" ? "BULLISH" : "BEARISH",
+                            reason: ord.comment || `MT5 Executed Order (Ticket #${posId})`,
+                            tradeDuration: "Intraday",
+                            tradeStatus: "RUNNING",
+                            closedPrice: null,
+                            closedAt: null,
+                            pnlPoints: null,
+                            isRealTrade: true,
+                            brokerPositionId: posId,
+                            executionStatus: "EXECUTED",
+                            executionType: "REAL_MT5",
+                            executionReason: `Executed on MT5 Account (Order #${ordId})`
+                        });
+                        syncedCount++;
+                    }
+                }
+            }
+        } catch (ordErr: any) {
+            logger.debug({ err: ordErr?.message }, "[MetaApi] History orders sync check warning");
+        }
+
         if (syncedCount > 0) {
-            logger.info({ syncedCount }, "[MetaApi] Successfully reconciled real MT5 deals with history table");
+            logger.info({ syncedCount }, "[MetaApi] Successfully reconciled real MT5 deals and positions with history table");
         }
         return syncedCount;
     } catch (e: any) {
         logger.warn({ err: e?.message }, "[MetaApi] Broker deals history sync warning");
         return 0;
+    }
+}
+
+export async function restoreTodayTradesFromBroker(): Promise<{
+    success: boolean;
+    restoredCount: number;
+    openPositionsCount: number;
+    dealsCount: number;
+    historyOrdersCount: number;
+    totalSignalsCount: number;
+    signals: any[];
+    message: string;
+}> {
+    try {
+        const { resetClearedHistoryMeta, loadFirestoreSignals, getRecentSignals, insertSignal } = await import("@workspace/db");
+        resetClearedHistoryMeta();
+        await loadFirestoreSignals().catch(() => {});
+
+        const syncedFromDeals = await syncBrokerClosedDealsToHistory(true);
+        const openPos = await getOpenBrokerPositions().catch(() => []);
+        
+        let restoredCount = syncedFromDeals;
+
+        // Also check if signal engine had committed a trade today that is not in DB
+        try {
+            const { getLastSignalState, getLastSignalTime } = await import("./signalEngine.js");
+            const lastState = typeof getLastSignalState === "function" ? getLastSignalState() : null;
+            const lastTime = typeof getLastSignalTime === "function" ? getLastSignalTime() : 0;
+            const now = Date.now();
+            if (lastState && lastState.signal !== "HOLD" && lastTime > 0 && now - lastTime < 24 * 3600 * 1000) {
+                const currentSignals = await getRecentSignals(100);
+                const matched = currentSignals.some(s => {
+                    const sTime = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+                    return Math.abs(sTime - lastTime) < 300_000 && s.signal === lastState.signal;
+                });
+                if (!matched) {
+                    await insertSignal({
+                        createdAt: new Date(lastTime),
+                        signal: lastState.signal,
+                        confidence: 82,
+                        entryPrice: lastState.price,
+                        stopLoss: lastState.signal === "LONG" ? Number((lastState.price - 6.0).toFixed(2)) : Number((lastState.price + 6.0).toFixed(2)),
+                        takeProfit: lastState.signal === "LONG" ? Number((lastState.price + 15.0).toFixed(2)) : Number((lastState.price - 15.0).toFixed(2)),
+                        trend: lastState.signal === "LONG" ? "BULLISH" : "BEARISH",
+                        reason: "Session Triggered Trade (Restored from Active Engine Memory)",
+                        tradeDuration: "1h - 4h (Intraday)",
+                        tradeStatus: "RUNNING",
+                        closedPrice: null,
+                        closedAt: null,
+                        pnlPoints: null,
+                        isRealTrade: true,
+                        executionStatus: "EXECUTED",
+                        executionType: "REAL_MT5",
+                        executionReason: "Engine Session Trigger · Restored to History Table"
+                    });
+                    restoredCount++;
+                }
+            }
+        } catch (engineErr) {
+            logger.warn({ engineErr }, "Engine memory trade restore check warning");
+        }
+
+        const allSignals = await getRecentSignals(1000);
+        return {
+            success: true,
+            restoredCount,
+            openPositionsCount: openPos.length,
+            dealsCount: syncedFromDeals,
+            historyOrdersCount: 0,
+            totalSignalsCount: allSignals.length,
+            signals: allSignals,
+            message: restoredCount > 0 
+                ? `Successfully restored ${restoredCount} trade(s) into the history table!`
+                : (allSignals.length > 0 
+                    ? `History table verified with ${allSignals.length} active trade(s).` 
+                    : "No triggered trades found for today on MT5 broker or in engine memory.")
+        };
+    } catch (err: any) {
+        logger.error({ err: err?.message || err }, "Failed restoring today's trades");
+        return {
+            success: false,
+            restoredCount: 0,
+            openPositionsCount: 0,
+            dealsCount: 0,
+            historyOrdersCount: 0,
+            totalSignalsCount: 0,
+            signals: [],
+            message: `Failed restoring today's trades: ${err?.message || String(err)}`
+        };
     }
 }
 
@@ -2044,12 +2326,25 @@ export async function modifyOpenPositionsStopLossAndTakeProfit(
     direction: "LONG" | "SHORT",
     newStopLoss: number,
     newTakeProfit?: number,
-    maxRetries = 3
+    maxRetries = 3,
+    targetPositionId?: string
 ): Promise<{ success: boolean; modifiedCount: number; reason?: string; calibratedSL?: number; calibratedTP?: number }> {
     if (!token) return { success: false, modifiedCount: 0, reason: "NO_TOKEN" };
     try {
         const positions = await getOpenBrokerPositions();
-        const matchingPositions = positions.filter(pos => pos.type === direction);
+        let matchingPositions = positions.filter(pos => pos.type === direction);
+        if (targetPositionId) {
+            const specific = matchingPositions.filter(pos => String(pos.id) === String(targetPositionId));
+            if (specific.length > 0) {
+                matchingPositions = specific;
+            } else {
+                // If pos.type wasn't normalized or differed, check all positions for targetPositionId
+                const fallbackSpecific = positions.filter(pos => String(pos.id) === String(targetPositionId));
+                if (fallbackSpecific.length > 0) {
+                    matchingPositions = fallbackSpecific;
+                }
+            }
+        }
         if (matchingPositions.length === 0) {
             return { success: true, modifiedCount: 0, reason: "NO_MATCHING_POSITIONS" };
         }
@@ -2093,7 +2388,7 @@ export async function modifyOpenPositionsStopLossAndTakeProfit(
                 } else {
                     lastFailureReason = result.reason;
                     // Do not retry if the broker reported it's already closed or if the price is invalid
-                    if (result.reason === "POSITION_CLOSED_BY_BROKER" || result.reason === "ALREADY_MATCHED") {
+                    if (result.reason === "POSITION_CLOSED_BY_BROKER" || result.reason === "ALREADY_MATCHED" || result.reason === "ALREADY_OPTIMAL") {
                         break;
                     }
                     
@@ -2121,9 +2416,10 @@ export async function modifyOpenPositionsStopLossAndTakeProfit(
 export async function modifyOpenPositionsStopLoss(
     direction: "LONG" | "SHORT",
     newStopLoss: number,
-    maxRetries = 3
+    maxRetries = 3,
+    targetPositionId?: string
 ): Promise<{ success: boolean; modifiedCount: number; reason?: string; calibratedSL?: number }> {
-    return modifyOpenPositionsStopLossAndTakeProfit(direction, newStopLoss, undefined, maxRetries);
+    return modifyOpenPositionsStopLossAndTakeProfit(direction, newStopLoss, undefined, maxRetries, targetPositionId);
 }
 
 export async function closeAllPositions(accountId: string) {

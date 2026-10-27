@@ -24,6 +24,7 @@ import {
   Layers,
   Zap,
   Target,
+  Crosshair,
   Shield,
   Scale,
   FileText,
@@ -101,7 +102,7 @@ export function HermesCard() {
   });
 
   const { data: orbData } = useQuery<{
-    engineMode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+    engineMode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD";
     orbRiskPerTrade: number;
     orbTargetMultiple: number;
     orbStopAtrMultiplier: number;
@@ -129,7 +130,7 @@ export function HermesCard() {
   const currentActiveMode = orbData?.engineMode || localEngineMode || "HYBRID_DUAL";
 
   const setEngineModeMutation = useMutation({
-    mutationFn: async (mode: "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE") => {
+    mutationFn: async (mode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD") => {
       setLocalEngineMode(mode);
       if (typeof window !== "undefined") {
         localStorage.setItem("gold_swing_engine_mode", mode);
@@ -515,8 +516,15 @@ export function HermesCard() {
                   <span className="text-xs font-bold tracking-tight text-foreground uppercase">
                     Execution Engine Architecture
                   </span>
-                  <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/10 border-amber-500/40 text-amber-500">
-                    {currentActiveMode === "HYBRID_DUAL"
+                  <Badge variant="outline" className={cn(
+                    "text-[10px] font-bold px-2 py-0.5",
+                    currentActiveMode === "ICT_SILVER_BULLET"
+                      ? "bg-amber-500/20 border-amber-500/60 text-amber-400"
+                      : "bg-amber-500/10 border-amber-500/40 text-amber-500"
+                  )}>
+                    {currentActiveMode === "ICT_SILVER_BULLET"
+                      ? "ICT Silver Bullet (Isolated)"
+                      : currentActiveMode === "HYBRID_DUAL"
                       ? "Hybrid Dual-Engine"
                       : currentActiveMode === "DETERMINISTIC_ORB"
                       ? "Deterministic ORB"
@@ -524,15 +532,20 @@ export function HermesCard() {
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  100% Deterministic 3h NY ORB Trigger (16:00 UTC) + Hermes AI Risk Guardian (5R Asymmetric Payoff)
+                  {currentActiveMode === "ICT_SILVER_BULLET"
+                    ? "Pure ICT Silver Bullet Engine · Asian/London Liquidity Sweeps + 15m FVG Displacement (08:00 & 12:00-16:00 UTC)"
+                    : currentActiveMode === "HYBRID_DUAL"
+                    ? "Hybrid Dual-Engine · 100% Deterministic 3h NY ORB Trigger (16:00 UTC) + Hermes AI Risk Guardian"
+                    : "100% Deterministic 3h NY ORB Trigger (16:00 UTC) + Hermes AI Risk Guardian (5R Asymmetric Payoff)"}
                 </p>
               </div>
             </div>
 
             {/* Quick Engine Mode Switcher */}
-            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/20 dark:bg-white/5 border border-border">
+            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-black/20 dark:bg-white/5 border border-border flex-wrap">
               {(
                 [
+                  { id: "ICT_SILVER_BULLET", label: "Silver Bullet", icon: Crosshair },
                   { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
                   { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
                   { id: "HERMES_ADAPTIVE", label: "Adaptive", icon: Brain },
@@ -548,7 +561,9 @@ export function HermesCard() {
                     className={cn(
                       "px-2.5 py-1 rounded text-[11px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer",
                       isSelected
-                        ? "bg-amber-500 text-black shadow-sm font-bold"
+                        ? mode.id === "ICT_SILVER_BULLET"
+                          ? "bg-amber-400 text-black shadow-sm font-bold ring-1 ring-amber-300"
+                          : "bg-amber-500 text-black shadow-sm font-bold"
                         : "text-muted-foreground hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10"
                     )}
                   >

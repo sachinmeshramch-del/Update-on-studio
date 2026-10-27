@@ -140,13 +140,21 @@ export async function checkRunningTrades(): Promise<void> {
     if (cachedRunningTrades.length === 0 || Date.now() - lastDbSyncTime > 15_000) {
       await refreshRunningTradesCache();
     }
-    if (cachedRunningTrades.length === 0) return;
 
     // Fetch open positions and recently closed deals across all active MT5 broker accounts (<1ms from memory)
     const [brokerPositions, recentClosedDeals] = await Promise.all([
       getOpenBrokerPositions().catch(() => [] as BrokerPosition[]),
       getRecentlyClosedBrokerDeals(new Date(Date.now() - 6 * 3600 * 1000)).catch(() => [] as BrokerClosedDeal[])
     ]);
+
+    // If broker has active open positions but cachedRunningTrades is empty, auto-reconcile so trailing stops execute!
+    if (brokerPositions.length > 0 && cachedRunningTrades.length === 0) {
+      const { syncBrokerClosedDealsToHistory } = await import("./metaApiFeed.js");
+      await syncBrokerClosedDealsToHistory(true).catch(() => {});
+      await refreshRunningTradesCache();
+    }
+
+    if (cachedRunningTrades.length === 0 && brokerPositions.length === 0) return;
 
     for (const trade of [...cachedRunningTrades]) {
       const { id, signal, entryPrice, stopLoss, takeProfit, createdAt } = trade;
@@ -369,24 +377,46 @@ export async function checkRunningTrades(): Promise<void> {
           const minProfitLockPrice = +(actualEntry + 2.50).toFixed(2);
 
           // Step A: Guaranteed Profit Floors when Market is in Favor (Intraday Calibrated)
-          // Trigger Break-Even after market moves +4.50 pts (or 35% of initial target)
-          // Trigger Fixed +2.50 pt Profit Lock once market moves >= +6.50 pts (or 50% of initial target)
-          const beActivationProfit = Math.max(4.50, +(distanceToInitialTarget * 0.35).toFixed(2));
-          const profitLockActivation = Math.max(6.50, +(distanceToInitialTarget * 0.50).toFixed(2));
+          // Progressive Multi-Tier Ratchet:
+          // Tier 0: +2.80 pt peak -> locks +0.50 pts (breakeven shield)
+          // Tier 1: +3.60 pt peak -> locks +1.80 pts (intraday momentum lock)
+          // Tier 2: +5.00 pt peak -> locks +3.00 pts (core profit lock)
+          // Tier 3: +7.00 pt peak -> locks +4.80 pts
+          // Tier 4: +10.00 pt peak -> locks +7.50 pts
+          // Tier 5: +14.00 pt peak -> locks +11.00 pts
+          const profitLockActivation = Math.max(7.50, +(distanceToInitialTarget * 0.50).toFixed(2));
 
           if (currentProfit >= profitLockActivation || peakProfit >= profitLockActivation) {
-            // Once market has moved >= 6.5 pts in favor, lock fixed +2.5 pt profit
-            if (currentBid >= minProfitLockPrice + minStopBuffer) {
+            // Once market has moved >= 7.5 pts in favor, lock fixed +4.5 pt profit
+            const coreLock = +(actualEntry + 4.50).toFixed(2);
+            if (currentBid >= coreLock + minStopBuffer) {
+              targetSl = Math.max(targetSl, coreLock);
+              trackerState.trailStage = "PROFIT_LOCKED_CORE";
+            } else if (currentBid >= minProfitLockPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, minProfitLockPrice);
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
                 trackerState.trailStage = "PROFIT_LOCKED_2PT";
               }
-            } else if (currentBid >= breakEvenPrice + minStopBuffer) {
-              targetSl = Math.max(targetSl, breakEvenPrice);
-              if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
-          } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
-            // Capital Protection / Break-Even when in profit (+4.5 pts)
+          } else if (currentProfit >= 5.00 || peakProfit >= 5.00) {
+            // Tier 2: Core Profit Lock at +5.00 pts (locks +3.00 pts)
+            const lock30 = +(actualEntry + 3.00).toFixed(2);
+            if (currentBid >= lock30 + minStopBuffer) {
+              targetSl = Math.max(targetSl, lock30);
+              trackerState.trailStage = "PROFIT_LOCKED_CORE";
+            }
+          } else if (currentProfit >= 3.60 || peakProfit >= 3.60) {
+            // Tier 1: Intraday Momentum Lock at +3.60 pts (locks +1.80 pts)
+            const lock18 = +(actualEntry + 1.80).toFixed(2);
+            if (currentBid >= lock18 + minStopBuffer) {
+              targetSl = Math.max(targetSl, lock18);
+              if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
+                trackerState.trailStage = "PROFIT_LOCKED_2PT";
+              }
+            }
+          } else if (currentProfit >= 2.80 || peakProfit >= 2.80) {
+            // Tier 0: Risk-Free Protective Shield at +2.80 pts
+            // When trade runs +2.80 pts in favor, secure breakeven (+0.50 pts fee/spread buffer)
             if (currentBid >= breakEvenPrice + minStopBuffer) {
               targetSl = Math.max(targetSl, breakEvenPrice);
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
@@ -418,12 +448,21 @@ export async function checkRunningTrades(): Promise<void> {
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
           } else {
-            // Progressive locking between +7.0 pts and runner activation
-            if (peakProfit >= 10.0) {
-              // Lock at least 50% of peak profit once peak reaches 10+ pts
-              const halfProfitSl = +(actualEntry + (peakProfit * 0.50)).toFixed(2);
-              if (currentBid >= halfProfitSl + minStopBuffer) {
-                targetSl = Math.max(targetSl, halfProfitSl);
+            // Progressive locking between +7.5 pts and runner activation
+            if (peakProfit >= 14.0) {
+              const lock105 = +(actualEntry + 10.50).toFixed(2);
+              if (currentBid >= lock105 + minStopBuffer) {
+                targetSl = Math.max(targetSl, lock105);
+              }
+            } else if (peakProfit >= 10.5) {
+              const lock7 = +(actualEntry + 7.00).toFixed(2);
+              if (currentBid >= lock7 + minStopBuffer) {
+                targetSl = Math.max(targetSl, lock7);
+              }
+            } else if (peakProfit >= 7.5) {
+              const lock45 = +(actualEntry + 4.50).toFixed(2);
+              if (currentBid >= lock45 + minStopBuffer) {
+                targetSl = Math.max(targetSl, lock45);
               }
             } else if (currentProfit >= distanceToInitialTarget * 0.70 && currentProfit < distanceToInitialTarget * 0.85) {
               const p2Target = +(actualEntry + (distanceToInitialTarget * 0.35)).toFixed(2);
@@ -450,17 +489,21 @@ export async function checkRunningTrades(): Promise<void> {
 
           // Step D: Dispatch Updates to MT5 Broker and Database
           const maxAllowedSl = +(currentBid - minStopBuffer).toFixed(2);
-          const shouldUpdateBrokerSl = (stopLoss <= 0 || targetSl > stopLoss) && targetSl <= maxAllowedSl;
+          if (targetSl > maxAllowedSl) {
+            targetSl = maxAllowedSl;
+          }
+          const shouldUpdateBrokerSl = (stopLoss <= 0 || targetSl > stopLoss + 0.05);
           const shouldUpdateBrokerTp = trackerState.runnerActivated && Math.abs(trade.takeProfit - trackerState.extendedTakeProfit) < 0.05 && trade.takeProfit > trackerState.initialTakeProfit;
 
-          if ((shouldUpdateBrokerSl || shouldUpdateBrokerTp) && targetSl <= maxAllowedSl) {
-            if (matchingOpenPos) {
+          if (shouldUpdateBrokerSl || shouldUpdateBrokerTp) {
+            const targetPosId = matchingOpenPos?.id || trade.brokerPositionId;
+            if (matchingOpenPos || (trade.isRealTrade && trade.brokerPositionId)) {
               if (!trailingSLInFlight.has(id as string)) {
                 trailingSLInFlight.add(id as string);
                 const newSlToSend = stopLoss > 0 ? Math.max(stopLoss, targetSl) : targetSl;
-                const newTpToSend = trackerState.runnerActivated ? trackerState.extendedTakeProfit : matchingOpenPos.takeProfit;
+                const newTpToSend = trackerState.runnerActivated ? trackerState.extendedTakeProfit : (matchingOpenPos?.takeProfit || trade.takeProfit);
 
-                modifyOpenPositionsStopLossAndTakeProfit("LONG", newSlToSend, newTpToSend).then(async (modResult) => {
+                modifyOpenPositionsStopLossAndTakeProfit("LONG", newSlToSend, newTpToSend, 3, targetPosId).then(async (modResult) => {
                   if (modResult && modResult.success && modResult.modifiedCount > 0) {
                     const actualSavedSl = modResult.calibratedSL || newSlToSend;
                     trade.stopLoss = actualSavedSl;
@@ -470,7 +513,7 @@ export async function checkRunningTrades(): Promise<void> {
                     await updateTradeStopLossAndTakeProfit(id as string, actualSavedSl, trade.takeProfit);
                     logger.info(
                       { 
-                        id, signal, entryPrice: actualEntry, currentPrice, currentBid, 
+                        id, signal, targetPosId, entryPrice: actualEntry, currentPrice, currentBid, 
                         oldSl: stopLoss, newSl: actualSavedSl, newTp: trade.takeProfit, 
                         peakProfit, currentProfit, stage: trackerState!.trailStage 
                       },
@@ -484,7 +527,7 @@ export async function checkRunningTrades(): Promise<void> {
                   }
                 }).finally(() => trailingSLInFlight.delete(id as string));
               }
-            } else if (!trade.isRealTrade) {
+            } else {
               trade.stopLoss = targetSl;
               trackerState.lastTargetSl = targetSl;
               await updateTradeStopLossAndTakeProfit(id as string, targetSl, trade.takeProfit);
@@ -580,24 +623,46 @@ export async function checkRunningTrades(): Promise<void> {
           const minProfitLockPrice = +(actualEntry - 2.50).toFixed(2);
 
           // Step A: Guaranteed Profit Floors when Market is in Favor (Intraday Calibrated)
-          // Trigger Break-Even after market moves +4.50 pts (or 35% of initial target)
-          // Trigger Fixed +2.50 pt Profit Lock once market moves >= +6.50 pts (or 50% of initial target)
-          const beActivationProfit = Math.max(4.50, +(distanceToInitialTarget * 0.35).toFixed(2));
-          const profitLockActivation = Math.max(6.50, +(distanceToInitialTarget * 0.50).toFixed(2));
+          // Progressive Multi-Tier Ratchet:
+          // Tier 0: +2.80 pt peak -> locks +0.50 pts (breakeven shield)
+          // Tier 1: +3.60 pt peak -> locks +1.80 pts (intraday momentum lock)
+          // Tier 2: +5.00 pt peak -> locks +3.00 pts (core profit lock)
+          // Tier 3: +7.00 pt peak -> locks +4.80 pts
+          // Tier 4: +10.00 pt peak -> locks +7.50 pts
+          // Tier 5: +14.00 pt peak -> locks +11.00 pts
+          const profitLockActivation = Math.max(7.50, +(distanceToInitialTarget * 0.50).toFixed(2));
 
           if (currentProfit >= profitLockActivation || peakProfit >= profitLockActivation) {
-            // Once market has moved >= 6.5 pts in favor, lock fixed +2.5 pt profit
-            if (currentAsk <= minProfitLockPrice - minStopBuffer) {
+            // Once market has moved >= 7.5 pts in favor, lock fixed +4.5 pt profit
+            const coreLock = +(actualEntry - 4.50).toFixed(2);
+            if (currentAsk <= coreLock - minStopBuffer) {
+              targetSl = (targetSl > 0 && targetSl < coreLock) ? targetSl : coreLock;
+              trackerState.trailStage = "PROFIT_LOCKED_CORE";
+            } else if (currentAsk <= minProfitLockPrice - minStopBuffer) {
               targetSl = (targetSl > 0 && targetSl < minProfitLockPrice) ? targetSl : minProfitLockPrice;
               if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
                 trackerState.trailStage = "PROFIT_LOCKED_2PT";
               }
-            } else if (currentAsk <= breakEvenPrice - minStopBuffer) {
-              targetSl = (targetSl > 0 && targetSl < breakEvenPrice) ? targetSl : breakEvenPrice;
-              if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
             }
-          } else if (currentProfit >= beActivationProfit || peakProfit >= beActivationProfit) {
-            // Capital Protection / Break-Even when in profit (+4.5 pts)
+          } else if (currentProfit >= 5.00 || peakProfit >= 5.00) {
+            // Tier 2: Core Profit Lock at +5.00 pts (locks +3.00 pts)
+            const lock30 = +(actualEntry - 3.00).toFixed(2);
+            if (currentAsk <= lock30 - minStopBuffer) {
+              targetSl = (targetSl > 0 && targetSl < lock30) ? targetSl : lock30;
+              trackerState.trailStage = "PROFIT_LOCKED_CORE";
+            }
+          } else if (currentProfit >= 3.60 || peakProfit >= 3.60) {
+            // Tier 1: Intraday Momentum Lock at +3.60 pts (locks +1.80 pts)
+            const lock18 = +(actualEntry - 1.80).toFixed(2);
+            if (currentAsk <= lock18 - minStopBuffer) {
+              targetSl = (targetSl > 0 && targetSl < lock18) ? targetSl : lock18;
+              if (trackerState.trailStage === "PROTECTIVE" || trackerState.trailStage === "BREAK_EVEN") {
+                trackerState.trailStage = "PROFIT_LOCKED_2PT";
+              }
+            }
+          } else if (currentProfit >= 2.80 || peakProfit >= 2.80) {
+            // Tier 0: Risk-Free Protective Shield at +2.80 pts
+            // When trade runs +2.80 pts in favor, secure breakeven (-0.50 pts fee/spread buffer)
             if (currentAsk <= breakEvenPrice - minStopBuffer) {
               targetSl = (targetSl > 0 && targetSl < breakEvenPrice) ? targetSl : breakEvenPrice;
               if (trackerState.trailStage === "PROTECTIVE") trackerState.trailStage = "BREAK_EVEN";
@@ -629,12 +694,21 @@ export async function checkRunningTrades(): Promise<void> {
               trackerState.trailStage = "RUNNER_STAGE_3";
             }
           } else {
-            // Progressive locking between +7.0 pts and runner activation
-            if (peakProfit >= 10.0) {
-              // Lock at least 50% of peak profit once peak reaches 10+ pts
-              const halfProfitSl = +(actualEntry - (peakProfit * 0.50)).toFixed(2);
-              if (currentAsk <= halfProfitSl - minStopBuffer) {
-                targetSl = Math.min(targetSl, halfProfitSl);
+            // Progressive locking between +7.5 pts and runner activation
+            if (peakProfit >= 14.0) {
+              const lock105 = +(actualEntry - 10.50).toFixed(2);
+              if (currentAsk <= lock105 - minStopBuffer) {
+                targetSl = Math.min(targetSl, lock105);
+              }
+            } else if (peakProfit >= 10.5) {
+              const lock7 = +(actualEntry - 7.00).toFixed(2);
+              if (currentAsk <= lock7 - minStopBuffer) {
+                targetSl = Math.min(targetSl, lock7);
+              }
+            } else if (peakProfit >= 7.5) {
+              const lock45 = +(actualEntry - 4.50).toFixed(2);
+              if (currentAsk <= lock45 - minStopBuffer) {
+                targetSl = Math.min(targetSl, lock45);
               }
             } else if (currentProfit >= distanceToInitialTarget * 0.70 && currentProfit < distanceToInitialTarget * 0.85) {
               const p2Target = +(actualEntry - (distanceToInitialTarget * 0.35)).toFixed(2);
@@ -661,17 +735,21 @@ export async function checkRunningTrades(): Promise<void> {
 
           // Step D: Dispatch Updates to MT5 Broker and Database
           const minAllowedSl = +(currentAsk + minStopBuffer).toFixed(2);
-          const shouldUpdateBrokerSl = (stopLoss <= 0 || targetSl < stopLoss) && targetSl >= minAllowedSl;
+          if (targetSl < minAllowedSl) {
+            targetSl = minAllowedSl;
+          }
+          const shouldUpdateBrokerSl = (stopLoss <= 0 || targetSl < stopLoss - 0.05);
           const shouldUpdateBrokerTp = trackerState.runnerActivated && Math.abs(trade.takeProfit - trackerState.extendedTakeProfit) < 0.05 && trade.takeProfit < trackerState.initialTakeProfit;
 
-          if ((shouldUpdateBrokerSl || shouldUpdateBrokerTp) && targetSl >= minAllowedSl) {
-            if (matchingOpenPos) {
+          if (shouldUpdateBrokerSl || shouldUpdateBrokerTp) {
+            const targetPosId = matchingOpenPos?.id || trade.brokerPositionId;
+            if (matchingOpenPos || (trade.isRealTrade && trade.brokerPositionId)) {
               if (!trailingSLInFlight.has(id as string)) {
                 trailingSLInFlight.add(id as string);
                 const newSlToSend = stopLoss > 0 ? Math.min(stopLoss, targetSl) : targetSl;
-                const newTpToSend = trackerState.runnerActivated ? trackerState.extendedTakeProfit : matchingOpenPos.takeProfit;
+                const newTpToSend = trackerState.runnerActivated ? trackerState.extendedTakeProfit : (matchingOpenPos?.takeProfit || trade.takeProfit);
 
-                modifyOpenPositionsStopLossAndTakeProfit("SHORT", newSlToSend, newTpToSend).then(async (modResult) => {
+                modifyOpenPositionsStopLossAndTakeProfit("SHORT", newSlToSend, newTpToSend, 3, targetPosId).then(async (modResult) => {
                   if (modResult && modResult.success && modResult.modifiedCount > 0) {
                     const actualSavedSl = modResult.calibratedSL || newSlToSend;
                     trade.stopLoss = actualSavedSl;
@@ -681,7 +759,7 @@ export async function checkRunningTrades(): Promise<void> {
                     await updateTradeStopLossAndTakeProfit(id as string, actualSavedSl, trade.takeProfit);
                     logger.info(
                       { 
-                        id, signal, entryPrice: actualEntry, currentPrice, currentAsk, 
+                        id, signal, targetPosId, entryPrice: actualEntry, currentPrice, currentAsk, 
                         oldSl: stopLoss, newSl: actualSavedSl, newTp: trade.takeProfit, 
                         peakProfit, currentProfit, stage: trackerState!.trailStage 
                       },
@@ -695,7 +773,7 @@ export async function checkRunningTrades(): Promise<void> {
                   }
                 }).finally(() => trailingSLInFlight.delete(id as string));
               }
-            } else if (!trade.isRealTrade) {
+            } else {
               trade.stopLoss = targetSl;
               trackerState.lastTargetSl = targetSl;
               await updateTradeStopLossAndTakeProfit(id as string, targetSl, trade.takeProfit);
@@ -732,9 +810,14 @@ export async function checkRunningTrades(): Promise<void> {
  * Throttled to 300ms, or triggered immediately if price approaches stop or target
  */
 function handleLiveTickForTradeTracker(live: LivePrice): void {
-  if (cachedRunningTrades.length === 0) return;
-
   const now = Date.now();
+  if (cachedRunningTrades.length === 0) {
+    if (now - lastTickCheckTime >= 4000) {
+      lastTickCheckTime = now;
+      checkRunningTrades().catch(() => {});
+    }
+    return;
+  }
   const timeSinceLast = now - lastTickCheckTime;
   const priceDelta = Math.abs(live.price - lastEvaluatedTickPrice);
 

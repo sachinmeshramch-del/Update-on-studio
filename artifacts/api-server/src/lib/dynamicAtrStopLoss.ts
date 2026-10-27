@@ -117,11 +117,12 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
   }
 
   // 3. Dynamic Floor & Spread Buffer (Tailored for Gold Intraday Volatility)
-  // Dynamic floor of 5.50 - 7.00 pts prevents premature stop-outs during regular market swings.
-  // Dynamic cap of 12.50 pts preserves capital and prevents outsized risk.
+  // 3. Dynamic Floor & Spread Buffer (Tailored for Gold Intraday Volatility)
+  // Dynamic floor of 3.80 - 4.50 pts prevents premature stop-outs during regular market swings.
+  // Dynamic cap of 5.80 pts preserves capital and prevents outsized risk.
   const spreadBuffer = Number(Math.max(0.60, liveSpread * 1.5).toFixed(2));
-  const dynamicFloor = Number(Math.max(5.50, Math.min(atr * 2.0, 7.00), liveSpread * 4.0).toFixed(2));
-  const dynamicCap   = Number(Math.min(12.50, Math.max(9.00, atr * 2.8)).toFixed(2));
+  const dynamicFloor = Number(Math.max(3.80, Math.min(atr * 1.5, 4.50), liveSpread * 3.5).toFixed(2));
+  const dynamicCap   = Number(Math.min(5.80, Math.max(5.00, atr * 1.8)).toFixed(2));
 
   const useStructuralStop = req.featureStructuralStop !== false;
 
@@ -137,36 +138,36 @@ export function calculateDynamicAtrStopLoss(req: DynamicAtrStopLossRequest): Dyn
 
   if (useStructuralStop) {
     // Intraday Structural Stop:
-    // Anchored beyond recent 15-candle swing extreme + (0.6 * ATR) buffer + spread
-    // Floor = 5.50 pts, Cap = 12.0 pts
+    // Anchored beyond recent 5-candle swing extreme + (0.3 * ATR) buffer + spread
+    // Floor = 3.80 pts, Cap = 5.80 pts
     const recentCandles = (candlesPrimary && candlesPrimary.length > 0)
-      ? candlesPrimary.slice(-15)
+      ? candlesPrimary.slice(-5)
       : [];
 
     if (direction === "LONG") {
       const lowestLow = recentCandles.length > 0
         ? Math.min(...recentCandles.map(c => c.low))
-        : (currentPrice - (atr * 2.2));
+        : (currentPrice - (atr * 1.6));
       structureLevel = Number(lowestLow.toFixed(2));
-      const rawSl = lowestLow - (0.6 * atr) - liveSpread;
+      const rawSl = lowestLow - (0.3 * atr) - liveSpread;
       const rawDistance = entryPrice - rawSl;
-      stopLossDistance = Number(Math.max(5.5, Math.min(12.0, rawDistance)).toFixed(2));
+      stopLossDistance = Number(Math.max(3.8, Math.min(5.8, rawDistance)).toFixed(2));
       stopLossPrice = Number((entryPrice - stopLossDistance).toFixed(2));
       anchoredToStructure = true;
     } else {
       const highestHigh = recentCandles.length > 0
         ? Math.max(...recentCandles.map(c => c.high))
-        : (currentPrice + (atr * 2.2));
+        : (currentPrice + (atr * 1.6));
       structureLevel = Number(highestHigh.toFixed(2));
-      const rawSl = highestHigh + (0.6 * atr) + liveSpread;
+      const rawSl = highestHigh + (0.3 * atr) + liveSpread;
       const rawDistance = rawSl - entryPrice;
-      stopLossDistance = Number(Math.max(5.5, Math.min(12.0, rawDistance)).toFixed(2));
+      stopLossDistance = Number(Math.max(3.8, Math.min(5.8, rawDistance)).toFixed(2));
       stopLossPrice = Number((entryPrice + stopLossDistance).toFixed(2));
       anchoredToStructure = true;
     }
   } else {
     // Sane ATR multiple fallback
-    stopLossDistance = Number(Math.max(5.5, Math.min(12.0, atr * multiplier)).toFixed(2));
+    stopLossDistance = Number(Math.max(3.8, Math.min(5.8, atr * multiplier)).toFixed(2));
     stopLossPrice = direction === "LONG"
       ? Number((entryPrice - stopLossDistance).toFixed(2))
       : Number((entryPrice + stopLossDistance).toFixed(2));

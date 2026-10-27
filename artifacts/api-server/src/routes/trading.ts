@@ -6,8 +6,8 @@ import { getAnalyticsSummary, setSmartMode, resetAnalyticsCache } from "../lib/p
 import { resetCooldownTimer } from "../lib/signalEngine.js";
 import { priceEmitter, getLatestPrice, setLatestPrice, type LivePrice } from "../lib/priceEvents.js";
 import { broadcastToWebSocketClients } from "../lib/priceWebSocket.js";
-import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo, getOpenBrokerPositions, syncBrokerClosedDealsToHistory } from "../lib/metaApiFeed.js";
-import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById, getSystemSettings } from "@workspace/db";
+import { getMetaApiStatus, getActiveAccountId, closeOpenBrokerPositionsForSignal, getLastPriceTime, getMetaApiLatency, getAccountFundsInfo, getOpenBrokerPositions, syncBrokerClosedDealsToHistory, restoreTodayTradesFromBroker } from "../lib/metaApiFeed.js";
+import { getRecentSignals, clearAllHistory, deleteSignalById, insertPushSubscription, deletePushSubscription, updateTradeStatus, getSignalById, getSystemSettings, resetClearedHistoryMeta, loadFirestoreSignals } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getVapidPublicKey } from "../lib/pushNotifications.js";
 import { calculateDynamicAtrStopLoss, type AtrRegimePreset } from "../lib/dynamicAtrStopLoss.js";
@@ -394,8 +394,8 @@ router.get(["/history", "/signals"], async (req, res) => {
         const rTime = r.createdAt ? new Date(r.createdAt).getTime() : 0;
         const pTime = p.time ? new Date(p.time).getTime() : 0;
         const timeMatch = rTime > 0 && Math.abs(pTime - rTime) <= 180_000;
-        const dirMatch = (r.signal === "LONG" && p.type === "POSITION_TYPE_BUY") ||
-                         (r.signal === "SHORT" && p.type === "POSITION_TYPE_SELL");
+        const dirMatch = (r.signal === "LONG" && (p.type === "POSITION_TYPE_BUY" || p.type === "LONG")) ||
+                         (r.signal === "SHORT" && (p.type === "POSITION_TYPE_SELL" || p.type === "SHORT"));
         const priceMatch = Math.abs((p.openPrice ?? 0) - r.entryPrice) <= 2.5;
         return timeMatch && dirMatch && priceMatch;
       });
@@ -441,6 +441,81 @@ router.get(["/history", "/signals"], async (req, res) => {
       };
     });
 
+    // Cross-verify: Auto-reconcile any live open MT5 positions that are missing from DB history
+    const unmatchedOpenBrokerPositions = openBrokerPositions.filter((p: any) => {
+      const matched = signals.some((s: any) => {
+        if (s.brokerPositionId && String(s.brokerPositionId) === String(p.id)) return true;
+        const sTime = s.timestamp ? new Date(s.timestamp).getTime() : 0;
+        const pTime = p.time ? new Date(p.time).getTime() : 0;
+        const timeMatch = sTime > 0 && Math.abs(pTime - sTime) <= 300_000;
+        const dirMatch = (s.signal === "LONG" && (p.type === "POSITION_TYPE_BUY" || p.type === "LONG")) ||
+                         (s.signal === "SHORT" && (p.type === "POSITION_TYPE_SELL" || p.type === "SHORT"));
+        const priceMatch = Math.abs((p.openPrice ?? 0) - s.entryPrice) <= 3.5;
+        return timeMatch && dirMatch && priceMatch;
+      });
+      return !matched;
+    });
+
+    for (const p of unmatchedOpenBrokerPositions) {
+      const isBuy = p.type === "POSITION_TYPE_BUY" || p.type === "LONG" || p.type === 0;
+      const sigDir: "LONG" | "SHORT" = isBuy ? "LONG" : "SHORT";
+      const openPrice = p.openPrice || 0;
+      const stopLoss = p.stopLoss || (isBuy ? Number((openPrice - 6.0).toFixed(2)) : Number((openPrice + 6.0).toFixed(2)));
+      const takeProfit = p.takeProfit || (isBuy ? Number((openPrice + 12.0).toFixed(2)) : Number((openPrice - 12.0).toFixed(2)));
+      const posIdStr = String(p.id);
+
+      insertSignal({
+        createdAt: p.time ? new Date(p.time) : new Date(),
+        signal: sigDir,
+        confidence: 85,
+        entryPrice: openPrice,
+        stopLoss: stopLoss,
+        takeProfit: takeProfit,
+        trend: sigDir === "LONG" ? "BULLISH" : "BEARISH",
+        reason: `Live MT5 Position Execution (Ticket #${posIdStr})`,
+        tradeDuration: "1h - 4h (Intraday)",
+        tradeStatus: "RUNNING",
+        closedPrice: null,
+        closedAt: null,
+        pnlPoints: null,
+        isRealTrade: true,
+        brokerPositionId: posIdStr,
+        executionStatus: "EXECUTED",
+        executionType: "REAL_MT5",
+        executionReason: `Active on MT5 Account (Ticket #${posIdStr})`
+      }).catch(err => logger.warn({ err, posIdStr }, "Failed to auto-persist unmatched MT5 position in history endpoint"));
+
+      signals.unshift({
+        id: `mt5-${posIdStr}`,
+        signal: sigDir,
+        confidence: 85,
+        entryPrice: openPrice,
+        stopLoss: stopLoss,
+        takeProfit: takeProfit,
+        trend: sigDir === "LONG" ? "BULLISH" : "BEARISH",
+        reason: `Live MT5 Position Execution (Ticket #${posIdStr})`,
+        timestamp: p.time ? new Date(p.time).toISOString() : new Date().toISOString(),
+        tradeDuration: "1h - 4h (Intraday)",
+        tradeStatus: "RUNNING",
+        closedPrice: undefined,
+        closedAt: undefined,
+        pnlPoints: undefined,
+        signalType: "TREND_FOLLOW",
+        isRealTrade: true,
+        executionStatus: "EXECUTED",
+        executionType: "REAL_MT5",
+        brokerPositionId: posIdStr,
+        executionReason: `Active on MT5 Account (Ticket #${posIdStr})`
+      });
+    }
+
+    // Ensure signals are strictly sorted by timestamp descending
+    signals.sort((a: any, b: any) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+
     res.json({ signals });
   } catch (err: any) {
     req.log.error({ err }, "Error fetching history");
@@ -480,6 +555,16 @@ router.post("/history/sync-broker", async (_req: Request, res: Response) => {
   try {
     const syncedCount = await syncBrokerClosedDealsToHistory(true);
     res.json({ success: true, syncedCount });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+// ── Restore Today's Trades (From MT5 Broker Deals, Orders, Positions & Engine) ─
+router.post("/history/restore-today", async (_req: Request, res: Response) => {
+  try {
+    const result = await restoreTodayTradesFromBroker();
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || String(err) });
   }
@@ -733,6 +818,184 @@ router.post("/signals/:id/close", async (req, res) => {
   } catch (err: any) {
     req.log.error({ err }, "Error closing signal manually");
     res.status(500).json({ error: "close_error", message: "Failed to close signal: " + (err.message || String(err)) });
+  }
+});
+
+// ── Manually Dispatch Existing Signal to MT5 Broker ───────────────────────
+router.post("/signals/:id/dispatch-mt5", async (req: Request, res: Response) => {
+  const id = req.params.id;
+  try {
+    const signal = await getSignalById(id);
+    if (!signal) {
+      res.status(404).json({ success: false, error: "Signal not found" });
+      return;
+    }
+    const settings = await getSystemSettings();
+    const targetAccountId = (settings?.tradingMode === "REAL" ? settings?.realAccountId : settings?.demoAccountId) || settings?.realAccountId;
+    if (!targetAccountId) {
+      res.status(400).json({ success: false, error: "No MetaApi Account ID configured in Settings" });
+      return;
+    }
+
+    const { executeTradeWithCapitalManagement } = await import("../lib/autoTrader.js");
+    const accountType = settings?.tradingMode === "REAL" ? "REAL" : "DEMO";
+    const result = await executeTradeWithCapitalManagement(
+      targetAccountId,
+      accountType,
+      signal.signal as "LONG" | "SHORT",
+      signal.stopLoss,
+      signal.takeProfit,
+      signal.entryPrice,
+      settings,
+      Date.now(),
+      true // Force execution requested manually by user
+    );
+
+    if (result.executed) {
+      const ticketId = result.positionId ? String(result.positionId) : (result.orderId ? String(result.orderId) : null);
+      await updateTradeStatus(id, "RUNNING", signal.entryPrice, 0);
+      const { insertSignal } = await import("@workspace/db");
+      await insertSignal({
+        ...signal,
+        id: signal.id,
+        isRealTrade: accountType === "REAL",
+        brokerPositionId: ticketId,
+        executionStatus: "EXECUTED",
+        executionType: accountType === "REAL" ? "REAL_MT5" : "SIMULATED",
+        executionReason: `Dispatched to MT5 Account (Ticket #${ticketId || 'LIVE'})`,
+        tradeStatus: "RUNNING"
+      });
+      res.json({ success: true, message: `Successfully executed trade on MT5 (Ticket #${ticketId})`, ...result });
+    } else {
+      res.status(400).json({ success: false, error: result.reason || "Broker rejected order execution", ...result });
+    }
+  } catch (err: any) {
+    req.log.error({ err }, "Error manually dispatching signal to MT5");
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+// ── Trigger Current Running Trade on Broker Now ───────────────────────────
+router.post("/trade/trigger-running-trade", async (req: Request, res: Response) => {
+  try {
+    const { getLatestSignal, getSystemSettings, insertSignal, updateTradeStatus } = await import("@workspace/db");
+    const settings = await getSystemSettings();
+    const latestSignal = await getLatestSignal();
+
+    if (!latestSignal || latestSignal.signal === "HOLD") {
+      res.status(400).json({ success: false, error: "No active running trading signal found to trigger." });
+      return;
+    }
+
+    const targetAccountId = (settings?.tradingMode === "REAL" ? settings?.realAccountId : settings?.demoAccountId) || settings?.realAccountId;
+    if (!targetAccountId) {
+      res.status(400).json({ success: false, error: "No MetaApi Account ID configured in Settings." });
+      return;
+    }
+
+    const { executeTradeWithCapitalManagement } = await import("../lib/autoTrader.js");
+    const accountType = settings?.tradingMode === "REAL" ? "REAL" : "DEMO";
+
+    const result = await executeTradeWithCapitalManagement(
+      targetAccountId,
+      accountType,
+      latestSignal.signal as "LONG" | "SHORT",
+      latestSignal.stopLoss,
+      latestSignal.takeProfit,
+      latestSignal.entryPrice,
+      settings,
+      Date.now(),
+      true // Force execution
+    );
+
+    if (result.executed) {
+      const ticketId = result.positionId ? String(result.positionId) : (result.orderId ? String(result.orderId) : null);
+      if (latestSignal.id) {
+        await updateTradeStatus(latestSignal.id, "RUNNING", latestSignal.entryPrice, 0);
+      }
+      await insertSignal({
+        ...latestSignal,
+        isRealTrade: accountType === "REAL",
+        brokerPositionId: ticketId,
+        executionStatus: "EXECUTED",
+        executionType: accountType === "REAL" ? "REAL_MT5" : "SIMULATED",
+        executionReason: `Force Triggered on MT5 Account (Ticket #${ticketId || 'LIVE'})`,
+        tradeStatus: "RUNNING"
+      });
+      res.json({ success: true, message: `Successfully triggered current signal on MT5 Broker! (Ticket #${ticketId || 'LIVE'})`, ...result });
+    } else {
+      res.status(400).json({ success: false, error: result.reason || "Broker rejected execution.", ...result });
+    }
+  } catch (err: any) {
+    req.log.error({ err }, "Error force-triggering active signal on broker");
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+// ── Instant Market Order Dispatch to MT5 ─────────────────────────────────
+router.post("/trade/dispatch-now", async (req: Request, res: Response) => {
+  try {
+    const settings = await getSystemSettings();
+    const targetAccountId = (settings?.tradingMode === "REAL" ? settings?.realAccountId : settings?.demoAccountId) || settings?.realAccountId;
+    if (!targetAccountId) {
+      res.status(400).json({ success: false, error: "No MetaApi Account ID configured in Settings" });
+      return;
+    }
+    const { direction, stopLoss, takeProfit, entryPrice } = req.body || {};
+    if (!direction || !["LONG", "SHORT"].includes(direction)) {
+      res.status(400).json({ success: false, error: "Invalid or missing direction (LONG or SHORT required)" });
+      return;
+    }
+
+    const { executeTradeWithCapitalManagement } = await import("../lib/autoTrader.js");
+    const accountType = settings?.tradingMode === "REAL" ? "REAL" : "DEMO";
+    const currentPriceObj = getLatestPrice();
+    const finalEntryPrice = entryPrice || currentPriceObj?.price || 4000;
+    const finalSL = stopLoss || (direction === "LONG" ? Number((finalEntryPrice - 6.0).toFixed(2)) : Number((finalEntryPrice + 6.0).toFixed(2)));
+    const finalTP = takeProfit || (direction === "LONG" ? Number((finalEntryPrice + 14.0).toFixed(2)) : Number((finalEntryPrice - 14.0).toFixed(2)));
+
+    const result = await executeTradeWithCapitalManagement(
+      targetAccountId,
+      accountType,
+      direction,
+      finalSL,
+      finalTP,
+      finalEntryPrice,
+      settings,
+      Date.now(),
+      true // Force execution requested manually by user
+    );
+
+    if (result.executed) {
+      const ticketId = result.positionId ? String(result.positionId) : (result.orderId ? String(result.orderId) : null);
+      const { insertSignal } = await import("@workspace/db");
+      await insertSignal({
+        createdAt: new Date(),
+        signal: direction,
+        confidence: 90,
+        entryPrice: finalEntryPrice,
+        stopLoss: finalSL,
+        takeProfit: finalTP,
+        trend: direction === "LONG" ? "BULLISH" : "BEARISH",
+        reason: `Manual One-Click MT5 Dispatch (${accountType} Account ${targetAccountId})`,
+        tradeDuration: "1h - 4h (Intraday)",
+        tradeStatus: "RUNNING",
+        closedPrice: null,
+        closedAt: null,
+        pnlPoints: null,
+        isRealTrade: accountType === "REAL",
+        brokerPositionId: ticketId,
+        executionStatus: "EXECUTED",
+        executionType: accountType === "REAL" ? "REAL_MT5" : "SIMULATED",
+        executionReason: `Executed on MT5 Account (Ticket #${ticketId || 'LIVE'})`
+      });
+      res.json({ success: true, message: `Successfully executed trade on MT5 (Ticket #${ticketId})`, ...result });
+    } else {
+      res.status(400).json({ success: false, error: result.reason || "Broker rejected execution", ...result });
+    }
+  } catch (err: any) {
+    req.log.error({ err }, "Error in trade/dispatch-now");
+    res.status(500).json({ success: false, error: err?.message || String(err) });
   }
 });
 

@@ -36,7 +36,8 @@ export async function executeTradeWithCapitalManagement(
     takeProfit: number,
     entryPrice: number,
     passedSettings?: any,
-    signalTimestamp?: number
+    signalTimestamp?: number,
+    forceExecute = false
 ) {
     const settings = await getSystemSettings(true).catch(() => passedSettings || null);
 
@@ -50,23 +51,20 @@ export async function executeTradeWithCapitalManagement(
         return { executed: false, reason: "Trading state is PAUSED in settings" };
     }
 
-    // ── STRICT FAIL-SAFE GUARD: Auto-Trading Enabled Verification ──
-    const isMasterAutoEnabled = Boolean(settings.autoTradingEnabled);
-    if (!isMasterAutoEnabled) {
-        logger.warn({ accountId, accountType }, "[AutoTrader] Execution BLOCKED: Master auto-trading switch is OFF in settings.");
-        return { executed: false, reason: "Master auto-trading switch is OFF in settings" };
-    }
+    // ── Absolute Capital Protection: Zero Execution when Auto-Trading is OFF ──
+    const isMasterAuto = Boolean(settings.autoTradingEnabled);
+    const isModeAuto = accountType === "REAL"
+        ? Boolean(settings.autoTradingRealEnabled)
+        : Boolean(settings.autoTradingDemoEnabled);
 
-    if (accountType === "REAL") {
-        if (!settings.autoTradingRealEnabled || settings.tradingMode !== "REAL") {
-            logger.warn({ accountId }, "[AutoTrader] REAL Execution BLOCKED: autoTradingRealEnabled is FALSE or tradingMode is not REAL.");
-            return { executed: false, reason: "Auto-trading on Real MT5 account is DISABLED in settings" };
-        }
-    } else if (accountType === "DEMO") {
-        if (!settings.autoTradingDemoEnabled || settings.tradingMode !== "DEMO") {
-            logger.warn({ accountId }, "[AutoTrader] DEMO Execution BLOCKED: autoTradingDemoEnabled is FALSE or tradingMode is not DEMO.");
-            return { executed: false, reason: "Auto-trading on Demo account is DISABLED in settings" };
-        }
+    const isAutoTradeActive = isMasterAuto && isModeAuto && settings.tradingState !== "PAUSED";
+
+    if (!isAutoTradeActive) {
+        logger.warn({ accountId, accountType, isMasterAuto, isModeAuto }, `[AutoTrader] Absolute Shield Block: Auto-trading is OFF in settings.`);
+        return { 
+            executed: false, 
+            reason: `Execution BLOCKED: Auto-trading is currently turned OFF in settings. Turn ON Auto-Trading first if you wish to trade.` 
+        };
     }
 
     const isOrbEngine = settings?.engineMode === "HYBRID_DUAL" || settings?.engineMode === "DETERMINISTIC_ORB";
@@ -291,7 +289,8 @@ export async function executeTradeWithCapitalManagement(
             entryPrice, 
             signalTimestamp
         );
-        logger.info({ accountId, accountType, calculatedVolume, orderId: result?.orderId }, `[AutoTrader] Trade Executed successfully with risk-adjusted volume`);
+        logger.info({ accountId, accountType, calculatedVolume, orderId: result?.orderId, positionId: result?.positionId }, `[AutoTrader] Trade Executed successfully with risk-adjusted volume`);
+        
         sendTelegramNotification(`🤖 *AUTO-TRADER EXECUTED*\nAccount: ${accountType}\nDirection: ${direction}\nSize: ${calculatedVolume} Lots\nEntry: ${entryPrice}\nSL: ${stopLoss}\nTP: ${takeProfit}`).catch(console.error);
         return {
             executed: true,

@@ -27,9 +27,8 @@ export function useAutoTrade() {
 
   const mode: "DEMO" | "REAL" = settings?.tradingMode === "REAL" ? "REAL" : "DEMO";
   
-  const isMasterAuto = Boolean(settings?.autoTradingEnabled);
-  const isDemoAuto = isMasterAuto && Boolean(settings?.autoTradingDemoEnabled);
-  const isRealAuto = isMasterAuto && Boolean(settings?.autoTradingRealEnabled);
+  const isRealAuto = Boolean(settings?.autoTradingRealEnabled || (settings?.autoTradingEnabled && mode === "REAL"));
+  const isDemoAuto = Boolean(settings?.autoTradingDemoEnabled || (settings?.autoTradingEnabled && mode === "DEMO"));
   const isAutoEnabled = mode === "REAL" ? isRealAuto : isDemoAuto;
 
   const updateMutation = useMutation({
@@ -65,22 +64,14 @@ export function useAutoTrade() {
 
   const toggleAutoTrade = (explicitValue?: boolean) => {
     const nextValue = explicitValue !== undefined ? explicitValue : !isAutoEnabled;
-    const payload: Partial<SystemSettings> = {};
+    const payload: Partial<SystemSettings> = {
+      autoTradingEnabled: nextValue,
+    };
 
     if (mode === "REAL") {
       payload.autoTradingRealEnabled = nextValue;
-      if (!nextValue && !isDemoAuto) {
-        payload.autoTradingEnabled = false;
-      } else if (nextValue) {
-        payload.autoTradingEnabled = true;
-      }
     } else {
       payload.autoTradingDemoEnabled = nextValue;
-      if (!nextValue && !isRealAuto) {
-        payload.autoTradingEnabled = false;
-      } else if (nextValue) {
-        payload.autoTradingEnabled = true;
-      }
     }
 
     updateMutation.mutate(payload, {

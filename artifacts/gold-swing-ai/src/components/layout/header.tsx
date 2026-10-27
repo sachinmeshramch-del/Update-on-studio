@@ -10,6 +10,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { SettingsDialog } from "./settings-dialog";
 import { QuickAutoTrade } from "@/components/trading/quick-auto-trade";
+import { StrategySelector } from "@/components/trading/strategy-selector";
 import { RefreshIntervalControl } from "@/components/trading/refresh-interval-control";
 import { useToast } from "@/hooks/use-toast";
 
@@ -388,7 +389,9 @@ export function Header() {
 
           
           {/* ── Quick Controls & Theme (Streamlined Banner) ────────────────────────── */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
+            <StrategySelector variant="compact" />
+
             <QuickAutoTrade variant="header" />
 
             <RefreshIntervalControl variant="header" />

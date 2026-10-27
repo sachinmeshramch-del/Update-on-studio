@@ -3,6 +3,8 @@ import { ChartWidget } from "@/components/trading/chart-widget";
 import { SignalPanel } from "@/components/trading/signal-panel";
 import { IndicatorsRow } from "@/components/trading/indicators-row";
 import { HistoryTable } from "@/components/trading/history-table";
+import { StrategySelector } from "@/components/trading/strategy-selector";
+import { HermesCard } from "@/components/trading/hermes-card";
 import { motion } from "framer-motion";
 
 export default function Dashboard() {
@@ -10,7 +12,16 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background flex flex-col pb-20">
       <Header />
 
-      <main className="flex-grow container mx-auto px-2 sm:px-4 py-4 md:py-8 flex flex-col gap-6 md:gap-8">
+      <main className="flex-grow container mx-auto px-2 sm:px-4 py-4 md:py-6 flex flex-col gap-6 md:gap-8">
+        
+        {/* Prominent Active Strategy Switching Banner (ICT Silver Bullet / Hybrid Dual / ORB) */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <StrategySelector variant="banner" />
+        </motion.div>
 
         {/* Top Section: Chart (left) + Signal Panel (right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
@@ -32,6 +43,15 @@ export default function Dashboard() {
             <SignalPanel />
           </motion.div>
         </div>
+
+        {/* Execution Architecture & Hermes Live Quant Engine Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+        >
+          <HermesCard />
+        </motion.div>
 
         {/* Signal History — directly below the signal panel section */}
         <motion.div
