@@ -383,11 +383,13 @@ export function preIdentifyLiquidityLevels(
 
     // Scan backward to find previous day candles
     for (let k = currentIndex - 1; k >= 0; k--) {
-      const kNy = getNyTimeComponents(candles[k].time);
+      const kCandle = candles[k];
+      if (!kCandle) continue;
+      const kNy = getNyTimeComponents(kCandle.time);
       if (kNy.day !== currentNy.day || kNy.month !== currentNy.month || kNy.year !== currentNy.year) {
         // Collect candles belonging to that previous day
-        pdh = Math.max(pdh, candles[k].high);
-        pdl = Math.min(pdl, candles[k].low);
+        pdh = Math.max(pdh, kCandle.high);
+        pdl = Math.min(pdl, kCandle.low);
         foundPd = true;
       } else if (foundPd) {
         // Reached start of previous day
@@ -420,16 +422,24 @@ export function preIdentifyLiquidityLevels(
     const lookback = config.swingLookbackBars || 5;
     const startIdx = Math.max(0, currentIndex - 100);
 
-    for (let k = startIdx + lookback; k <= currentIndex - 1; k--) {
+    for (let k = startIdx + lookback; k <= currentIndex - 1; k++) {
       const c = candles[k];
+      if (!c) continue;
       let isSwingHigh = true;
       let isSwingLow = true;
 
       for (let offset = 1; offset <= lookback; offset++) {
-        if (k - offset >= 0 && candles[k - offset].high >= c.high) isSwingHigh = false;
-        if (k - offset >= 0 && candles[k - offset].low <= c.low) isSwingLow = false;
-        if (k + offset <= currentIndex && candles[k + offset].high >= c.high) isSwingHigh = false;
-        if (k + offset <= currentIndex && candles[k + offset].low <= c.low) isSwingLow = false;
+        const prevCandle = k - offset >= 0 ? candles[k - offset] : undefined;
+        const nextCandle = k + offset <= currentIndex ? candles[k + offset] : undefined;
+
+        if (prevCandle) {
+          if (prevCandle.high >= c.high) isSwingHigh = false;
+          if (prevCandle.low <= c.low) isSwingLow = false;
+        }
+        if (nextCandle) {
+          if (nextCandle.high >= c.high) isSwingHigh = false;
+          if (nextCandle.low <= c.low) isSwingLow = false;
+        }
       }
 
       const levelIso = new Date(
@@ -608,7 +618,7 @@ export function detectDisplacementAndMss(
     // Bullish MSS: Break above a recent swing high formed before or during the sweep
     let highestSwing = -1e9;
     for (let k = lookbackStart; k <= lookbackEnd; k++) {
-      highestSwing = Math.max(highestSwing, candles[k].high);
+      if (candles[k]) highestSwing = Math.max(highestSwing, candles[k].high);
     }
 
     if (highestSwing > 0) {
@@ -623,7 +633,7 @@ export function detectDisplacementAndMss(
     // Bearish MSS: Break below a recent swing low formed before or during the sweep
     let lowestSwing = 1e9;
     for (let k = lookbackStart; k <= lookbackEnd; k++) {
-      lowestSwing = Math.min(lowestSwing, candles[k].low);
+      if (candles[k]) lowestSwing = Math.min(lowestSwing, candles[k].low);
     }
 
     if (lowestSwing < 1e8) {

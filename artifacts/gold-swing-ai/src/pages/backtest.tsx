@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Header } from "@/components/layout/header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -264,8 +264,21 @@ interface HistoricalCoverageSummary {
 }
 
 export default function BacktestPage() {
-  const [timeframe, setTimeframe] = useState<string>("15m");
-  const [candleCount, setCandleCount] = useState<number>(1000);
+  const [timeframe, setTimeframe] = useState<string>(() => {
+    try {
+      return localStorage.getItem("gold_swing_backtest_timeframe") || "15m";
+    } catch {
+      return "15m";
+    }
+  });
+  const [candleCount, setCandleCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("gold_swing_backtest_candle_count");
+      return saved ? Number(saved) : 1000;
+    } catch {
+      return 1000;
+    }
+  });
   const [initialBalance, setInitialBalance] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("gold_swing_backtest_initial_balance");
@@ -327,6 +340,8 @@ export default function BacktestPage() {
   const [isSyncingData, setIsSyncingData] = useState<boolean>(false);
   const [coverage, setCoverage] = useState<HistoricalCoverageSummary | null>(null);
 
+  const queryClient = useQueryClient();
+
   const { data: settingsData } = useQuery<{ engineMode?: string }>({
     queryKey: ["settings"],
     queryFn: () => fetch("/api/settings").then(r => r.json()),
@@ -376,12 +391,6 @@ export default function BacktestPage() {
         badge: "Pure 3h NY ORB",
         description: "100% deterministic mathematical execution. Fires at 16:00 UTC if price breaks out of the 13:00-15:00 UTC 3-hour window and aligns with EMA50. Strict 5R profit target and dynamic ATR stop-loss."
       };
-    } else if (engineMode === "HERMES_ADAPTIVE") {
-      return {
-        name: "Active Strategy: Hermes AI Adaptive Confluence",
-        badge: "Adaptive AI Confluence",
-        description: "Multi-indicator adaptive confluence engine with autonomous hyper-parameter reflection across sessions and swing reversals."
-      };
     }
     return {
       name: "Active Strategy: Hybrid Dual-Engine Intraday",
@@ -414,7 +423,15 @@ export default function BacktestPage() {
     executionCostModel?: ExecutionCostModel;
   } | null>(null);
 
-  const [viewMode, setViewMode] = useState<"AUTONOMOUS_RESEARCH" | "SINGLE_BACKTEST">("AUTONOMOUS_RESEARCH");
+  const [viewMode, setViewMode] = useState<"AUTONOMOUS_RESEARCH" | "SINGLE_BACKTEST">(
+    () => {
+      try {
+        return (localStorage.getItem("gold_swing_backtest_view_mode") as any) || "SINGLE_BACKTEST";
+      } catch {
+        return "SINGLE_BACKTEST";
+      }
+    }
+  );
   const [activeTab, setActiveTab] = useState<
     "RESEARCH_CONTROLLER" | "EQUITY" | "ATTRIBUTION" | "EVAL_LOG" | "ABLATION" | "VARIANTS" | "VALIDATION" | "MONTHLY" | "SESSIONS" | "PATTERNS" | "TRADES" | "COST_MODEL" | "DATA_MANAGER"
   >("RESEARCH_CONTROLLER");
@@ -521,7 +538,10 @@ export default function BacktestPage() {
       try {
         data = JSON.parse(resText);
       } catch (jsonErr) {
-        throw new Error(`Server returned invalid response (${res.status} ${res.statusText}): ${resText.slice(0, 150)}`);
+        if (resText.trim().startsWith("<")) {
+          throw new Error("Server bundle is compiling or restarting. Please wait a few seconds and try running the backtest again.");
+        }
+        throw new Error(`Server returned non-JSON response (${res.status} ${res.statusText}): ${resText.slice(0, 100)}`);
       }
 
       if (!res.ok || data.success === false) {
@@ -758,7 +778,7 @@ export default function BacktestPage() {
                     Backtest Strategy Engine
                   </span>
                   <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/10 border-amber-500/30 text-amber-500">
-                    {engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : engineMode === "HERMES_ADAPTIVE" ? "Hermes Adaptive AI" : "Hybrid Dual-Engine"}
+                    {engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hybrid Dual-Engine"}
                   </Badge>
                   {engineMode === liveBotMode ? (
                     <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -796,11 +816,23 @@ export default function BacktestPage() {
                   return (
                     <button
                       key={mode.id}
-                      onClick={() => {
+                      onClick={async () => {
                         setEngineMode(mode.id);
                         localStorage.setItem("gold_swing_backtest_strategy_manual", "true");
                         localStorage.setItem("gold_swing_backtest_strategy", mode.id);
-                        toast.info(`Backtest Strategy switched to ${mode.label}`);
+                        localStorage.setItem("gold_swing_engine_mode", mode.id);
+                        queryClient.setQueryData(["settings"], (old: any) => ({ ...(old || {}), engineMode: mode.id }));
+                        queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({ ...(old || {}), engineMode: mode.id }));
+                        try {
+                          await fetch("/api/hermes/set-engine-mode", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ engineMode: mode.id }),
+                          });
+                        } catch {}
+                        queryClient.invalidateQueries({ queryKey: ["settings"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/hermes/orb-state"] });
+                        toast.success(`Active Strategy switched to ${mode.label}`);
                       }}
                       className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
@@ -1110,7 +1142,11 @@ export default function BacktestPage() {
                 <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Timeframe</label>
                 <select
                   value={timeframe}
-                  onChange={(e) => setTimeframe(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTimeframe(val);
+                    try { localStorage.setItem("gold_swing_backtest_timeframe", val); } catch {}
+                  }}
                   className="w-full bg-black/20 border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:border-amber-500"
                 >
                   <option value="15m">15m (Primary Intraday Structure)</option>
@@ -1125,7 +1161,11 @@ export default function BacktestPage() {
                 <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Historical Candles</label>
                 <select
                   value={candleCount}
-                  onChange={(e) => setCandleCount(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setCandleCount(val);
+                    try { localStorage.setItem("gold_swing_backtest_candle_count", String(val)); } catch {}
+                  }}
                   className="w-full bg-black/20 border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:border-amber-500"
                 >
                   <option value={1000}>1,000 candles (~2 weeks on 15m)</option>

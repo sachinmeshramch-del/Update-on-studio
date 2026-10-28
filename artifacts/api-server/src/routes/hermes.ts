@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getHermesStateSummary, runHermesReflection, resetHermesToDefault } from "../lib/hermesEngine.js";
-import { getSystemSettings, insertSignal, getLatestSignal, DEFAULT_HERMES_PARAMETERS } from "@workspace/db";
+import { getSystemSettings, updateSystemSettings, insertSignal, getLatestSignal, DEFAULT_HERMES_PARAMETERS } from "@workspace/db";
 import { getLatestPrice } from "../lib/priceEvents.js";
 import { executeTradeWithCapitalManagement } from "../lib/autoTrader.js";
 import { sendTelegramNotification } from "../lib/telegram.js";
@@ -392,22 +392,21 @@ hermesRouter.get("/orb-state", async (req, res) => {
 
 /**
  * POST /api/hermes/set-engine-mode
- * Quick mode switch: HYBRID_DUAL | DETERMINISTIC_ORB | HERMES_ADAPTIVE
+ * Quick mode switch: HYBRID_DUAL | DETERMINISTIC_ORB | ALPHA_TRADES_SD | ICT_SILVER_BULLET
  */
 hermesRouter.post("/set-engine-mode", async (req, res) => {
   try {
     const { engineMode } = req.body;
-    if (!["HYBRID_DUAL", "DETERMINISTIC_ORB", "HERMES_ADAPTIVE", "ALPHA_TRADES_SD", "ICT_SILVER_BULLET"].includes(engineMode)) {
-      return res.status(400).json({ error: "Invalid engineMode. Must be HYBRID_DUAL, DETERMINISTIC_ORB, HERMES_ADAPTIVE, ALPHA_TRADES_SD, or ICT_SILVER_BULLET." });
+    if (!["HYBRID_DUAL", "DETERMINISTIC_ORB", "ALPHA_TRADES_SD", "ICT_SILVER_BULLET"].includes(engineMode)) {
+      return res.status(400).json({ error: "Invalid engineMode. Must be HYBRID_DUAL, DETERMINISTIC_ORB, ALPHA_TRADES_SD, or ICT_SILVER_BULLET." });
     }
-    const { updateSystemSettings } = await import("@workspace/db");
     const updated = await updateSystemSettings({ engineMode });
     recordHermesStateUpdate(`Execution Engine switched to ${engineMode.replace(/_/g, " ")}`, {
       newState: engineMode,
       engineMode,
       component: "HERMES_CORE",
     });
-    logger.info({ engineMode }, "[Hermes AI Brain] Engine mode successfully updated");
+    logger.info({ engineMode: updated.engineMode }, "[Hermes AI Brain] Engine mode successfully updated");
     res.json({ success: true, engineMode: updated.engineMode });
   } catch (err: any) {
     logger.error({ err }, "[Hermes Router] Failed to update engine mode");

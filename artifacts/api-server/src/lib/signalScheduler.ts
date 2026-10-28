@@ -177,8 +177,10 @@ async function runScheduledSignal(): Promise<void> {
       return;
     }
 
-    // ── Deduplication Guard (Scheduler Level) ───────────────────────────────
+    // ── Deduplication & Execution Gating (Scheduler Level) ───────────────────
     let settings: any = null;
+    let isSuppressedDuplicate = false;
+    let isSuppressedActiveTrade = false;
     try {
       const [latest, running, brokerOpen, dbSettings] = await Promise.all([
           getLatestSignal().catch(() => null),
@@ -191,14 +193,14 @@ async function runScheduledSignal(): Promise<void> {
       if (latest && latest.signal === signal.signal) {
         const msSince = Date.now() - latest.createdAt.getTime();
         if (msSince < 15 * 60 * 1000) {
-          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate intraday signal (fired within 15 min)");
-          return;
+          logger.info({ signal: signal.signal, msSince }, "Scheduler: Suppressing duplicate order dispatch (fired within 15 min - recording signal for analysis)");
+          isSuppressedDuplicate = true;
         }
       }
 
       if (running.length > 0 || brokerOpen.length > 0) {
-        logger.info({ dbRunning: running.length, brokerRunning: brokerOpen.length, newSignal: signal.signal }, "Scheduler: Suppressing signal (a trade is already active either in DB or MT5)");
-        return;
+        logger.info({ dbRunning: running.length, brokerRunning: brokerOpen.length, newSignal: signal.signal }, "Scheduler: Suppressing order dispatch (trade active - recording signal for analysis)");
+        isSuppressedActiveTrade = true;
       }
     } catch (checkErr) {
       logger.warn({ checkErr }, "Scheduler: Failed to check DB deduplication");
@@ -217,7 +219,8 @@ async function runScheduledSignal(): Promise<void> {
       ? Boolean(settings?.autoTradingRealEnabled)
       : Boolean(settings?.autoTradingDemoEnabled);
 
-    const isTargetAutoEnabled = isMasterAuto && isModeAuto && settings?.tradingState !== "PAUSED";
+    // Order dispatch is strictly gated if auto-trading is enabled AND no active trade/duplicate suppression exists
+    const isTargetAutoEnabled = isMasterAuto && isModeAuto && settings?.tradingState !== "PAUSED" && !isSuppressedDuplicate && !isSuppressedActiveTrade;
 
     try {
       if (isTargetAutoEnabled) {
@@ -249,7 +252,7 @@ async function runScheduledSignal(): Promise<void> {
           }
         }
       } else {
-        logger.info({ currentMode }, "[MetaApi Execution] Auto-Trading is OFF for current mode — signal recorded as Signal-Only.");
+        logger.info({ currentMode, isSuppressedDuplicate, isSuppressedActiveTrade }, "[MetaApi Execution] Order execution skipped — signal recorded in history table for strategy analysis.");
       }
     } catch (e: any) {
       logger.error({ err: e.message || e }, "Failed to evaluate auto-trade execution");
@@ -258,6 +261,15 @@ async function runScheduledSignal(): Promise<void> {
     let executionReason: string = "Simulated / Signal only (Auto-trading disabled)";
     let executionStatus: "EXECUTED" | "NOT_EXECUTED" = "NOT_EXECUTED";
     let executionType: "REAL_MT5" | "SIMULATED" = "SIMULATED";
+    let initialTradeStatus: "RUNNING" | "SIGNAL_ONLY" = "SIGNAL_ONLY";
+
+    if (isSuppressedDuplicate) {
+      executionReason = "Signal Recorded for Analysis (Suppressed order: Duplicate intraday signal within 15m)";
+      initialTradeStatus = "SIGNAL_ONLY";
+    } else if (isSuppressedActiveTrade) {
+      executionReason = "Signal Recorded for Analysis (Suppressed order: Active trade currently running in DB/MT5)";
+      initialTradeStatus = "SIGNAL_ONLY";
+    }
 
     // Wait for broker dispatch to verify execution status
     if (tradePromises.length > 0) {
@@ -269,16 +281,19 @@ async function runScheduledSignal(): Promise<void> {
           executionType = currentMode === "REAL" ? "REAL_MT5" : "SIMULATED";
           brokerPositionId = res.value.positionId ? String(res.value.positionId) : (res.value.orderId ? String(res.value.orderId) : null);
           executionReason = `Executed on MT5 Account (Ticket #${brokerPositionId || 'LIVE'})`;
+          initialTradeStatus = "RUNNING";
           break;
         } else if (res.status === "fulfilled" && !res.value?.executed) {
           executionReason = res.value?.reason || "Execution rejected by risk shield or broker margin check";
+          initialTradeStatus = "SIGNAL_ONLY";
         } else if (res.status === "rejected") {
           executionReason = res.reason?.message || "Execution request failed";
+          initialTradeStatus = "SIGNAL_ONLY";
         }
       }
-    } else {
+    } else if (!isSuppressedDuplicate && !isSuppressedActiveTrade) {
       if (!isTargetAutoEnabled) {
-        executionReason = `Auto-Trading is OFF for ${currentMode} mode in Settings (Signal Only).`;
+        executionReason = `Auto-Trading is OFF for ${currentMode} mode in Settings (Signal Only recorded for analysis).`;
       } else {
         executionReason = "Signal Only — Account ID not configured for execution.";
       }
@@ -287,7 +302,7 @@ async function runScheduledSignal(): Promise<void> {
     // Commit the signal to engine memory to reset cooldowns
     commitSignal(signal);
     
-    // Persist signal with verified real execution status
+    // Persist signal with verified real execution status in history table for strategy analysis
     const dbPersistPromise = insertSignal({
       signal:        signal.signal,
       confidence:    signal.confidence,
@@ -297,7 +312,7 @@ async function runScheduledSignal(): Promise<void> {
       trend:         signal.trend,
       reason:        signal.reason,
       tradeDuration: signal.tradeDuration,
-      tradeStatus:   "RUNNING",
+      tradeStatus:   initialTradeStatus,
       closedPrice:   null,
       closedAt:      null,
       pnlPoints:     null,

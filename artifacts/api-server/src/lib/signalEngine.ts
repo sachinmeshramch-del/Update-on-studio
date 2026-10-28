@@ -1958,8 +1958,7 @@ export async function generateSignal(currentPrice: number, isCommit = false, liv
       candlesMacro,
       session
     );
-    const rawEngineMode = settings?.engineMode as string;
-    const engineMode = (rawEngineMode === "HERMES_ADAPTIVE" ? "HYBRID_DUAL" : rawEngineMode) || "HYBRID_DUAL";
+    const engineMode = (settings?.engineMode as string) || "HYBRID_DUAL";
 
     if (engineMode === "ICT_SILVER_BULLET") {
       // 1. PURE ICT SILVER BULLET & LIQUIDITY SWEEP MODE:

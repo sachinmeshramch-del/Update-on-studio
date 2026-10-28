@@ -78,37 +78,44 @@ function initBackgroundServices(serverInstance: any) {
   }, 3500);
 }
 
-function startServer(retries = 12, delayMs = 1500) {
+let activeServer: any = null;
+
+function shutdown(signal: string) {
+  logger.info({ signal }, "Received shutdown signal, closing server...");
+  if (activeServer) {
+    activeServer.close(() => {
+      logger.info("Server closed successfully.");
+      process.exit(0);
+    });
+  }
+  setTimeout(() => {
+    process.exit(0);
+  }, 2000).unref();
+}
+
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
+
+function startServer(retries = 30, delayMs = 1500) {
   const server = app.listen(port, "0.0.0.0", () => {
+    activeServer = server;
     logger.info({ port, host: "0.0.0.0" }, "Server successfully started and listening");
     initBackgroundServices(server);
   });
 
   server.on("error", (err: any) => {
-    if (err.code === "EADDRINUSE" && retries > 0) {
-      logger.warn({ port, retriesLeft: retries }, "Port 3000 is temporarily in use (EADDRINUSE), retrying server listen in 1.5s...");
+    if (err.code === "EADDRINUSE") {
+      const remainingRetries = retries > 0 ? retries - 1 : 0;
+      logger.warn({ port, retriesLeft: remainingRetries }, "Port 3000 is temporarily in use (EADDRINUSE), retrying server listen in 1.5s...");
+      try { server.close(); } catch {}
       setTimeout(() => {
-        startServer(retries - 1, delayMs);
+        startServer(remainingRetries, delayMs);
       }, delayMs);
     } else {
       logger.error({ err, port }, "Fatal server listen error");
       process.exit(1);
     }
   });
-
-  const shutdown = (signal: string) => {
-    logger.info({ signal }, "Received shutdown signal, closing server...");
-    server.close(() => {
-      logger.info("Server closed successfully.");
-      process.exit(0);
-    });
-    setTimeout(() => {
-      process.exit(0);
-    }, 2000).unref();
-  };
-
-  process.once("SIGTERM", () => shutdown("SIGTERM"));
-  process.once("SIGINT", () => shutdown("SIGINT"));
 
   return server;
 }

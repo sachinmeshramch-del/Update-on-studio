@@ -127,6 +127,23 @@ export function SettingsDialog() {
     mutation.mutate(updated);
   };
 
+  const handleStrategyChange = (mode: "ICT_SILVER_BULLET" | "ALPHA_TRADES_SD" | "HYBRID_DUAL" | "DETERMINISTIC_ORB") => {
+    const updated = { ...formData, engineMode: mode };
+    setFormData(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gold_swing_engine_mode", mode);
+      localStorage.setItem("gold_swing_backtest_strategy", mode);
+    }
+    mutation.mutate(updated);
+    fetch("/api/hermes/set-engine-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engineMode: mode }),
+    }).catch(() => {});
+    queryClient.setQueryData(["settings"], (old: any) => ({ ...(old || {}), engineMode: mode }));
+    queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({ ...(old || {}), engineMode: mode }));
+  };
+
   const handleSave = () => {
     if (formData) {
       mutation.mutate(formData);
@@ -251,14 +268,14 @@ export function SettingsDialog() {
                   <span>Engine Architecture & Strategy</span>
                 </div>
                 <span className="text-[10px] font-mono text-amber-500">
-                  {formData.engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
+                  {formData.engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "HYBRID_DUAL" ? "3h NY ORB + Hermes AI" : "Pure 3h NY ORB"}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, engineMode: "ICT_SILVER_BULLET" })}
+                  onClick={() => handleStrategyChange("ICT_SILVER_BULLET")}
                   className={cn(
                     "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                     formData.engineMode === "ICT_SILVER_BULLET"
@@ -280,7 +297,7 @@ export function SettingsDialog() {
 
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, engineMode: "ALPHA_TRADES_SD" })}
+                  onClick={() => handleStrategyChange("ALPHA_TRADES_SD")}
                   className={cn(
                     "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                     formData.engineMode === "ALPHA_TRADES_SD"
@@ -302,7 +319,7 @@ export function SettingsDialog() {
 
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, engineMode: "HYBRID_DUAL" })}
+                  onClick={() => handleStrategyChange("HYBRID_DUAL")}
                   className={cn(
                     "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                     formData.engineMode === "HYBRID_DUAL"
@@ -324,7 +341,7 @@ export function SettingsDialog() {
 
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, engineMode: "DETERMINISTIC_ORB" })}
+                  onClick={() => handleStrategyChange("DETERMINISTIC_ORB")}
                   className={cn(
                     "text-left p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                     formData.engineMode === "DETERMINISTIC_ORB"

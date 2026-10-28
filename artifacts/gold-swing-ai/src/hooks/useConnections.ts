@@ -34,7 +34,7 @@ export function useConnections() {
     };
 
     fetchConnections();
-    const interval = setInterval(fetchConnections, 2000);
+    const interval = setInterval(fetchConnections, 10000);
     return () => clearInterval(interval);
   }, []);
 

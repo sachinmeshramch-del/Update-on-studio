@@ -56,8 +56,22 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 1000,
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("recharts")) return "vendor-recharts";
+            if (id.includes("lightweight-charts")) return "vendor-lightweight-charts";
+            if (id.includes("lucide-react")) return "vendor-lucide";
+            if (id.includes("firebase")) return "vendor-firebase";
+            if (id.includes("@tanstack") || id.includes("wouter")) return "vendor-query-router";
+            if (id.includes("react") || id.includes("react-dom")) return "vendor-react";
+          }
+        },
+      },
+    },
   },
   server: {
     port,

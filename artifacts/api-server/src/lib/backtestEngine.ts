@@ -728,7 +728,7 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
   }> = [];
 
   const rawMode = params.strategyMode as string;
-  const strategyMode = (rawMode === "HERMES_ADAPTIVE" ? "HYBRID_DUAL" : rawMode) || "HYBRID_DUAL";
+  const strategyMode = rawMode || "HYBRID_DUAL";
   const strategyName = strategyMode === "ICT_SILVER_BULLET"
     ? "ICT Silver Bullet & Liquidity Sweep Engine"
     : strategyMode === "ALPHA_TRADES_SD"
@@ -748,6 +748,15 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
 
   logger.info({ tf, count, symbol, trailingVariant, strategyMode }, "[Backtest] Starting quantitative simulation");
 
+  // Pre-calculate technical indicators across full dataset once for O(N) execution speed
+  const fullCloses = candles.map(c => c.close);
+  const fullEma9 = calcEMA(fullCloses, 9);
+  const fullEma21 = calcEMA(fullCloses, 21);
+  const fullEma50 = calcEMA(fullCloses, 50);
+  const fullRsi = calcRSI(fullCloses, 14);
+  const fullMacd = calcMACD(fullCloses);
+  const fullAtr = calcATR(candles, 14);
+
   // Daily state tracking for Deterministic ORB Engine (13:00-15:00 UTC 3h range)
   let currentDayKey = "";
   let nyRangeHigh = 0;
@@ -763,7 +772,8 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
   let i = warmup;
 
   while (i < candles.length - 2) {
-    const currentSlice = candles.slice(0, i + 1);
+    const windowStart = Math.max(0, i - 150);
+    const currentSlice = candles.slice(windowStart, i + 1);
     const curr = candles[i];
     const currDate = toDate(curr.time);
     const candleIso = currDate.toISOString();
@@ -790,27 +800,16 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
       if (nyRangeLow === 0 || curr.low < nyRangeLow) nyRangeLow = curr.low;
     }
 
-    // Indicator calculation
-    const closes = currentSlice.map(c => c.close);
-    const atrArr = calcATR(currentSlice, 14);
-    const atr = (atrArr && atrArr.length > 0) ? atrArr[atrArr.length - 1] : 2.5;
-
-    const ema9Series = calcEMA(closes, 9);
-    const ema21Series = calcEMA(closes, 21);
-    const ema50Series = calcEMA(closes, 50);
-
-    const lastEma9 = ema9Series[ema9Series.length - 1];
-    const lastEma21 = ema21Series[ema21Series.length - 1];
-    const lastEma50 = ema50Series[ema50Series.length - 1];
-    const prevEma50 = ema50Series[Math.max(0, ema50Series.length - 4)] || lastEma50;
+    // Direct O(1) Indicator lookup from precalculated series
+    const atr = fullAtr[i] || 2.5;
+    const lastEma9 = fullEma9[i] || curr.close;
+    const lastEma21 = fullEma21[i] || curr.close;
+    const lastEma50 = fullEma50[i] || curr.close;
+    const prevEma50 = fullEma50[Math.max(0, i - 4)] || lastEma50;
     const isEma50Bullish = lastEma50 >= (prevEma50 - 0.10);
     const isEma50Bearish = lastEma50 <= (prevEma50 + 0.10);
-
-    const rsiSeries = calcRSI(closes, 14);
-    const lastRsi = rsiSeries[rsiSeries.length - 1];
-
-    const macdSeries = calcMACD(closes);
-    const lastMacdHist = macdSeries.histogram[macdSeries.histogram.length - 1] || 0;
+    const lastRsi = fullRsi[i] || 50;
+    const lastMacdHist = fullMacd.histogram[i] || 0;
 
     const currentIndicators = {
       rsi: Number(lastRsi.toFixed(1)),
@@ -854,7 +853,7 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
 
     // 1. Session Filter Check
     if (featureSessionFilter) {
-      const isLondonNY = utcH >= 7 && utcH < 19;
+      const isLondonNY = utcH >= 7 && utcH < 20;
       const isRollover = totalMinutes >= 21 * 60 + 40 && totalMinutes <= 22 * 60 + 30;
       const isAsian = utcH >= 22 || utcH < 7;
       const isFridayLate = currDate.getUTCDay() === 5 && utcH >= 18;
@@ -1076,37 +1075,6 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
             confidence: alphaSignal.trendlineBreak ? 88 : 80,
             reason: alphaSignal.trendlineBreak ? "Counter-trendline pierced with volume" : "Session momentum confluence",
           },
-        ];
-      }
-    } else if (strategyMode === "HERMES_ADAPTIVE") {
-      const isTrendBullish = lastEma9 > lastEma21 && curr.close > lastEma50;
-      const isTrendBearish = lastEma9 < lastEma21 && curr.close < lastEma50;
-
-      if (isTrendBullish && lastRsi >= 42 && lastRsi <= 65 && lastMacdHist >= -0.15) {
-        signalDir = "LONG";
-        patternName = "Hermes Adaptive AI Trend";
-        conditionsSatisfiedList = [
-          "EMA 9 > EMA 21 and Close > EMA 50",
-          `RSI sweet-spot (42 <= ${lastRsi} <= 65)`,
-          `MACD histogram momentum >= -0.15 (${lastMacdHist})`,
-        ];
-        contributingStrats = [
-          { strategyId: "EMA_RIBBON", strategyName: "EMA 9/21/50 Alignment", outcome: "BUY", confidence: 85, reason: "Fast EMA above slow EMA with price above baseline" },
-          { strategyId: "RSI_MOMENTUM", strategyName: "RSI Sweet-Spot Engine", outcome: "BUY", confidence: 80, reason: `Healthy momentum at ${lastRsi} (no exhaustion)` },
-          { strategyId: "MACD_HISTOGRAM", strategyName: "MACD Momentum Shift", outcome: "BUY", confidence: 75, reason: `Histogram positive momentum (${lastMacdHist})` },
-        ];
-      } else if (isTrendBearish && lastRsi >= 35 && lastRsi <= 58 && lastMacdHist <= 0.15) {
-        signalDir = "SHORT";
-        patternName = "Hermes Adaptive AI Trend";
-        conditionsSatisfiedList = [
-          "EMA 9 < EMA 21 and Close < EMA 50",
-          `RSI sweet-spot (35 <= ${lastRsi} <= 58)`,
-          `MACD histogram momentum <= 0.15 (${lastMacdHist})`,
-        ];
-        contributingStrats = [
-          { strategyId: "EMA_RIBBON", strategyName: "EMA 9/21/50 Alignment", outcome: "SELL", confidence: 85, reason: "Fast EMA below slow EMA with price below baseline" },
-          { strategyId: "RSI_MOMENTUM", strategyName: "RSI Sweet-Spot Engine", outcome: "SELL", confidence: 80, reason: `Healthy bearish momentum at ${lastRsi}` },
-          { strategyId: "MACD_HISTOGRAM", strategyName: "MACD Momentum Shift", outcome: "SELL", confidence: 75, reason: `Histogram negative momentum (${lastMacdHist})` },
         ];
       }
     } else {
@@ -2038,11 +2006,6 @@ export async function runBacktest(params: BacktestParams): Promise<BacktestResul
           if (cBar.close > scNyHigh && cBar.close >= cEma50) { sDir = "LONG"; scOrbFired = true; }
           else if (cBar.close < scNyLow && cBar.close <= cEma50) { sDir = "SHORT"; scOrbFired = true; }
         }
-      } else if (strategyMode === "HERMES_ADAPTIVE") {
-        const isBull = cEma9 > cEma21 && cBar.close > cEma50;
-        const isBear = cEma9 < cEma21 && cBar.close < cEma50;
-        if (isBull && cRsi >= 42 && cRsi <= 65 && cMacdHist >= -0.15) sDir = "LONG";
-        else if (isBear && cRsi >= 35 && cRsi <= 58 && cMacdHist <= 0.15) sDir = "SHORT";
       } else {
         const cPat = detectCandlePattern(cSlice, cAtr);
         const cOB = detectOrderBlocks(cSlice);

@@ -734,33 +734,31 @@ import { SystemSettings } from './schema/index';
 import { setDoc } from 'firebase/firestore';
 
 const SETTINGS_FILE_NAME = '.settings_cache.json';
+export const VALID_ENGINE_MODES = [
+  'ICT_SILVER_BULLET',
+  'ALPHA_TRADES_SD',
+  'HYBRID_DUAL',
+  'DETERMINISTIC_ORB',
+] as const;
 
-function getSettingsFilePath(): string {
-  const possiblePaths = [
+function getSettingsFilePaths(): string[] {
+  return Array.from(new Set([
+    path.resolve('/app/applet', SETTINGS_FILE_NAME),
+    path.resolve('/app/applet/artifacts/api-server', SETTINGS_FILE_NAME),
     path.resolve(process.cwd(), SETTINGS_FILE_NAME),
     path.resolve(process.cwd(), 'artifacts/api-server', SETTINGS_FILE_NAME),
-    path.resolve('/app/applet/artifacts/api-server', SETTINGS_FILE_NAME),
-    path.resolve('/app/applet', SETTINGS_FILE_NAME),
-  ];
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) return p;
-  }
-  for (const p of possiblePaths) {
-    try {
-      if (fs.existsSync(path.dirname(p))) return p;
-    } catch {}
-  }
-  return path.resolve(process.cwd(), SETTINGS_FILE_NAME);
+  ]));
 }
 
 function loadLocalSettings(): Partial<SystemSettings> | null {
   try {
-    const file = getSettingsFilePath();
-    if (fs.existsSync(file)) {
-      const raw = fs.readFileSync(file, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        return parsed as Partial<SystemSettings>;
+    for (const file of getSettingsFilePaths()) {
+      if (fs.existsSync(file)) {
+        const raw = fs.readFileSync(file, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return parsed as Partial<SystemSettings>;
+        }
       }
     }
   } catch (e) {
@@ -772,13 +770,7 @@ function loadLocalSettings(): Partial<SystemSettings> | null {
 function saveLocalSettings(settings: SystemSettings): void {
   try {
     const payload = JSON.stringify(settings, null, 2);
-    const candidatePaths = [
-      path.resolve(process.cwd(), SETTINGS_FILE_NAME),
-      path.resolve(process.cwd(), 'artifacts/api-server', SETTINGS_FILE_NAME),
-      path.resolve('/app/applet/artifacts/api-server', SETTINGS_FILE_NAME),
-      path.resolve('/app/applet', SETTINGS_FILE_NAME),
-    ];
-    for (const file of candidatePaths) {
+    for (const file of getSettingsFilePaths()) {
       try {
         const dir = path.dirname(file);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -792,7 +784,7 @@ function saveLocalSettings(settings: SystemSettings): void {
 
 let cachedSettings: SystemSettings | null = null;
 let lastSettingsFetch = 0;
-const SETTINGS_CACHE_TTL = 1_000; // 1 second fast memory cache for immediate responsiveness
+const SETTINGS_CACHE_TTL = 5_000; // 5-second resilient memory cache
 
 export const DEFAULT_HERMES_PARAMETERS: HermesParameters = {
   minConfidenceNormal: 72,
@@ -812,9 +804,18 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
     return cachedSettings;
   }
 
-  // Check persisted disk settings as our authoritative baseline
+  // Load disk settings as the persistent authority
   const diskSettings = loadLocalSettings();
-  const baselineSettings = cachedSettings ? { ...diskSettings, ...cachedSettings } : diskSettings;
+  
+  // Resolve authoritative engineMode: disk selection is persistent storage authority
+  const authoritativeEngineMode =
+    (diskSettings?.engineMode && VALID_ENGINE_MODES.includes(diskSettings.engineMode as any))
+      ? diskSettings.engineMode
+      : (cachedSettings?.engineMode && VALID_ENGINE_MODES.includes(cachedSettings.engineMode as any))
+      ? cachedSettings.engineMode
+      : 'HYBRID_DUAL';
+
+  const baselineSettings = diskSettings ? { ...cachedSettings, ...diskSettings } : (cachedSettings || {});
 
   try {
     const q = query(collection(db, 'settings'), limit(1));
@@ -835,7 +836,6 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         hermesMaxDrawdownLimit: 5.0,
         hermesStrategyVersion: 'v1.0.0',
         hermesParameters: { ...DEFAULT_HERMES_PARAMETERS },
-        engineMode: 'HYBRID_DUAL',
         orbRiskPerTrade: 2.0,
         orbTargetMultiple: 5.0,
         orbStopAtrMultiplier: 1.5,
@@ -848,15 +848,21 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         featureSessionFilter: true,
         tradingState: 'ACTIVE',
         ...(baselineSettings || {}),
+        engineMode: authoritativeEngineMode,
       };
       cachedSettings = defaultSettings;
       lastSettingsFetch = now;
-      saveLocalSettings(defaultSettings);
       return defaultSettings;
     }
     const d = snap.docs[0];
     const raw = d.data();
-    const settings = {
+    
+    // Choose authoritative mode: local/cached setting wins over stale remote data
+    const resolvedEngineMode =
+      authoritativeEngineMode ||
+      (raw.engineMode && VALID_ENGINE_MODES.includes(raw.engineMode) ? raw.engineMode : 'HYBRID_DUAL');
+
+    const settings: SystemSettings = {
       id: d.id,
       dashboardPasscode: 'goldswing2024',
       hermesEnabled: raw.hermesEnabled ?? true,
@@ -872,7 +878,6 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
         minConfidenceRange: Math.max(75, raw.hermesParameters?.minConfidenceRange ?? 75),
         asianSessionMinConfidence: Math.max(78, raw.hermesParameters?.asianSessionMinConfidence ?? 78),
       },
-      engineMode: raw.engineMode ?? baselineSettings?.engineMode ?? 'HYBRID_DUAL',
       orbRiskPerTrade: raw.orbRiskPerTrade ?? 2.0,
       orbTargetMultiple: raw.orbTargetMultiple ?? 5.0,
       orbStopAtrMultiplier: raw.orbStopAtrMultiplier ?? 1.5,
@@ -884,9 +889,10 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       featureSpreadGuard: raw.featureSpreadGuard ?? true,
       featureSessionFilter: raw.featureSessionFilter ?? true,
       tradingState: raw.tradingState ?? 'ACTIVE',
+      ...raw,
       ...baselineSettings,
-      ...raw, // Raw user preferences in DB MUST override baseline disk defaults
-    } as SystemSettings;
+      engineMode: resolvedEngineMode,
+    };
 
     // Enforce high-conviction anti-overtrading confidence thresholds (72%+)
     if (settings.hermesParameters) {
@@ -911,7 +917,6 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
 
     cachedSettings = settings;
     lastSettingsFetch = now;
-    saveLocalSettings(settings);
     return settings;
   } catch {
     const fallbackSettings: SystemSettings = {
@@ -929,7 +934,6 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       hermesMaxDrawdownLimit: 5.0,
       hermesStrategyVersion: 'v1.0.0',
       hermesParameters: { ...DEFAULT_HERMES_PARAMETERS },
-      engineMode: 'HYBRID_DUAL',
       orbRiskPerTrade: 2.0,
       orbTargetMultiple: 5.0,
       orbStopAtrMultiplier: 1.5,
@@ -942,6 +946,7 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
       featureSessionFilter: true,
       tradingState: 'ACTIVE',
       ...(baselineSettings || {}),
+      engineMode: authoritativeEngineMode,
     };
     if (fallbackSettings.autoTradingEnabled === false) {
       fallbackSettings.autoTradingRealEnabled = false;
@@ -949,7 +954,6 @@ export async function getSystemSettings(forceRefresh = false): Promise<SystemSet
     }
     cachedSettings = fallbackSettings;
     lastSettingsFetch = now;
-    saveLocalSettings(fallbackSettings);
     return fallbackSettings;
   }
 }
@@ -958,7 +962,14 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   const current = await getSystemSettings();
   const id = current.id || 'general';
   
-  const updated = { ...current, ...settings };
+  const updated: SystemSettings = { ...current, ...settings };
+
+  // Explicitly validate and enforce engineMode persistence
+  if (settings.engineMode && VALID_ENGINE_MODES.includes(settings.engineMode as any)) {
+    updated.engineMode = settings.engineMode;
+  } else if (!updated.engineMode || !VALID_ENGINE_MODES.includes(updated.engineMode as any)) {
+    updated.engineMode = current.engineMode || 'HYBRID_DUAL';
+  }
 
   // Explicitly keep master switch synchronized with mode switches
   if (settings.autoTradingEnabled === false) {
@@ -978,6 +989,7 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
   cachedSettings = { ...updated, id };
   lastSettingsFetch = Date.now();
 
+  // Save synchronously to local disk caches
   saveLocalSettings(cachedSettings);
 
   withTimeout(setDoc(doc(db, 'settings', id), updated, { merge: true }), 1500).catch(() => null);

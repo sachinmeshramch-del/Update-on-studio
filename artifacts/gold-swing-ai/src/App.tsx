@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -6,19 +7,33 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
-import SettingsPage from "@/pages/settings";
-import LoginScreen from "@/pages/login";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/firebase/auth-context";
-
 import { RefreshIntervalProvider, getStoredRefreshInterval } from "@/hooks/useRefreshInterval";
+import { BottomNav } from "@/components/layout/bottom-nav";
+
+const LoginScreen = lazy(() => import("@/pages/login"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const DiagnosticsPage = lazy(() => import("@/pages/diagnostics"));
+const BacktestPage = lazy(() => import("@/pages/backtest"));
+const DataPage = lazy(() => import("@/pages/data"));
+const MorePage = lazy(() => import("@/pages/more"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center p-4">
+      <div className="w-8 h-8 border-3 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: true,
-      refetchIntervalInBackground: true,
+      refetchOnWindowFocus: false,
+      refetchIntervalInBackground: false,
+      staleTime: 5000,
       refetchInterval: (query) => {
         const key = query.queryKey?.[0];
         if (
@@ -47,30 +62,32 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!user) return <LoginScreen />;
+  if (!user) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LoginScreen />
+      </Suspense>
+    );
+  }
   
   return <>{children}</>;
 }
-
-import DiagnosticsPage from "@/pages/diagnostics";
-import BacktestPage from "@/pages/backtest";
-import DataPage from "@/pages/data";
-import MorePage from "@/pages/more";
-import { BottomNav } from "@/components/layout/bottom-nav";
 
 function Router() {
   return (
     <AuthGuard>
       <div className="relative min-h-screen">
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/backtest" component={BacktestPage} />
-          <Route path="/data" component={DataPage} />
-          <Route path="/more" component={MorePage} />
-          <Route path="/settings" component={SettingsPage} />
-          <Route path="/diagnostics" component={DiagnosticsPage} />
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense fallback={<PageLoader />}>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/backtest" component={BacktestPage} />
+            <Route path="/data" component={DataPage} />
+            <Route path="/more" component={MorePage} />
+            <Route path="/settings" component={SettingsPage} />
+            <Route path="/diagnostics" component={DiagnosticsPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
         <BottomNav />
       </div>
     </AuthGuard>

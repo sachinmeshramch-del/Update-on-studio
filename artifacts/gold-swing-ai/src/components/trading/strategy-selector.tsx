@@ -80,7 +80,7 @@ export function StrategySelector({ variant = "banner", className }: StrategySele
         return saved;
       }
     }
-    return "ICT_SILVER_BULLET";
+    return "HYBRID_DUAL";
   });
 
   const { data: settings } = useQuery<{ engineMode?: StrategyEngineMode }>({
@@ -93,23 +93,8 @@ export function StrategySelector({ variant = "banner", className }: StrategySele
     staleTime: 5000,
   });
 
-  const activeMode: StrategyEngineMode = (settings?.engineMode as StrategyEngineMode) || localMode || "ICT_SILVER_BULLET";
-
-  useEffect(() => {
-    if (settings?.engineMode && settings.engineMode !== localMode) {
-      setLocalMode(settings.engineMode);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("gold_swing_engine_mode", settings.engineMode);
-      }
-    }
-  }, [settings?.engineMode]);
-
   const switchMutation = useMutation({
     mutationFn: async (newMode: StrategyEngineMode) => {
-      setLocalMode(newMode);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("gold_swing_engine_mode", newMode);
-      }
       const res = await fetch("/api/hermes/set-engine-mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,7 +103,38 @@ export function StrategySelector({ variant = "banner", className }: StrategySele
       if (!res.ok) throw new Error("Failed to update execution strategy");
       return res.json();
     },
+    onMutate: async (newMode: StrategyEngineMode) => {
+      await queryClient.cancelQueries({ queryKey: ["settings"] });
+      await queryClient.cancelQueries({ queryKey: ["/api/hermes/orb-state"] });
+      setLocalMode(newMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", newMode);
+        localStorage.setItem("gold_swing_backtest_strategy", newMode);
+      }
+      const previousSettings = queryClient.getQueryData(["settings"]);
+      queryClient.setQueryData(["settings"], (old: any) => ({
+        ...(old || {}),
+        engineMode: newMode,
+      }));
+      queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({
+        ...(old || {}),
+        engineMode: newMode,
+      }));
+      return { previousSettings };
+    },
     onSuccess: (data, newMode) => {
+      setLocalMode(newMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", newMode);
+      }
+      queryClient.setQueryData(["settings"], (old: any) => ({
+        ...(old || {}),
+        engineMode: newMode,
+      }));
+      queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({
+        ...(old || {}),
+        engineMode: newMode,
+      }));
       const opt = STRATEGY_OPTIONS.find((s) => s.id === newMode);
       toast.success(`Active Strategy Switched to ${opt?.label || newMode}`, {
         description: opt?.description,
@@ -128,10 +144,24 @@ export function StrategySelector({ variant = "banner", className }: StrategySele
       queryClient.invalidateQueries({ queryKey: ["/api/signal"] });
       queryClient.invalidateQueries({ queryKey: ["/api/hermes/diagnostics"] });
     },
-    onError: (err: any) => {
+    onError: (err: any, _newMode, context) => {
+      if (context?.previousSettings) {
+        queryClient.setQueryData(["settings"], context.previousSettings);
+      }
       toast.error("Failed to switch strategy", { description: err.message });
     },
   });
+
+  const activeMode: StrategyEngineMode = localMode || (settings?.engineMode as StrategyEngineMode) || "HYBRID_DUAL";
+
+  useEffect(() => {
+    if (settings?.engineMode && !switchMutation.isPending && settings.engineMode !== localMode) {
+      setLocalMode(settings.engineMode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", settings.engineMode);
+      }
+    }
+  }, [settings?.engineMode, switchMutation.isPending]);
 
   const activeOption = STRATEGY_OPTIONS.find((o) => o.id === activeMode) || STRATEGY_OPTIONS[0];
 

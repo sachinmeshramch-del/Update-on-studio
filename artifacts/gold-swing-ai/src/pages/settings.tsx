@@ -37,7 +37,7 @@ interface Settings {
   dailyProfitTargetPercent?: number;
   dailyStopLossPercent?: number;
   dashboardPasscode?: string;
-  engineMode?: "ICT_SILVER_BULLET" | "ALPHA_TRADES_SD" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE";
+  engineMode?: "ICT_SILVER_BULLET" | "ALPHA_TRADES_SD" | "HYBRID_DUAL" | "DETERMINISTIC_ORB";
   orbRiskPerTrade?: number;
   orbTargetMultiple?: number;
   orbStopAtrMultiplier?: number;
@@ -146,6 +146,23 @@ export default function SettingsPage() {
     const updated = { ...formData, [key]: checked, autoTradingEnabled: checked };
     setFormData(updated);
     mutation.mutate(updated);
+  };
+
+  const handleStrategySwitch = (mode: "ICT_SILVER_BULLET" | "ALPHA_TRADES_SD" | "HYBRID_DUAL" | "DETERMINISTIC_ORB") => {
+    const updated = { ...formData, engineMode: mode };
+    setFormData(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gold_swing_engine_mode", mode);
+      localStorage.setItem("gold_swing_backtest_strategy", mode);
+    }
+    queryClient.setQueryData(["settings"], (old: any) => ({ ...(old || {}), engineMode: mode }));
+    queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({ ...(old || {}), engineMode: mode }));
+    mutation.mutate(updated);
+    fetch("/api/hermes/set-engine-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engineMode: mode }),
+    }).catch(() => {});
   };
 
   const handleModeChange = (mode: "REAL") => {
@@ -355,14 +372,14 @@ export default function SettingsPage() {
                     <span>Engine Architecture & Strategy</span>
                   </div>
                   <span className="text-[11px] font-mono text-amber-500">
-                    {formData.engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "HYBRID_DUAL" ? "Hybrid Dual-Engine" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hermes Adaptive"}
+                    {formData.engineMode === "ICT_SILVER_BULLET" ? "ICT Silver Bullet" : formData.engineMode === "ALPHA_TRADES_SD" ? "Alpha Trades S&D" : formData.engineMode === "DETERMINISTIC_ORB" ? "Pure 3h NY ORB" : "Hybrid Dual-Engine"}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, engineMode: "ICT_SILVER_BULLET" })}
+                    onClick={() => handleStrategySwitch("ICT_SILVER_BULLET")}
                     className={cn(
                       "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                       formData.engineMode === "ICT_SILVER_BULLET"
@@ -383,7 +400,7 @@ export default function SettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, engineMode: "ALPHA_TRADES_SD" })}
+                    onClick={() => handleStrategySwitch("ALPHA_TRADES_SD")}
                     className={cn(
                       "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                       formData.engineMode === "ALPHA_TRADES_SD"
@@ -405,7 +422,7 @@ export default function SettingsPage() {
 
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, engineMode: "HYBRID_DUAL" })}
+                    onClick={() => handleStrategySwitch("HYBRID_DUAL")}
                     className={cn(
                       "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                       formData.engineMode === "HYBRID_DUAL"
@@ -427,7 +444,7 @@ export default function SettingsPage() {
 
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, engineMode: "DETERMINISTIC_ORB" })}
+                    onClick={() => handleStrategySwitch("DETERMINISTIC_ORB")}
                     className={cn(
                       "text-left p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-1",
                       formData.engineMode === "DETERMINISTIC_ORB"

@@ -102,7 +102,7 @@ export function HermesCard() {
   });
 
   const { data: orbData } = useQuery<{
-    engineMode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD";
+    engineMode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "ALPHA_TRADES_SD";
     orbRiskPerTrade: number;
     orbTargetMultiple: number;
     orbStopAtrMultiplier: number;
@@ -127,14 +127,10 @@ export function HermesCard() {
     }
   }, [orbData?.engineMode]);
 
-  const currentActiveMode = orbData?.engineMode || localEngineMode || "HYBRID_DUAL";
+  const currentActiveMode = localEngineMode || orbData?.engineMode || "HYBRID_DUAL";
 
   const setEngineModeMutation = useMutation({
-    mutationFn: async (mode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "HERMES_ADAPTIVE" | "ALPHA_TRADES_SD") => {
-      setLocalEngineMode(mode);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("gold_swing_engine_mode", mode);
-      }
+    mutationFn: async (mode: "ICT_SILVER_BULLET" | "HYBRID_DUAL" | "DETERMINISTIC_ORB" | "ALPHA_TRADES_SD") => {
       const res = await fetch("/api/hermes/set-engine-mode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,11 +139,26 @@ export function HermesCard() {
       if (!res.ok) throw new Error("Failed to update engine mode");
       return res.json();
     },
+    onMutate: async (mode) => {
+      await queryClient.cancelQueries({ queryKey: ["settings"] });
+      await queryClient.cancelQueries({ queryKey: ["/api/hermes/orb-state"] });
+      setLocalEngineMode(mode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gold_swing_engine_mode", mode);
+        localStorage.setItem("gold_swing_backtest_strategy", mode);
+      }
+      queryClient.setQueryData(["settings"], (old: any) => ({ ...(old || {}), engineMode: mode }));
+      queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({ ...(old || {}), engineMode: mode }));
+    },
     onSuccess: (data) => {
       setLocalEngineMode(data.engineMode);
       if (typeof window !== "undefined") {
         localStorage.setItem("gold_swing_engine_mode", data.engineMode);
       }
+      queryClient.setQueryData(["settings"], (old: any) => ({
+        ...(old || {}),
+        engineMode: data.engineMode,
+      }));
       queryClient.setQueryData(["/api/hermes/orb-state"], (old: any) => ({
         ...(old || {}),
         engineMode: data.engineMode,
@@ -548,7 +559,7 @@ export function HermesCard() {
                   { id: "ICT_SILVER_BULLET", label: "Silver Bullet", icon: Crosshair },
                   { id: "HYBRID_DUAL", label: "Hybrid Dual", icon: Zap },
                   { id: "DETERMINISTIC_ORB", label: "Pure ORB", icon: Target },
-                  { id: "HERMES_ADAPTIVE", label: "Adaptive", icon: Brain },
+                  { id: "ALPHA_TRADES_SD", label: "Supply & Demand", icon: TrendingUp },
                 ] as const
               ).map((mode) => {
                 const Icon = mode.icon;

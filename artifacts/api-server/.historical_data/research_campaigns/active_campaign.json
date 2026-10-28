@@ -191,11 +191,11 @@
     {
       "candidateId": "EXP-STRAT-02-HERMES-ADAPTIVE",
       "rank": 0,
-      "strategyId": "HERMES_ADAPTIVE",
-      "strategyName": "Hermes AI Adaptive Confluence",
+      "strategyId": "HYBRID_DUAL",
+      "strategyName": "Hybrid Dual Engine",
       "timeframe": "5m",
       "config": {
-        "strategyMode": "HERMES_ADAPTIVE",
+        "strategyMode": "HYBRID_DUAL",
         "timeframe": "5m",
         "candleCount": 800,
         "tpRatio": 2.5,

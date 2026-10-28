@@ -91,10 +91,29 @@ app.use(
 );
 
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 app.use("/api", router);
+
+// Catch unhandled API requests to prevent falling through to static SPA HTML index.html
+app.use("/api", (_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `API endpoint ${_req.method} ${_req.originalUrl} not found.`
+  });
+});
+
+// Global API Error Handler — ensures ALL Express errors (e.g., body parsing, 413, 500) ALWAYS return clean JSON and NEVER HTML
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  logger.error({ err: err.message || err, url: req.originalUrl, status }, "Global Express Error Handler caught exception");
+  if (res.headersSent) return;
+  res.status(status).json({
+    success: false,
+    error: err.message || "An internal server error occurred while processing the request."
+  });
+});
 
 
 
